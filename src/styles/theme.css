@@ -1,0 +1,263 @@
+@custom-variant dark (&:is(.dark *));
+
+:root {
+  --font-size: 16px;
+  --background: #070b1a;
+  --foreground: #e8e0d4;
+  --card: #0f1629;
+  --card-foreground: #e8e0d4;
+  --popover: #0f1629;
+  --popover-foreground: #e8e0d4;
+  --primary: #d4a843;
+  --primary-foreground: #070b1a;
+  --secondary: #1a1040;
+  --secondary-foreground: #c0c8d8;
+  --muted: #141b2d;
+  --muted-foreground: #6b7b9b;
+  --accent: #1a1040;
+  --accent-foreground: #d4a843;
+  --destructive: #c41e3a;
+  --destructive-foreground: #ffffff;
+  --border: rgba(212,168,67,0.15);
+  --input: transparent;
+  --input-background: #141b2d;
+  --switch-background: #1a1040;
+  --font-weight-medium: 500;
+  --font-weight-normal: 400;
+  --ring: oklch(0.708 0 0);
+  --chart-1: oklch(0.646 0.222 41.116);
+  --chart-2: oklch(0.6 0.118 184.704);
+  --chart-3: oklch(0.398 0.07 227.392);
+  --chart-4: oklch(0.828 0.189 84.429);
+  --chart-5: oklch(0.769 0.188 70.08);
+  --radius: 0.625rem;
+  --sidebar: oklch(0.985 0 0);
+  --sidebar-foreground: oklch(0.145 0 0);
+  --sidebar-primary: #030213;
+  --sidebar-primary-foreground: oklch(0.985 0 0);
+  --sidebar-accent: oklch(0.97 0 0);
+  --sidebar-accent-foreground: oklch(0.205 0 0);
+  --sidebar-border: oklch(0.922 0 0);
+  --sidebar-ring: oklch(0.708 0 0);
+  --scrollbar-track: rgba(7,11,26,0.5);
+  --scrollbar-thumb: rgba(212,168,67,0.15);
+  --scrollbar-thumb-hover: rgba(212,168,67,0.35);
+}
+
+/* Day phase overrides — applied via data-phase="day" on <html> */
+[data-phase="day"] {
+  --background: #f0ead8;
+  --foreground: #2a1f10;
+  --card: #f5f0e4;
+  --card-foreground: #2a1f10;
+  --popover: #f5f0e4;
+  --popover-foreground: #2a1f10;
+  --primary: #a07808;
+  --primary-foreground: #f5f0e4;
+  --secondary: #e8e0cc;
+  --secondary-foreground: #5a4a30;
+  --muted: #e3dac6;
+  --muted-foreground: #7a6a4a;
+  --accent: #e8e0cc;
+  --accent-foreground: #a07808;
+  --destructive: #c41e3a;
+  --destructive-foreground: #ffffff;
+  --border: rgba(120,100,60,0.15);
+  --input: transparent;
+  --input-background: rgba(255,255,255,0.5);
+  --switch-background: #e3dac6;
+  --scrollbar-track: rgba(227,218,198,0.6);
+  --scrollbar-thumb: rgba(160,120,8,0.18);
+  --scrollbar-thumb-hover: rgba(160,120,8,0.4);
+}
+
+.dark {
+  --background: oklch(0.145 0 0);
+  --foreground: oklch(0.985 0 0);
+  --card: oklch(0.145 0 0);
+  --card-foreground: oklch(0.985 0 0);
+  --popover: oklch(0.145 0 0);
+  --popover-foreground: oklch(0.985 0 0);
+  --primary: oklch(0.985 0 0);
+  --primary-foreground: oklch(0.205 0 0);
+  --secondary: oklch(0.269 0 0);
+  --secondary-foreground: oklch(0.985 0 0);
+  --muted: oklch(0.269 0 0);
+  --muted-foreground: oklch(0.708 0 0);
+  --accent: oklch(0.269 0 0);
+  --accent-foreground: oklch(0.985 0 0);
+  --destructive: oklch(0.396 0.141 25.723);
+  --destructive-foreground: oklch(0.637 0.237 25.331);
+  --border: oklch(0.269 0 0);
+  --input: oklch(0.269 0 0);
+  --ring: oklch(0.439 0 0);
+  --font-weight-medium: 500;
+  --font-weight-normal: 400;
+  --chart-1: oklch(0.488 0.243 264.376);
+  --chart-2: oklch(0.696 0.17 162.48);
+  --chart-3: oklch(0.769 0.188 70.08);
+  --chart-4: oklch(0.627 0.265 303.9);
+  --chart-5: oklch(0.645 0.246 16.439);
+  --sidebar: oklch(0.205 0 0);
+  --sidebar-foreground: oklch(0.985 0 0);
+  --sidebar-primary: oklch(0.488 0.243 264.376);
+  --sidebar-primary-foreground: oklch(0.985 0 0);
+  --sidebar-accent: oklch(0.269 0 0);
+  --sidebar-accent-foreground: oklch(0.985 0 0);
+  --sidebar-border: oklch(0.269 0 0);
+  --sidebar-ring: oklch(0.439 0 0);
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-input-background: var(--input-background);
+  --color-switch-background: var(--switch-background);
+  --color-ring: var(--ring);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+}
+
+@layer base {
+  /**
+   * IMPORTANT — Motion (Framer Motion) compatibility note:
+   * `border-transparent` sets border-color: transparent on ALL elements.
+   * If a motion.* element then uses a PARTIAL inline border style
+   * (e.g. borderBottom: '1px solid …'), the computed border-color
+   * becomes multi-valued (e.g. "transparent transparent rgba(…)")
+   * which Motion's color parser cannot handle.
+   *
+   * Fix: on motion.* elements, NEVER use partial border shorthands
+   * (borderBottom, borderTop, etc.) that include a color.
+   * Instead, set the full `border` shorthand first, then override
+   * only the width of the side you want hidden:
+   *   border: '1px solid rgba(…)',   // uniform color
+   *   borderBottomWidth: 0,          // hide bottom only
+   *
+   * Or use individual longhand properties:
+   *   borderBottomWidth: 1,
+   *   borderBottomStyle: 'solid',
+   *   borderColor: 'rgba(…)',        // sets ALL sides uniformly
+   */
+  * {
+    @apply border-transparent outline-ring/50;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+  }
+
+  /* ── Custom scrollbars ── */
+
+  /* Firefox */
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track);
+  }
+
+  /* Webkit (Chrome, Safari, Edge) */
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+
+  ::-webkit-scrollbar-track {
+    background: var(--scrollbar-track);
+    border-radius: 3px;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    background: var(--scrollbar-thumb);
+    border-radius: 3px;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    background: var(--scrollbar-thumb-hover);
+  }
+
+  ::-webkit-scrollbar-corner {
+    background: var(--scrollbar-track);
+  }
+
+  /**
+  * Default typography styles for HTML elements (h1-h4, p, label, button, input).
+  * These are in @layer base, so Tailwind utility classes (like text-sm, text-lg) automatically override them.
+  */
+
+  html {
+    font-size: var(--font-size);
+  }
+
+  h1 {
+    font-size: var(--text-2xl);
+    font-weight: var(--font-weight-medium);
+    line-height: 1.5;
+  }
+
+  h2 {
+    font-size: var(--text-xl);
+    font-weight: var(--font-weight-medium);
+    line-height: 1.5;
+  }
+
+  h3 {
+    font-size: var(--text-lg);
+    font-weight: var(--font-weight-medium);
+    line-height: 1.5;
+  }
+
+  h4 {
+    font-size: var(--text-base);
+    font-weight: var(--font-weight-medium);
+    line-height: 1.5;
+  }
+
+  label {
+    font-size: var(--text-base);
+    font-weight: var(--font-weight-medium);
+    line-height: 1.5;
+  }
+
+  button {
+    font-size: var(--text-base);
+    font-weight: var(--font-weight-medium);
+    line-height: 1.5;
+  }
+
+  input {
+    font-size: var(--text-base);
+    font-weight: var(--font-weight-normal);
+    line-height: 1.5;
+  }
+}

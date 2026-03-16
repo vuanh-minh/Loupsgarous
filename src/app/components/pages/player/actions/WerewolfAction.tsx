@@ -1,0 +1,279 @@
+import React, { useState } from 'react';
+import { motion, AnimatePresence } from 'motion/react';
+import { Skull, Users, Target, X, Search, CircleCheck, ChevronDown } from 'lucide-react';
+import { PAvatar } from '../PAvatar';
+import { type RoleActionBaseProps } from './roleActionTypes';
+
+interface Props extends RoleActionBaseProps {
+  onWerewolfVote: (wolfId: number, targetId: number) => void;
+}
+
+export function WerewolfAction({ state, alivePlayers, currentPlayer, allPlayers, onFlipBack, onWerewolfVote, t }: Props) {
+  const [pendingWolfTarget, setPendingWolfTarget] = useState<number | null>(null);
+  const [showMeute, setShowMeute] = useState(false);
+  const [wolfTargetSearch, setWolfTargetSearch] = useState('');
+
+  const wolves = allPlayers.filter((p) => p.alive && p.role === 'loup-garou');
+  const targets = alivePlayers;
+
+  const tally: Record<number, number> = {};
+  Object.values(state.werewolfVotes).forEach((tid: number) => {
+    tally[tid] = (tally[tid] || 0) + 1;
+  });
+
+  const maxKills = Math.max(1, state.wolfKillsPerNight || 1);
+  const killZoneIds = new Set(
+    Object.entries(tally)
+      .filter(([, count]) => count > 0)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, maxKills)
+      .map(([id]) => parseInt(id))
+  );
+
+  const pendingTarget = pendingWolfTarget !== null
+    ? allPlayers.find((p) => p.id === pendingWolfTarget) ?? null
+    : null;
+
+  return (
+    <div
+      className="rounded-xl p-5 mb-5"
+      style={{
+        background: 'linear-gradient(135deg, rgba(196,30,58,0.06), rgba(140,20,40,0.03))',
+        border: '1px solid rgba(196,30,58,0.18)',
+      }}
+    >
+      <div className="flex items-center gap-2 mb-1">
+        <Skull size={14} style={{ color: '#c41e3a' }} />
+        <span style={{ fontFamily: '"Cinzel", serif', color: '#c41e3a', fontSize: '0.8rem' }}>
+          Choisir {(state.wolfKillsPerNight || 1) === 1 ? 'une victime' : `${state.wolfKillsPerNight} victimes`}
+        </span>
+      </div>
+      <p style={{ color: t.textMuted, fontSize: '0.6rem', marginBottom: '0.75rem' }}>
+        Designe un villageois a eliminer cette nuit.
+      </p>
+
+      {wolves.length > 1 && (
+        <div className="mb-3">
+          <button
+            onClick={() => setShowMeute((v) => !v)}
+            className="flex items-center gap-2 px-3 py-2 rounded-lg w-full cursor-pointer transition-colors"
+            style={{
+              background: 'rgba(196,30,58,0.06)',
+              border: '1px solid rgba(196,30,58,0.1)',
+            }}
+          >
+            <Users size={11} style={{ color: '#c41e3a' }} />
+            <span style={{ color: t.textSecondary, fontSize: '0.55rem', fontFamily: '"Cinzel", serif' }}>
+              Voir la meute
+            </span>
+            <span style={{ color: '#c41e3a', fontSize: '0.6rem', opacity: 0.7, marginLeft: '2px' }}>
+              ({wolves.length})
+            </span>
+            <ChevronDown
+              size={12}
+              style={{
+                color: '#c41e3a',
+                opacity: 0.6,
+                marginLeft: 'auto',
+                transition: 'transform 0.2s',
+                transform: showMeute ? 'rotate(180deg)' : 'rotate(0)',
+              }}
+            />
+          </button>
+          <AnimatePresence>
+            {showMeute && (
+              <motion.div
+                initial={{ opacity: 0, height: 0 }}
+                animate={{ opacity: 1, height: 'auto' }}
+                exit={{ opacity: 0, height: 0 }}
+                transition={{ duration: 0.2 }}
+                className="overflow-hidden"
+              >
+                <div
+                  className="flex items-center gap-2 px-3 py-2 mt-1 rounded-lg flex-wrap"
+                  style={{
+                    background: 'rgba(196,30,58,0.04)',
+                    border: '1px solid rgba(196,30,58,0.08)',
+                  }}
+                >
+                  {wolves.map((w) => {
+                    const hasVoted = state.werewolfVotes[w.id] !== undefined;
+                    return (
+                      <span
+                        key={w.id}
+                        className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full"
+                        style={{
+                          background: w.id === currentPlayer.id
+                            ? t.goldBg
+                            : hasVoted ? 'rgba(196,30,58,0.12)' : 'rgba(255,255,255,0.04)',
+                          border: `1px solid ${w.id === currentPlayer.id ? t.goldBorder : hasVoted ? 'rgba(196,30,58,0.25)' : 'rgba(255,255,255,0.08)'}`,
+                          fontSize: '0.6rem',
+                        }}
+                      >
+                        <div className="w-5 h-5 rounded-full overflow-hidden flex-shrink-0"><PAvatar player={w} size="text-sm" /></div>
+                        <span style={{ color: w.id === currentPlayer.id ? t.gold : t.text, fontSize: '0.55rem' }}>
+                          {w.name}
+                        </span>
+                        {hasVoted && <CircleCheck size={8} style={{ color: '#c41e3a' }} />}
+                      </span>
+                    );
+                  })}
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </div>
+      )}
+
+      {/* Confirmation overlay */}
+      {pendingTarget ? (
+        <motion.div
+          initial={{ opacity: 0, scale: 0.95 }}
+          animate={{ opacity: 1, scale: 1 }}
+          className="rounded-lg p-4 text-center"
+          style={{
+            background: 'rgba(196,30,58,0.1)',
+            border: '1px solid rgba(196,30,58,0.3)',
+          }}
+        >
+          <p style={{ color: t.textMuted, fontSize: '0.6rem', marginBottom: '0.5rem' }}>
+            Confirmer votre choix ?
+          </p>
+          <div className="flex items-center justify-center gap-2 mb-3">
+            <div className="w-9 h-9 rounded-full overflow-hidden flex-shrink-0"><PAvatar player={pendingTarget} size="text-2xl" /></div>
+            <span style={{ color: '#e8c8c8', fontSize: '0.85rem', fontFamily: '"Cinzel", serif' }}>
+              {pendingTarget.name}
+            </span>
+          </div>
+          <div className="flex flex-col items-stretch gap-2">
+            <motion.button
+              whileTap={{ scale: 0.95 }}
+              onClick={() => {
+                onWerewolfVote(currentPlayer.id, pendingWolfTarget!);
+                setPendingWolfTarget(null);
+                if (onFlipBack) onFlipBack();
+              }}
+              className="flex items-center justify-center gap-1.5 px-4 py-2 rounded-lg"
+              style={{
+                background: 'rgba(196,30,58,0.2)',
+                border: '1px solid rgba(196,30,58,0.4)',
+                color: '#e8c8c8',
+                fontSize: '0.65rem',
+                fontFamily: '"Cinzel", serif',
+              }}
+            >
+              <Target size={13} />
+              Confirmer
+            </motion.button>
+            <motion.button
+              whileTap={{ scale: 0.95 }}
+              onClick={() => setPendingWolfTarget(null)}
+              className="flex items-center justify-center gap-1.5 px-4 py-2 rounded-lg"
+              style={{
+                background: `rgba(${t.overlayChannel}, 0.04)`,
+                border: `1px solid rgba(${t.overlayChannel}, 0.12)`,
+                color: t.textMuted,
+                fontSize: '0.65rem',
+                fontFamily: '"Cinzel", serif',
+              }}
+            >
+              <X size={13} />
+              Annuler
+            </motion.button>
+          </div>
+        </motion.div>
+      ) : (
+        <div>
+          {targets.length > 5 && (
+            <div className="relative mb-1">
+              <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: t.textMuted }} />
+              <input
+                type="text"
+                placeholder="Rechercher un joueur..."
+                value={wolfTargetSearch}
+                onChange={(e) => setWolfTargetSearch(e.target.value)}
+                className="w-full pl-8 pr-8 py-2 rounded-lg text-sm outline-none transition-all mx-[0px] my-[16px]"
+                style={{
+                  background: `rgba(${t.overlayChannel}, 0.04)`,
+                  border: `1px solid ${wolfTargetSearch ? 'rgba(196,30,58,0.3)' : `rgba(${t.overlayChannel}, 0.08)`}`,
+                  color: t.text,
+                  fontSize: '0.7rem',
+                }}
+              />
+              {wolfTargetSearch && (
+                <button
+                  onClick={() => setWolfTargetSearch('')}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 w-5 h-5 rounded-full flex items-center justify-center hover:bg-white/10 transition-all"
+                >
+                  <X size={11} style={{ color: t.textMuted }} />
+                </button>
+              )}
+            </div>
+          )}
+          <div className="grid grid-cols-4 gap-2">
+          {(wolfTargetSearch
+            ? targets.filter((tgt) => tgt.name.toLowerCase().includes(wolfTargetSearch.toLowerCase()))
+            : targets
+          )
+            .slice()
+            .sort((a, b) => (tally[b.id] || 0) - (tally[a.id] || 0))
+            .map((tgt) => {
+            const otherVotes = tally[tgt.id] || 0;
+            const inKillZone = killZoneIds.has(tgt.id);
+
+            return (
+              <motion.button
+                key={tgt.id}
+                layout
+                whileTap={{ scale: 0.9 }}
+                onClick={() => { setPendingWolfTarget(tgt.id); }}
+                className="flex flex-col items-center gap-1 p-2 rounded-lg transition-colors relative"
+                style={{
+                  background: inKillZone
+                    ? 'rgba(196,30,58,0.1)'
+                    : `rgba(${t.overlayChannel}, 0.03)`,
+                  borderWidth: '1px',
+                  borderStyle: 'solid',
+                  borderColor: inKillZone
+                    ? 'rgba(196,30,58,0.35)'
+                    : `rgba(${t.overlayChannel}, 0.08)`,
+                  boxShadow: inKillZone
+                    ? '0 0 12px rgba(196,30,58,0.15), inset 0 0 12px rgba(196,30,58,0.05)'
+                    : 'none',
+                }}
+              >
+                <div className="w-8 h-8 rounded-full overflow-hidden mx-auto"><PAvatar player={tgt} size="text-xl" /></div>
+                <span
+                  className="w-full text-center line-clamp-2 break-words"
+                  style={{ color: inKillZone ? '#e8c8c8' : t.textSecondary, fontSize: '0.5rem', fontWeight: inKillZone ? 600 : 400 }}
+                >
+                  {tgt.name}
+                </span>
+                {otherVotes > 0 && (
+                  <span
+                    className="absolute -top-1 -right-1 min-w-[16px] h-4 px-1 rounded-full flex items-center justify-center"
+                    style={{
+                      background: inKillZone ? 'rgba(196,30,58,0.8)' : 'rgba(196,30,58,0.5)',
+                      color: '#fff',
+                      fontSize: '0.5rem',
+                      fontFamily: '"Cinzel", serif',
+                      fontWeight: 700,
+                    }}
+                  >
+                    {otherVotes}
+                  </span>
+                )}
+              </motion.button>
+            );
+          })}
+          </div>
+          {wolfTargetSearch && targets.filter((tgt) => tgt.name.toLowerCase().includes(wolfTargetSearch.toLowerCase())).length === 0 && (
+            <p style={{ color: t.textMuted, fontSize: '0.65rem', textAlign: 'center', padding: '0.5rem 0' }}>
+              Aucun joueur ne correspond.
+            </p>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
