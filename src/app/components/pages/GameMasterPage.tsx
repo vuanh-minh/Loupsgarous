@@ -15,6 +15,7 @@ import {
   Menu,
   ScrollText,
   Settings,
+  Activity,
 } from 'lucide-react';
 import { useGame, type Player, type NightStep, type DayStep, type GamePhase, localLoadGamesList, localSaveGamesList, localDeleteState } from '../../context/GameContext';
 import { useIsMobile } from '../ui/use-mobile';
@@ -111,6 +112,7 @@ export function GameMasterPage() {
   const [hintTargetPlayerId, setHintTargetPlayerId] = useState<number | null>(null);
   const [questTargetPlayerId, setQuestTargetPlayerId] = useState<number | null>(null);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [perfMonitorOpen, setPerfMonitorOpen] = useState(false);
 
   // ── Lobby: fetch games list ──
   const localIdCounter = useRef(0);
@@ -1470,8 +1472,9 @@ export function GameMasterPage() {
               { id: 'setup' as GMTab, label: 'Configuration', icon: <Settings size={16} /> },
               { id: 'gallery' as GMTab, label: 'Galerie', icon: <LayoutGrid size={16} /> },
               { id: 'spectator' as GMTab, label: 'Spectateur', icon: <Eye size={16} /> },
+              { id: '__perf__' as GMTab, label: 'Performance', icon: <Activity size={16} /> },
             ];
-            const isOnBurgerTab = burgerTabs.some(bt => bt.id === activeTab);
+            const isOnBurgerTab = burgerTabs.some(bt => bt.id === activeTab) || perfMonitorOpen;
             return (
               <>
                 <button
@@ -1524,13 +1527,18 @@ export function GameMasterPage() {
                             <button
                               key={tab.id}
                               onClick={() => {
-                                setActiveTab(tab.id);
+                                if (tab.id === '__perf__') {
+                                  setPerfMonitorOpen((v) => !v);
+                                } else {
+                                  setActiveTab(tab.id);
+                                  setPerfMonitorOpen(false);
+                                }
                                 setMobileMenuOpen(false);
                               }}
                               className="w-full flex items-center gap-3 px-4 py-3 transition-colors"
                               style={{
-                                background: activeTab === tab.id ? t.goldBg : 'transparent',
-                                color: activeTab === tab.id ? t.gold : t.textMuted,
+                                background: (tab.id === '__perf__' ? perfMonitorOpen : activeTab === tab.id) ? t.goldBg : 'transparent',
+                                color: (tab.id === '__perf__' ? perfMonitorOpen : activeTab === tab.id) ? t.gold : t.textMuted,
                                 fontFamily: '"Cinzel", serif',
                                 fontSize: '0.75rem',
                                 borderBottom: idx < burgerTabs.length - 1 ? `1px solid rgba(255,255,255,0.04)` : 'none',
@@ -1538,7 +1546,7 @@ export function GameMasterPage() {
                             >
                               {tab.icon}
                               {tab.label}
-                              {activeTab === tab.id && (
+                              {(tab.id === '__perf__' ? perfMonitorOpen : activeTab === tab.id) && (
                                 <span className="ml-auto" style={{ color: t.gold }}>
                                   <Check size={14} />
                                 </span>
@@ -1922,6 +1930,8 @@ export function GameMasterPage() {
         aliveCount={state.players.filter(p => p.alive).length}
         playerHeartbeats={playerHeartbeats}
         playerNames={Object.fromEntries(state.players.map(p => [p.shortCode, p.name]))}
+        isOpen={perfMonitorOpen}
+        onClose={() => setPerfMonitorOpen(false)}
       />
     </div>
   );

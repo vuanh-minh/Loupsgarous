@@ -223,6 +223,28 @@ export function DiscoveryRecapPanel({
     } else {
       recapDescription = "Aucun flair effectue";
     }
+  } else if (currentPlayer.role === "oracle") {
+    const oracleUsed = !!(state.oracleUsed || {})[currentPlayer.id];
+    recapIcon = "\uD83C\uDF19";
+    recapTitle = "Issue de la nuit";
+    recapDescription = oracleUsed
+      ? "Vous avez consulte les etoiles"
+      : "Aucune consultation";
+  } else if (currentPlayer.role === "empoisonneur") {
+    const targetId = (state.empoisonneurTargets ?? {})[currentPlayer.id];
+    const target = allPlayers.find((p) => p.id === targetId);
+    recapIcon = "\uD83E\uDDEA";
+    recapTitle = "Poison";
+    recapDescription = target ? (
+      <span>
+        Vous avez empoisonn\u00e9{" "}
+        <strong style={{ color: "#65a30d" }}>
+          {target.name}
+        </strong>
+      </span>
+    ) : (
+      "Aucune cible empoisonnee"
+    );
   }
 
   return (
@@ -970,6 +992,117 @@ export function GuardSleepingPanel({
             background: `rgba(${t.overlayChannel}, 0.04)`,
             border: "1px solid rgba(59,130,246,0.15)",
             color: "#93c5fd",
+            fontFamily: '"Cinzel", serif',
+            fontSize: "0.65rem",
+            letterSpacing: "0.05em",
+          }}
+        >
+          <RotateCcw size={13} />
+          Retourner la carte
+        </motion.button>
+      </div>
+    </div>
+  );
+}
+
+/* ---- Empoisonneur Sleeping Panel (back of card for empoisonneur who has acted) ---- */
+export function EmpoisonneurSleepingPanel({
+  targetName,
+  onFlipBack,
+  t,
+}: {
+  targetName: string;
+  onFlipBack: () => void;
+  t: GameThemeTokens;
+}) {
+  return (
+    <div className="flex flex-col h-full">
+      <div className="flex-1 overflow-y-auto min-h-0 px-4 py-6 flex flex-col items-center justify-center">
+        <div className="p-6 text-center w-full flex flex-col items-center justify-center flex-1 relative overflow-hidden">
+          {/* Subtle poison glow background */}
+          <motion.div
+            className="absolute inset-0 rounded-xl"
+            animate={{ opacity: [0.03, 0.08, 0.03] }}
+            transition={{ duration: 4, repeat: Infinity, ease: "easeInOut" }}
+            style={{ background: "radial-gradient(ellipse at center, rgba(101,163,13,0.2), transparent 70%)" }}
+          />
+
+          <div className="relative z-10 flex flex-col items-center">
+            <motion.div
+              animate={{ y: [0, -5, 0] }}
+              transition={{ duration: 3.5, repeat: Infinity, ease: "easeInOut" }}
+              className="flex items-center gap-2"
+            >
+              <motion.span
+                className="text-5xl block"
+                animate={{ rotate: [-3, 3, -3] }}
+                transition={{ duration: 3, repeat: Infinity, ease: "easeInOut" }}
+              >
+                🧪
+              </motion.span>
+              <motion.span
+                className="text-4xl block"
+                animate={{ rotate: [3, -3, 3] }}
+                transition={{ duration: 3, repeat: Infinity, ease: "easeInOut", delay: 0.3 }}
+              >
+                💀
+              </motion.span>
+            </motion.div>
+
+            <h2 style={{ fontFamily: '"Cinzel", serif', color: "#65a30d", fontSize: "1.1rem", marginTop: "1rem" }}>
+              Le poison coule...
+            </h2>
+
+            <motion.div
+              initial={{ opacity: 0, y: 5 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.3 }}
+              className="mt-3 flex items-center gap-2 px-4 py-2 rounded-lg"
+              style={{ background: "rgba(101,163,13,0.08)", border: "1px solid rgba(101,163,13,0.2)" }}
+            >
+              <span style={{ fontSize: "0.85rem" }}>🎯</span>
+              <span style={{ fontFamily: '"Cinzel", serif', color: "#a3e635", fontSize: "0.85rem", fontWeight: 600, letterSpacing: "0.02em" }}>
+                {targetName}
+              </span>
+            </motion.div>
+
+            <motion.p
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ delay: 0.5 }}
+              style={{ color: t.textMuted, fontSize: "0.65rem", marginTop: "0.75rem", lineHeight: 1.6, maxWidth: "16rem" }}
+            >
+              Sa prochaine quete sera automatiquement sabotee.
+            </motion.p>
+
+            <motion.p
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ delay: 0.8 }}
+              style={{ color: `${t.textMuted}99`, fontSize: "0.55rem", marginTop: "0.75rem", fontStyle: "italic" }}
+            >
+              Fermez les yeux {"\u2014"} votre poison agira bientot.
+            </motion.p>
+          </div>
+        </div>
+      </div>
+
+      {/* Sticky bottom button */}
+      <div
+        className="shrink-0 px-4 pb-4 pt-2"
+        style={{ background: `linear-gradient(to top, ${t.pageBg}, ${t.pageBg}ee 70%, transparent)` }}
+      >
+        <motion.button
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.3 }}
+          onClick={onFlipBack}
+          whileTap={{ scale: 0.95 }}
+          className="w-full flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl transition-all duration-200"
+          style={{
+            background: `rgba(${t.overlayChannel}, 0.04)`,
+            border: "1px solid rgba(101,163,13,0.15)",
+            color: "#a3e635",
             fontFamily: '"Cinzel", serif',
             fontSize: "0.65rem",
             letterSpacing: "0.05em",

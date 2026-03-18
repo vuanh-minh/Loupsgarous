@@ -275,7 +275,7 @@ export function GamePanel(props: GamePanelProps) {
           <div className="flex-1 min-h-0 flex flex-col overflow-hidden" style={{ paddingBottom: '16px' }}>
             <AnimatePresence mode="wait">
               {effectiveMobileView === 'controls' && (
-                <motion.div key="mobile-controls" className="flex flex-col flex-1 min-h-0" initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 10 }}>
+                <motion.div key="mobile-controls" className="flex flex-col flex-1 min-h-0 overflow-y-auto" initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 10 }}>
                   <MobileControlsView phaseOutcomePreview={phaseOutcomePreview} />
                 </motion.div>
               )}

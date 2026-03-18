@@ -246,6 +246,95 @@ actionRoutes.post("/make-server-2c00868b/game/action/seer-target", async (c) => 
   }
 });
 
+// ── Oracle use ──
+actionRoutes.post("/make-server-2c00868b/game/action/oracle-use", async (c) => {
+  try {
+    const body = await c.req.json();
+    const { actorId } = body;
+    const key = await resolveGameKey(body);
+
+    const res = await withGameLock(key, (state) => {
+      if (!state.oracleUsed) state.oracleUsed = {};
+      if (!state.oracleResults) state.oracleResults = {};
+      if (state.oracleUsed[actorId]) return;
+      state.oracleUsed[actorId] = true;
+
+      const lines: string[] = [];
+      const players: any[] = state.players || [];
+      const findName = (id: number) => players.find((p: any) => p.id === id)?.name || 'Un joueur';
+
+      const wolfVotes: Record<number, number> = state.werewolfVotes || {};
+      let resolvedWolfTargets: number[] = [];
+      if (Object.keys(wolfVotes).length > 0) {
+        const voteCounts: Record<number, number> = {};
+        Object.values(wolfVotes).forEach((targetId: number) => {
+          voteCounts[targetId] = (voteCounts[targetId] || 0) + 1;
+        });
+        const maxKills = Math.max(1, state.wolfKillsPerNight || 1);
+        resolvedWolfTargets = Object.entries(voteCounts)
+          .sort((a: any, b: any) => b[1] - a[1])
+          .slice(0, maxKills)
+          .map(([id]: any) => parseInt(id));
+      }
+
+      const witchHealed = Object.keys(state.witchHealedThisNight || {}).length > 0;
+      const healedTarget = witchHealed && resolvedWolfTargets.length > 0 ? resolvedWolfTargets[0] : null;
+      if (witchHealed && resolvedWolfTargets.length > 0) {
+        resolvedWolfTargets = resolvedWolfTargets.slice(1);
+      }
+
+      const guardProtectedIds = new Set<number>(Object.values(state.guardTargets || {}));
+      const vpSet = state.villagePresentIds ? new Set(state.villagePresentIds) : null;
+      if (vpSet) {
+        resolvedWolfTargets = resolvedWolfTargets.filter((id: number) => vpSet.has(id));
+      }
+
+      for (const targetId of resolvedWolfTargets) {
+        if (guardProtectedIds.has(targetId)) {
+          lines.push(`🛡️ ${findName(targetId)} va être protégé(e) cette nuit.`);
+        } else {
+          lines.push(`🐺 ${findName(targetId)} va être dévoré(e) par les loups.`);
+        }
+      }
+
+      if (healedTarget !== null) {
+        lines.push(`🧙‍♀️ ${findName(healedTarget)} va être sauvé(e) par la Sorcière.`);
+      }
+
+      const witchKillTargetIds = Object.values(state.witchKillTargets || {}) as number[];
+      for (const targetId of witchKillTargetIds) {
+        if (vpSet && !vpSet.has(targetId)) continue;
+        if (guardProtectedIds.has(targetId)) {
+          lines.push(`🛡️ ${findName(targetId)} va être protégé(e) cette nuit.`);
+        } else {
+          lines.push(`☠️ ${findName(targetId)} va être empoisonné(e).`);
+        }
+      }
+
+      // Empoisonneur: show who has been poisoned this night
+      const empoisonneurTargets: Record<number, number> = state.empoisonneurTargets || {};
+      const poisonedThisNight = new Set<number>(Object.values(empoisonneurTargets));
+      for (const targetId of poisonedThisNight) {
+        const target = players.find((p: any) => p.id === targetId);
+        if (target && target.alive) {
+          lines.push(`🧪 ${findName(targetId)} va être empoisonné(e) — sa prochaine quête sera sabotée.`);
+        }
+      }
+
+      if (lines.length === 0) {
+        lines.push('😴 La nuit est calme — aucune victime en vue.');
+      }
+
+      state.oracleResults[actorId] = lines;
+    });
+    if (!res) return c.json({ error: "Aucune partie en cours" }, 404);
+    return c.json({ success: true });
+  } catch (err) {
+    console.log("Oracle use action error:", err);
+    return c.json({ error: `Erreur oracle: ${err}` }, 500);
+  }
+});
+
 // ── Guard target ──
 actionRoutes.post("/make-server-2c00868b/game/action/guard-target", async (c) => {
   try {
@@ -266,6 +355,29 @@ actionRoutes.post("/make-server-2c00868b/game/action/guard-target", async (c) =>
   } catch (err) {
     console.log("Guard target action error:", err);
     return c.json({ error: `Erreur garde: ${err}` }, 500);
+  }
+});
+
+// ── Empoisonneur target ──
+actionRoutes.post("/make-server-2c00868b/game/action/empoisonneur-target", async (c) => {
+  try {
+    const body = await c.req.json();
+    const { actorId, playerId } = body;
+    const key = await resolveGameKey(body);
+
+    const res = await withGameLock(key, (state) => {
+      if (!state.empoisonneurTargets) state.empoisonneurTargets = {};
+      if (playerId != null) {
+        state.empoisonneurTargets[actorId] = playerId;
+      } else {
+        delete state.empoisonneurTargets[actorId];
+      }
+    });
+    if (!res) return c.json({ error: "Aucune partie en cours" }, 404);
+    return c.json({ success: true });
+  } catch (err) {
+    console.log("Empoisonneur target action error:", err);
+    return c.json({ error: `Erreur empoisonneur: ${err}` }, 500);
   }
 });
 
@@ -865,6 +977,18 @@ actionRoutes.post("/make-server-2c00868b/game/action/timer-transition", async (c
       state.foxTargets = {};
       state.foxResults = {};
       state.conciergeTargets = {};
+      state.oracleUsed = {};
+      state.oracleResults = {};
+
+      // Apply empoisonneur targets: mark victims as poisoned, then clear night targets
+      if (!state.poisonedPlayers) state.poisonedPlayers = {};
+      for (const targetId of Object.values(state.empoisonneurTargets || {})) {
+        const target = (state.players as any[]).find((p: any) => p.id === targetId);
+        if (target && target.alive) {
+          state.poisonedPlayers[targetId as number] = true;
+        }
+      }
+      state.empoisonneurTargets = {};
 
       // Apply early votes
       const earlyVotes = state.earlyVotes || {};
@@ -1664,8 +1788,15 @@ actionRoutes.post("/make-server-2c00868b/game/action/quest-answer", async (c) =>
             t.playerResults[playerId] = playerAnswer === correctRaw.toLowerCase();
           }
         }
-        // Determine overall quest status for this player
-        const allCorrect = quest.tasks.every((t: any) => t.playerResults[playerId] === true);
+        // ── Empoisonneur: check poison BEFORE determining status ──
+        if (!state.poisonedPlayers) state.poisonedPlayers = {};
+        const isPoisoned = !!state.poisonedPlayers[playerId];
+        if (isPoisoned) {
+          delete state.poisonedPlayers[playerId];
+        }
+
+        // Determine overall quest status (poison forces immediate fail, no transient success)
+        const allCorrect = !isPoisoned && quest.tasks.every((t: any) => t.playerResults[playerId] === true);
         quest.playerStatuses[playerId] = allCorrect ? 'success' : 'fail';
 
         // Stamp which phase this player's quest was resolved in
@@ -1763,7 +1894,14 @@ actionRoutes.post("/make-server-2c00868b/game/action/quest-collab-vote", async (
           const hasFail = playerGroup.some(
             (pid: number) => quest.collaborativeVotes?.[pid] === false
           );
-          const finalStatus = hasFail ? 'fail' : 'success';
+          // ── Empoisonneur: if any group member is poisoned, force sabotage ──
+          if (!state.poisonedPlayers) state.poisonedPlayers = {};
+          const hasPoisoned = playerGroup.some((pid: number) => state.poisonedPlayers[pid]);
+          const finalStatus = (hasFail || hasPoisoned) ? 'fail' : 'success';
+          // Clear poison for all poisoned members in this group
+          for (const pid of playerGroup) {
+            if (state.poisonedPlayers[pid]) delete state.poisonedPlayers[pid];
+          }
 
           // Set all group members to the same final status
           if (!quest.playerResolvedInPhase) quest.playerResolvedInPhase = {};

@@ -202,8 +202,14 @@ export interface GameState {
   phaseDeathHistory?: PhaseDeathRecord[];
   /** Concierge: maps concierge player ID -> observed player ID (this night) */
   conciergeTargets: Record<number, number>;
-  /** Dernière volonté: tracks which dead players have used their one-time last-will vote */
-  lastWillUsed: Record<number, boolean>;
+  /** Oracle: tracks which oracle players have used their power this night */
+  oracleUsed: Record<number, boolean>;
+  /** Oracle: night outcome text lines for each oracle player */
+  oracleResults: Record<number, string[]>;
+  /** Empoisonneur: maps empoisonneur player ID -> targeted player ID (this night) */
+  empoisonneurTargets: Record<number, number>;
+  /** Poisoned players: playerId -> true. Persists until the player completes a quest (auto-sabotaged). */
+  poisonedPlayers: Record<number, boolean>;
   /** Wolf inactivity: tracks consecutive nights each wolf has NOT voted. Killed at 2. */
   wolfMissedVotes: Record<number, number>;
   /** Wolf inactivity threshold: number of consecutive missed votes before death. 0 = disabled. */

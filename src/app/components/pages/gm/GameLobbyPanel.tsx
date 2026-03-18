@@ -25,112 +25,10 @@ import { GMGameSettingsAccordion } from './GMGameSettingsAccordion';
 import { BulkImportModal } from '../setup/SetupModals';
 import { ImportFromGalleryModal } from '../setup/ImportFromGalleryModal';
 import { PLAYER_AVATARS, type PlayerEntry } from '../setup/setupConstants';
+import { type GamePreset, GAME_PRESETS } from '../../../data/gamePresets';
 
-export interface GamePreset {
-  id: string;
-  label: string;
-  emoji: string;
-  description: string;
-  minPlayers: number;
-  maxPlayers: number;
-  wolfKillsPerNight: number;
-  roles: (playerCount: number) => Record<string, number>;
-}
-
-export const GAME_PRESETS: GamePreset[] = [
-  {
-    id: 'hameau',
-    label: 'Hameau',
-    emoji: '🏕️',
-    description: '6-10 joueurs · 1 victime/nuit',
-    minPlayers: 3,
-    maxPlayers: 10,
-    wolfKillsPerNight: 1,
-    roles: (n) => {
-      const wolves = Math.max(1, Math.round(n * 0.2));
-      return {
-        'loup-garou': wolves,
-        'voyante': 1,
-        'sorciere': 1,
-        'villageois': Math.max(0, n - wolves - 2),
-        'chasseur': 0, 'cupidon': 0, 'petite-fille': 0, 'garde': 0, 'renard': 0, 'corbeau': 0, 'concierge': 0,
-      };
-    },
-  },
-  {
-    id: 'village',
-    label: 'Village',
-    emoji: '🏘️',
-    description: '11-20 joueurs · 1 victime/nuit',
-    minPlayers: 11,
-    maxPlayers: 20,
-    wolfKillsPerNight: 1,
-    roles: (n) => {
-      const wolves = Math.max(2, Math.round(n * 0.2));
-      const specials = 3; // voyante + sorciere + chasseur
-      return {
-        'loup-garou': wolves,
-        'voyante': 1,
-        'sorciere': 1,
-        'chasseur': 1,
-        'villageois': Math.max(0, n - wolves - specials),
-        'cupidon': 0, 'petite-fille': 0, 'garde': 0, 'renard': 0, 'corbeau': 0, 'concierge': 0,
-      };
-    },
-  },
-  {
-    id: 'bourg',
-    label: 'Bourg',
-    emoji: '🏰',
-    description: '21-35 joueurs · 2 victimes/nuit',
-    minPlayers: 21,
-    maxPlayers: 35,
-    wolfKillsPerNight: 2,
-    roles: (n) => {
-      const wolves = Math.max(4, Math.round(n * 0.2));
-      const specials = 6; // 2 voyantes + sorciere + chasseur + renard + garde
-      return {
-        'loup-garou': wolves,
-        'voyante': 2,
-        'sorciere': 1,
-        'chasseur': 1,
-        'renard': 1,
-        'garde': 1,
-        'villageois': Math.max(0, n - wolves - specials),
-        'cupidon': 0, 'petite-fille': 0, 'corbeau': 0, 'concierge': 0,
-      };
-    },
-  },
-  {
-    id: 'metropole',
-    label: 'Metropole',
-    emoji: '🏙️',
-    description: '36+ joueurs · 3 victimes/nuit',
-    minPlayers: 36,
-    maxPlayers: 60,
-    wolfKillsPerNight: 3,
-    roles: (n) => {
-      // 10 Loups + 2 Corbeaux = 12 wolf team
-      // 1 Voyante, 2 Renards, 2 Concierges, 1 Petite Fille, 1 Garde, 1 Sorciere, 1 Chasseur, 1 Cupidon = 10 specials
-      const wolfPack = 10;
-      const corbeaux = 2;
-      const specials = 10; // voyante + 2 renards + 2 concierges + petite-fille + garde + sorciere + chasseur + cupidon
-      return {
-        'loup-garou': wolfPack,
-        'corbeau': corbeaux,
-        'voyante': 1,
-        'renard': 2,
-        'concierge': 2,
-        'petite-fille': 1,
-        'garde': 1,
-        'sorciere': 1,
-        'chasseur': 1,
-        'cupidon': 1,
-        'villageois': Math.max(0, n - wolfPack - corbeaux - specials),
-      };
-    },
-  },
-];
+export type { GamePreset };
+export { GAME_PRESETS };
 
 interface GameLobbyPanelProps {
   state: GameState;
@@ -344,6 +242,10 @@ export const GameLobbyPanel = React.memo(function GameLobbyPanel({
     }
     // Also update wolfKillsPerNight in game state
     updateState((s) => ({ ...s, wolfKillsPerNight: preset.wolfKillsPerNight }));
+    // Apply extra settings if any
+    if (preset.extraSettings) {
+      updateState((s) => ({ ...s, ...preset.extraSettings }));
+    }
   };
 
   // Legacy autoDistribute uses the recommended preset

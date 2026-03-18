@@ -838,7 +838,19 @@ export function useGameActions({ setState, stateRef, localModeRef }: ActionsDeps
       foxTargets: {},
       foxResults: {},
       conciergeTargets: {},
+      oracleUsed: {},
+      oracleResults: {},
       nominations: {},
+      // Apply empoisonneur targets as poisoned, then clear
+      poisonedPlayers: {
+        ...(s.poisonedPlayers || {}),
+        ...Object.fromEntries(
+          Object.values(s.empoisonneurTargets || {})
+            .filter((pid) => s.players.find((p) => p.id === pid)?.alive)
+            .map((pid) => [pid, true])
+        ),
+      },
+      empoisonneurTargets: {},
     }));
   }, [setState]);
 

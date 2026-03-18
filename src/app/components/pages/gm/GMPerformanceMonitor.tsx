@@ -5,7 +5,7 @@
  */
 import React, { useState, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Activity, X, ChevronDown, ChevronUp, Zap, Wifi, WifiOff, Heart } from 'lucide-react';
+import { X, ChevronDown, ChevronUp, Zap, Wifi, WifiOff, Heart } from 'lucide-react';
 import { getBroadcastMetrics, resetBroadcastMetrics, type BroadcastMetrics } from '../../../context/useRealtimeSync';
 import type { RealtimeStatus } from '../../../context/useRealtimeSync';
 
@@ -21,6 +21,8 @@ interface GMPerformanceMonitorProps {
   aliveCount: number;
   playerHeartbeats?: Record<string, number>;
   playerNames?: Record<string, string>; // shortCode -> name for display
+  isOpen: boolean;
+  onClose: () => void;
 }
 
 const GMPerformanceMonitor = React.memo(function GMPerformanceMonitor({
@@ -29,8 +31,9 @@ const GMPerformanceMonitor = React.memo(function GMPerformanceMonitor({
   aliveCount,
   playerHeartbeats = {},
   playerNames = {},
+  isOpen,
+  onClose,
 }: GMPerformanceMonitorProps) {
-  const [isOpen, setIsOpen] = useState(false);
   const [metrics, setMetrics] = useState<BroadcastMetrics>(getBroadcastMetrics());
   const [expanded, setExpanded] = useState(false);
 
@@ -69,15 +72,6 @@ const GMPerformanceMonitor = React.memo(function GMPerformanceMonitor({
 
   return (
     <>
-      {/* Floating toggle button */}
-      <button
-        onClick={() => setIsOpen((v) => !v)}
-        className="fixed bottom-4 right-4 z-[9999] w-10 h-10 rounded-full bg-gray-900/80 border border-gray-700 flex items-center justify-center hover:bg-gray-800 transition-colors shadow-lg"
-        title="Performance Monitor"
-      >
-        <Activity className="w-4 h-4 text-emerald-400" />
-      </button>
-
       {/* Monitor panel */}
       <AnimatePresence>
         {isOpen && (
@@ -96,7 +90,7 @@ const GMPerformanceMonitor = React.memo(function GMPerformanceMonitor({
               </div>
               <div className="flex items-center gap-1">
                 <StatusIcon className={`w-3.5 h-3.5 ${statusColor}`} />
-                <button onClick={() => setIsOpen(false)} className="p-0.5 hover:bg-gray-700 rounded">
+                <button onClick={onClose} className="p-0.5 hover:bg-gray-700 rounded">
                   <X className="w-3.5 h-3.5" />
                 </button>
               </div>

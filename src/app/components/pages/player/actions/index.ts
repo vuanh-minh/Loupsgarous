@@ -8,3 +8,5 @@ export { CorbeauAction } from './CorbeauAction';
 export { HunterAction } from './HunterAction';
 export { FoxAction } from './FoxAction';
 export type { FoxActionHandle } from './FoxAction';
+export { OracleAction } from './OracleAction';
+export { EmpoisonneurAction } from './EmpoisonneurAction';

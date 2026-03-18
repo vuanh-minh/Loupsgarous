@@ -179,6 +179,9 @@ export function useGMPhaseTransitions(deps: GMPhaseTransitionDeps) {
         foxTargets: {},
         foxResults: {},
         conciergeTargets: {},
+        oracleUsed: {},
+        oracleResults: {},
+        empoisonneurTargets: {},
         phaseTimerEndAt: durNight > 0 ? computeEndAt(durNight) : null,
         aliveAtPhaseStart: Object.fromEntries(s.players.map((p) => [p.id, p.alive])),
         questCompletionsThisPhase: {},
@@ -334,7 +337,19 @@ export function useGMPhaseTransitions(deps: GMPhaseTransitionDeps) {
       corbeauLastTargets: { ...(s.corbeauTargets || {}) },
       corbeauTargets: {},
       corbeauMessages: {},
+      oracleUsed: {},
+      oracleResults: {},
       questCompletionsThisPhase: {},
+      // Apply empoisonneur targets: mark victims as poisoned, then clear night targets
+      poisonedPlayers: {
+        ...(s.poisonedPlayers || {}),
+        ...Object.fromEntries(
+          Object.values(s.empoisonneurTargets || {})
+            .filter((pid) => s.players.find((p) => p.id === pid)?.alive)
+            .map((pid) => [pid, true])
+        ),
+      },
+      empoisonneurTargets: {},
     }));
 
     // Apply early votes as real votes, then clear them

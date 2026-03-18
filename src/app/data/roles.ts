@@ -157,6 +157,32 @@ export const ROLES: RoleDefinition[] = [
     maxCount: 15,
     defaultCount: 0,
   },
+  {
+    id: 'oracle',
+    name: 'Oracle',
+    article: 'le' as const,
+    team: 'village' as const,
+    emoji: '🌙',
+    color: '#7c3aed',
+    description: 'Un mystique capable de percevoir l\'issue de la nuit avant l\'aube.',
+    power: 'Chaque nuit, l\'Oracle peut consulter les etoiles pour decouvrir ce qui se passe durant la nuit : qui est devore, sauve ou empoisonne.',
+    minCount: 0,
+    maxCount: 15,
+    defaultCount: 0,
+  },
+  {
+    id: 'empoisonneur',
+    name: 'Empoisonneur',
+    article: 'le' as const,
+    team: 'werewolf' as const,
+    emoji: '🧪',
+    color: '#65a30d',
+    description: 'Un alchimiste malfaisant qui manipule les esprits en semant la confusion.',
+    power: 'Chaque nuit, l\'Empoisonneur cible un joueur. La prochaine quete que ce joueur terminera (individuelle ou collaborative) sera automatiquement sabotee. La victime ne sait pas qu\'elle est empoisonnee.',
+    minCount: 0,
+    maxCount: 15,
+    defaultCount: 0,
+  },
 ];
 
 export const getRoleById = (id: string): RoleDefinition | undefined =>

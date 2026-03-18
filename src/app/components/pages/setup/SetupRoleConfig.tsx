@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { Shield, AlertCircle, ChevronDown, ChevronUp, Sparkles, Skull } from 'lucide-react';
 import { ROLES } from '../../../data/roles';
 import { type GameThemeTokens } from '../../../context/gameTheme';
-import { type GamePreset } from '../../pages/gm/GameLobbyPanel';
+import { type GamePreset } from '../../../data/gamePresets';
 
 export function SetupRoleConfig({
   roleConfig,

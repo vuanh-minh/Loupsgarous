@@ -446,7 +446,7 @@ export function GMPlayerList() {
               </div>
               <div className="flex-1 text-left min-w-0">
                 <p style={{ color: t.text, fontSize: '0.8rem' }} className="truncate">
-                  {p.name} {state.maireId === p.id ? '🏛️' : ''}
+                  {p.name} {state.maireId === p.id ? '🏛️' : ''}{state.poisonedPlayers?.[p.id] && <span title="Empoisonné — prochaine quête sabotée" style={{ color: '#65a30d' }}> 🧪</span>}
                 </p>
                 <div className="flex items-center gap-1.5">
                   <span style={{ color: role?.color || t.textMuted, fontSize: '0.6rem' }}>
@@ -887,6 +887,18 @@ export function GMPlayerList() {
                   done: state.corbeauTargets?.[pid] !== undefined,
                   label: state.corbeauTargets?.[pid] !== undefined
                     ? `Cible → ${state.players.find((p: Player) => p.id === state.corbeauTargets[pid])?.name || '?'}`
+                    : 'En attente',
+                }),
+                'oracle': () => ({
+                  done: !!(state.oracleUsed || {})[pid],
+                  label: (state.oracleUsed || {})[pid]
+                    ? 'A consulté les étoiles'
+                    : 'En attente',
+                }),
+                'empoisonneur': () => ({
+                  done: state.empoisonneurTargets?.[pid] !== undefined,
+                  label: state.empoisonneurTargets?.[pid] !== undefined
+                    ? `🧪 Cible → ${state.players.find((p: Player) => p.id === state.empoisonneurTargets[pid])?.name || '?'}`
                     : 'En attente',
                 }),
               };

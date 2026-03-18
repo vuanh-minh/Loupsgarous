@@ -11,6 +11,7 @@ import { ConciergeAction } from './ConciergeAction';
 import {
   WerewolfAction, SeerAction, CupidAction, WitchAction,
   PetiteFilleAction, GuardAction, CorbeauAction, HunterAction, FoxAction,
+  OracleAction, EmpoisonneurAction,
 } from './actions';
 
 /* ---- Role Actions Panel ---- */
@@ -22,6 +23,9 @@ export function RoleActionsPanel({
   onGuardTarget, onCorbeauTarget, onHunterPreTarget,
   onFoxTarget,
   onConciergeTarget,
+  onOracleUse,
+  onOracleDismiss,
+  onEmpoisonneurTarget,
   practiceMode = false,
   t,
 }: {
@@ -45,6 +49,9 @@ export function RoleActionsPanel({
   onHunterPreTarget?: (targetId: number | null) => void;
   onFoxTarget?: (playerIds: number[]) => void;
   onConciergeTarget?: (targetId: number) => void;
+  onOracleUse?: () => void;
+  onOracleDismiss?: () => void;
+  onEmpoisonneurTarget?: (targetId: number) => void;
   practiceMode?: boolean;
   t: GameThemeTokens;
 }) {
@@ -245,6 +252,33 @@ export function RoleActionsPanel({
               currentPlayer={currentPlayer}
               allPlayers={allPlayers}
               onConciergeTarget={onConciergeTarget}
+              onFlipBack={onFlipBack}
+              t={t}
+            />
+          )}
+
+          {/* Oracle (already extracted) */}
+          {currentPlayer.role === 'oracle' && state.phase === 'night' && onOracleUse && (
+            <OracleAction
+              state={state}
+              alivePlayers={alivePlayers}
+              currentPlayer={currentPlayer}
+              allPlayers={allPlayers}
+              onOracleUse={onOracleUse}
+              onDismiss={onOracleDismiss}
+              onFlipBack={onFlipBack}
+              t={t}
+            />
+          )}
+
+          {/* Empoisonneur (already extracted) */}
+          {currentPlayer.role === 'empoisonneur' && state.phase === 'night' && onEmpoisonneurTarget && (
+            <EmpoisonneurAction
+              state={state}
+              alivePlayers={alivePlayers}
+              currentPlayer={currentPlayer}
+              allPlayers={allPlayers}
+              onEmpoisonneurTarget={onEmpoisonneurTarget}
               onFlipBack={onFlipBack}
               t={t}
             />

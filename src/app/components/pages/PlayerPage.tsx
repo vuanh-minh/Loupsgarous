@@ -24,7 +24,7 @@ import { usePWAContext } from '../layout/RootLayout';
 import { PWAInstallBanner } from '../PWAInstallBanner';
 import { useDeathAnnouncement, DeathAnnouncementModal } from './player/DeathAnnouncementModal';
 import { VillageListPanel } from './player/VillageListPanel';
-import { DiscoveryRecapPanel, VillagerSleepingPanel, GuardSleepingPanel } from './player/SleepingPanels';
+import { DiscoveryRecapPanel, VillagerSleepingPanel, GuardSleepingPanel, EmpoisonneurSleepingPanel } from './player/SleepingPanels';
 import { RoleActionsPanel } from './player/RoleActionsPanel';
 import { GamePanel } from './player/GamePanel';
 import { RoleRevealScreen } from './player/RoleRevealScreen';
@@ -93,7 +93,9 @@ export function PlayerPage() {
     serverSetHunterPreTarget, serverConfirmHunterShot, serverSetEarlyVote,
     serverSetFoxTarget,
     serverSetConciergeTarget,
+    serverOracleUse,
     serverSetLastWillUsed,
+    serverSetEmpoisonneurTarget,
     serverAnswerQuestTask,
     serverCollabVote,
     serverCancelCollabVote,
@@ -231,6 +233,7 @@ export function PlayerPage() {
   const [isFlipped, setIsFlipped] = useState(false);
   const [seerRevealing, setSeerRevealing] = useState(false);
   const [foxRevealing, setFoxRevealing] = useState(false);
+  const [oracleDismissed, setOracleDismissed] = useState(false);
   const [conciergeRevealing, setConciergeRevealing] = useState(false);
   const [hypothesisTarget, setHypothesisTarget] = useState<number | null>(null);
   const [hasSeenNight1Recap, setHasSeenNight1Recap] = useState(false);
@@ -425,7 +428,9 @@ export function PlayerPage() {
   const corbeauHasActed = currentPlayer?.role === 'corbeau' && currentPlayer && (state.corbeauTargets ?? {})[currentPlayer.id] !== undefined;
   const foxHasActed = currentPlayer?.role === 'renard' && currentPlayer && (state.foxTargets ?? {})[currentPlayer.id] !== undefined;
   const conciergeHasActed = currentPlayer?.role === 'concierge' && currentPlayer && (state.conciergeTargets ?? {})[currentPlayer.id] !== undefined;
-  const roleHasActed = wolfHasVoted || seerHasActed || cupidHasActed || witchHasActed || guardHasActed || corbeauHasActed || foxHasActed || conciergeHasActed;
+  const oracleHasActed = currentPlayer?.role === 'oracle' && currentPlayer && !!(state.oracleUsed ?? {})[currentPlayer.id] && oracleDismissed;
+  const empoisonneurHasActed = currentPlayer?.role === 'empoisonneur' && currentPlayer && (state.empoisonneurTargets ?? {})[currentPlayer.id] !== undefined;
+  const roleHasActed = wolfHasVoted || seerHasActed || cupidHasActed || witchHasActed || guardHasActed || corbeauHasActed || foxHasActed || conciergeHasActed || oracleHasActed || empoisonneurHasActed;
 
   // Discovery phase mode split: simulation-only roles vs real-action roles
   const SIMULATION_ONLY_ROLES = ['chasseur', 'sorciere'];
@@ -528,6 +533,7 @@ export function PlayerPage() {
       setSeerRevealing(false);
       setFoxRevealing(false);
       setConciergeRevealing(false);
+      setOracleDismissed(false);
     }
   }, [state.phase, isDiscoveryPhase]);
   useEffect(() => {
@@ -1190,6 +1196,29 @@ export function PlayerPage() {
                                 conciergeTargets: { ...(s.conciergeTargets ?? {}), [currentPlayer.id]: targetId },
                               }));
                               serverSetConciergeTarget(currentPlayer.id, targetId).then(handlePostAction);
+                            }
+                          }
+                          onOracleUse={isSimulationMode
+                            ? () => { /* practice — no-op */ }
+                            : () => {
+                              markActionSent();
+                              updateState((s) => ({
+                                ...s,
+                                oracleUsed: { ...(s.oracleUsed ?? {}), [currentPlayer.id]: true },
+                              }));
+                              serverOracleUse(currentPlayer.id).then(handlePostAction);
+                            }
+                          }
+                          onOracleDismiss={() => setOracleDismissed(true)}
+                          onEmpoisonneurTarget={isSimulationMode
+                            ? (_targetId) => { /* practice — no-op */ }
+                            : (targetId) => {
+                              markActionSent();
+                              updateState((s) => ({
+                                ...s,
+                                empoisonneurTargets: { ...(s.empoisonneurTargets ?? {}), [currentPlayer.id]: targetId },
+                              }));
+                              serverSetEmpoisonneurTarget(currentPlayer.id, targetId).then(handlePostAction);
                             }
                           }
                           t={t}

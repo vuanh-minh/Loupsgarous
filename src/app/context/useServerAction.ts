@@ -239,6 +239,11 @@ export function useServerActions() {
     return postAction('seer-target', { actorId, playerId, gameId });
   }, [gameId, localMode]);
 
+  const serverOracleUse = useCallback((actorId: number) => {
+    if (localMode) return Promise.resolve(true);
+    return postAction('oracle-use', { actorId, gameId });
+  }, [gameId, localMode]);
+
   const serverWitchHeal = useCallback((actorId: number) => {
     if (localMode) return Promise.resolve(true);
     return postAction('witch-heal', { actorId, gameId });
@@ -262,6 +267,35 @@ export function useServerActions() {
   const serverSetGuardTarget = useCallback((actorId: number, playerId: number | null) => {
     if (localMode) return Promise.resolve(true);
     return postAction('guard-target', { actorId, playerId, gameId });
+  }, [gameId, localMode]);
+
+  const serverSetCorbeauTarget = useCallback((actorId: number, playerId: number, message: string, imageUrl?: string) => {
+    if (localMode) return applyLocal((s) => {
+      const targets = { ...s.corbeauTargets, [actorId]: playerId };
+      const messages = { ...s.corbeauMessages };
+      if (message) messages[actorId] = message;
+      // Create hint (normally server-side only)
+      const hintId = Date.now() + Math.floor(Math.random() * 10000);
+      const hints = [...(s.hints || []), {
+        id: hintId,
+        text: message || "D'une source mystérieuse...",
+        imageUrl,
+        createdAt: new Date().toISOString(),
+      }];
+      const playerHints = [...(s.playerHints || []), {
+        hintId,
+        playerId,
+        sentAt: new Date().toISOString(),
+        revealed: false,
+      }];
+      return { ...s, corbeauTargets: targets, corbeauMessages: messages, hints, playerHints };
+    });
+    return postAction('corbeau-target', { actorId, playerId, message, imageUrl, gameId });
+  }, [gameId, localMode, applyLocal]);
+
+  const serverSetEmpoisonneurTarget = useCallback((actorId: number, playerId: number | null) => {
+    if (localMode) return Promise.resolve(true);
+    return postAction('empoisonneur-target', { actorId, playerId, gameId });
   }, [gameId, localMode]);
 
   const serverSetHunterPreTarget = useCallback((actorId: number, playerId: number | null) => {
@@ -327,7 +361,9 @@ export function useServerActions() {
             }
             return { ...t, playerResults: { ...t.playerResults, [playerId]: isCorrect } };
           });
-          const allCorrect = tasks.every((t) => t.playerResults?.[playerId] === true);
+          // Check poison BEFORE determining status (mirrors server-side logic)
+          const isPoisoned = !!(s.poisonedPlayers as Record<number, boolean> | undefined)?.[playerId];
+          const allCorrect = !isPoisoned && tasks.every((t) => t.playerResults?.[playerId] === true);
           playerStatuses[playerId] = allCorrect ? 'success' : 'fail';
         }
         return { ...q, tasks, playerStatuses };
@@ -364,7 +400,9 @@ export function useServerActions() {
           const allGroupVoted = playerGroup.every((pid) => collaborativeVotes[pid] !== undefined);
           if (allGroupVoted) {
             const hasFail = playerGroup.some((pid) => collaborativeVotes[pid] === false);
-            const finalStatus = hasFail ? 'fail' : 'success';
+            // Check poison for any group member (mirrors server-side logic)
+            const hasPoisoned = playerGroup.some((pid) => !!(s.poisonedPlayers as Record<number, boolean> | undefined)?.[pid]);
+            const finalStatus = (hasFail || hasPoisoned) ? 'fail' : 'success';
             for (const pid of playerGroup) {
               playerStatuses[pid] = finalStatus;
             }
@@ -495,32 +533,6 @@ export function useServerActions() {
     return postAction('reveal-hint', { playerId, hintId, gameId });
   }, [gameId, localMode, applyLocal]);
 
-  // ── Corbeau target — direct call in PlayerPage sets targets/messages but
-  //    only the server creates hints. In local mode applyLocal handles both. ──
-  const serverSetCorbeauTarget = useCallback((actorId: number, playerId: number, message: string, imageUrl?: string) => {
-    if (localMode) return applyLocal((s) => {
-      const targets = { ...s.corbeauTargets, [actorId]: playerId };
-      const messages = { ...s.corbeauMessages };
-      if (message) messages[actorId] = message;
-      // Create hint (normally server-side only)
-      const hintId = Date.now() + Math.floor(Math.random() * 10000);
-      const hints = [...(s.hints || []), {
-        id: hintId,
-        text: message || "D'une source mystérieuse...",
-        imageUrl,
-        createdAt: new Date().toISOString(),
-      }];
-      const playerHints = [...(s.playerHints || []), {
-        hintId,
-        playerId,
-        sentAt: new Date().toISOString(),
-        revealed: false,
-      }];
-      return { ...s, corbeauTargets: targets, corbeauMessages: messages, hints, playerHints };
-    });
-    return postAction('corbeau-target', { actorId, playerId, message, imageUrl, gameId });
-  }, [gameId, localMode, applyLocal]);
-
   // ── Join village (away player becomes present) ──
   const serverJoinVillage = useCallback((playerId: number) => {
     if (localMode) return applyLocal((s) => {
@@ -538,6 +550,7 @@ export function useServerActions() {
     serverCancelVote,
     serverCastWerewolfVote,
     serverSetSeerTarget,
+    serverOracleUse,
     serverWitchHeal,
     serverWitchKill,
     serverCancelWitchKill,
@@ -545,6 +558,7 @@ export function useServerActions() {
     serverMarkRoleRevealed,
     serverSetGuardTarget,
     serverSetCorbeauTarget,
+    serverSetEmpoisonneurTarget,
     serverRevealHint,
     serverDeclareCandidacy,
     serverWithdrawCandidacy,
