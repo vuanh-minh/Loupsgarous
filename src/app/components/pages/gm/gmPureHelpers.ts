@@ -659,6 +659,17 @@ export function distributeQuestRound(s: GameState): { state: GameState; distribu
     }
   }
 
+  // Unhide all quests that have been assigned to at least one player (no longer drafts)
+  const allAssignedQuestIds = new Set<number>();
+  for (const ids of Object.values(newAssignments)) {
+    for (const qid of ids) allAssignedQuestIds.add(qid);
+  }
+  for (const q of updatedQuests) {
+    if (q.hidden && allAssignedQuestIds.has(q.id)) {
+      q.hidden = false;
+    }
+  }
+
   return {
     state: { ...s, quests: updatedQuests, questAssignments: newAssignments },
     distributedCount,

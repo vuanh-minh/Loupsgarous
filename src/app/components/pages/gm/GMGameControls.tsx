@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
-import { motion } from 'motion/react';
-import { Eye, Check, Moon, Crown, UserX } from 'lucide-react';
+import { motion, AnimatePresence } from 'motion/react';
+import { Eye, Check, Moon, Crown, UserX, Copy, CheckCheck, ExternalLink } from 'lucide-react';
 import { useGamePanelContext } from './GamePanelContext';
 import { buildNightActions, computeVoteData } from './useGMGameLogic';
 import { GMVoteTracking } from './GMVoteTracking';
@@ -34,6 +34,8 @@ export function GMGameControls({ phaseOutcomePreview }: GMGameControlsProps) {
   } = useGamePanelContext();
 
   const [nightActionsTab, setNightActionsTab] = useState<'pending' | 'done'>('pending');
+  const [revealSelectedPlayer, setRevealSelectedPlayer] = useState<Player | null>(null);
+  const [codeCopied, setCodeCopied] = useState(false);
 
   const nightActions = React.useMemo(
     () => buildNightActions(state, hasRole, alivePlayers),
@@ -85,6 +87,83 @@ export function GMGameControls({ phaseOutcomePreview }: GMGameControlsProps) {
           </div>
         </motion.div>
 
+        {/* Selected player code display */}
+        <AnimatePresence>
+          {revealSelectedPlayer && (
+            <motion.div
+              initial={{ opacity: 0, height: 0 }}
+              animate={{ opacity: 1, height: 'auto' }}
+              exit={{ opacity: 0, height: 0 }}
+              className="overflow-hidden mb-4"
+            >
+              <div
+                className="rounded-xl p-4 flex items-center justify-between gap-3"
+                style={{
+                  background: 'rgba(212,168,67,0.08)',
+                  border: '1px solid rgba(212,168,67,0.25)',
+                }}
+              >
+                <div className="flex items-center gap-3 min-w-0">
+                  <GMAvatar player={revealSelectedPlayer} size="text-xl" />
+                  <div className="min-w-0">
+                    <span style={{ color: '#8090b0', fontSize: '0.7rem' }}>{revealSelectedPlayer.name}</span>
+                    <div className="flex items-center gap-2 mt-0.5">
+                      <span style={{ fontFamily: '"Cinzel", serif', color: '#d4a843', fontSize: '1.3rem', fontWeight: 700, letterSpacing: '0.15em' }}>
+                        {revealSelectedPlayer.shortCode}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2 flex-shrink-0">
+                  <button
+                    onClick={() => {
+                      navigate(`/player/${revealSelectedPlayer.shortCode}`);
+                    }}
+                    className="flex items-center gap-1.5 px-3 py-2 rounded-lg transition-all cursor-pointer"
+                    style={{
+                      background: 'rgba(138,180,248,0.12)',
+                      border: '1px solid rgba(138,180,248,0.25)',
+                      color: '#8ab4f8',
+                      fontSize: '0.75rem',
+                      fontWeight: 600,
+                    }}
+                    title="Ouvrir la vue joueur"
+                  >
+                    <ExternalLink size={14} />
+                    Voir
+                  </button>
+                  <button
+                    onClick={() => {
+                      const text = revealSelectedPlayer.shortCode;
+                      const ta = document.createElement('textarea');
+                      ta.value = text;
+                      ta.style.position = 'fixed';
+                      ta.style.opacity = '0';
+                      document.body.appendChild(ta);
+                      ta.select();
+                      document.execCommand('copy');
+                      document.body.removeChild(ta);
+                      setCodeCopied(true);
+                      setTimeout(() => setCodeCopied(false), 2000);
+                    }}
+                    className="flex items-center gap-1.5 px-3 py-2 rounded-lg transition-all cursor-pointer"
+                    style={{
+                      background: codeCopied ? 'rgba(107,142,90,0.2)' : 'rgba(212,168,67,0.15)',
+                      border: `1px solid ${codeCopied ? 'rgba(107,142,90,0.4)' : 'rgba(212,168,67,0.3)'}`,
+                      color: codeCopied ? '#6b8e5a' : '#d4a843',
+                      fontSize: '0.75rem',
+                      fontWeight: 600,
+                    }}
+                  >
+                    {codeCopied ? <CheckCheck size={14} /> : <Copy size={14} />}
+                    {codeCopied ? 'Copie !' : 'Copier'}
+                  </button>
+                </div>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
         {/* Village grid with role-seen status */}
         <div
           className="rounded-xl p-5 mb-6"
@@ -101,10 +180,10 @@ export function GMGameControls({ phaseOutcomePreview }: GMGameControlsProps) {
                   key={p.id}
                   className="flex flex-col items-center gap-1.5 cursor-pointer transition-transform hover:scale-110 active:scale-95"
                   onClick={() => {
-                    sessionStorage.setItem('__gm_preview', '1');
-                    navigate(`/player/${p.shortCode}`);
+                    setRevealSelectedPlayer(p);
+                    setCodeCopied(false);
                   }}
-                  title={`Voir la page de ${p.name}`}
+                  title={`Code de ${p.name}`}
                 >
                   <div
                     className="w-12 h-12 rounded-full flex items-center justify-center relative"

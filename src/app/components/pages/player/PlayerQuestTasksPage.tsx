@@ -9,6 +9,7 @@ import {
 import type { GameState, Quest, QuestTask, QuestTaskInputType, QuestStatus } from '../../../context/gameTypes';
 import type { GameThemeTokens } from '../../../context/gameTheme';
 import { PAvatar } from './PAvatar';
+import { HintFullscreenLightbox, getHintAssociations, setHintAssociation as setHintAssoc, extractRoleFromHintText } from '../../HintComponents';
 
 interface PlayerQuestTasksPageProps {
   quest: Quest;
@@ -16,6 +17,7 @@ interface PlayerQuestTasksPageProps {
   currentPlayerId: number;
   onBack: () => void;
   onAnswerTask: (questId: number, taskId: number, answer: string) => void;
+  onSetHypothesis?: (targetPlayerId: number, roleId: string) => void;
   t: GameThemeTokens;
 }
 
@@ -52,7 +54,21 @@ const NIGHT_PALETTE: CardPalette = {
   collabBg: 'rgba(120,140,200,0.15)', collabBorder: 'rgba(120,140,200,0.3)', collabText: '#a8b8e0',
 };
 
-function getCardPalette(phase: string): CardPalette {
+const DEAD_PALETTE: CardPalette = {
+  bg: 'linear-gradient(165deg, #28222e 0%, #221e28 30%, #1d1922 70%, #17141c 100%)',
+  bgOverlay: 'linear-gradient(180deg, rgba(150,130,180,0.04) 0%, rgba(120,100,160,0.01) 100%)',
+  headerBg: 'rgba(22,18,28,0.65)',
+  border: '#4a4258', borderLight: '#5a5068', borderDark: '#17141c',
+  title: '#a898b5', text: '#887a95', textDim: '#655a70',
+  divider: 'rgba(140,120,170,0.12)', insetBg: 'rgba(12,8,18,0.35)', insetBorder: 'rgba(140,120,170,0.08)',
+  accent: '#9b8bb8', accentBg: 'rgba(155,139,184,0.12)', accentBorder: 'rgba(155,139,184,0.25)', accentDark: '#13101a',
+  decorLine: 'linear-gradient(90deg, transparent, rgba(150,130,180,0.2), transparent)',
+  cardShadow: 'inset 0 1px 0 rgba(150,130,180,0.06), 0 4px 14px rgba(0,0,0,0.45), 0 1px 3px rgba(0,0,0,0.3)',
+  collabBg: 'rgba(130,110,160,0.15)', collabBorder: 'rgba(130,110,160,0.3)', collabText: '#9585a8',
+};
+
+function getCardPalette(phase: string, isDead?: boolean): CardPalette {
+  if (isDead) return DEAD_PALETTE;
   return phase === 'night' ? NIGHT_PALETTE : DAY_PALETTE;
 }
 
@@ -216,7 +232,7 @@ function PlayerSelectModal({ players, cp, isNight, onSelect, onClose }: {
 }
 
 // ── TaskInput ──
-function TaskInput({ task, quest, state, playerId, onAnswer, cp, onOpenPlayerSelect }: {
+function TaskInput({ task, quest, state, playerId, onAnswer, cp, onOpenPlayerSelect, isDead }: {
   task: QuestTask;
   quest: Quest;
   state: GameState;
@@ -224,6 +240,7 @@ function TaskInput({ task, quest, state, playerId, onAnswer, cp, onOpenPlayerSel
   onAnswer: (answer: string) => void;
   cp: CardPalette;
   onOpenPlayerSelect: () => void;
+  isDead?: boolean;
 }) {
   const [draft, setDraft] = useState('');
   const myAnswer = task.playerAnswers?.[playerId];
@@ -239,15 +256,24 @@ function TaskInput({ task, quest, state, playerId, onAnswer, cp, onOpenPlayerSel
     setDraft('');
   }, [draft, onAnswer]);
 
+  const accentColor = isDead ? '#9b8bb8' : '#d4a843';
+  const accentBg = isDead ? 'rgba(155,139,184,0.1)' : 'rgba(212,168,67,0.1)';
+  const accentBorder = isDead ? 'rgba(155,139,184,0.2)' : 'rgba(212,168,67,0.2)';
+  const successColor = isDead ? '#8a7ba0' : '#7ac462';
+  const successBg = isDead ? 'rgba(140,120,170,0.12)' : 'rgba(90,150,70,0.12)';
+  const successBorder = isDead ? 'rgba(140,120,170,0.25)' : 'rgba(90,150,70,0.25)';
+  const neutralBg = isDead ? 'rgba(140,120,170,0.08)' : 'rgba(160,130,90,0.08)';
+  const neutralBorder = isDead ? 'rgba(140,120,170,0.15)' : 'rgba(160,130,90,0.15)';
+
   if (isAnswered && !isResolved) {
     return (
       <div className="flex items-center gap-2 mt-1.5">
         <div
           className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-md flex-1"
-          style={{ background: 'rgba(212,168,67,0.1)', border: '1px solid rgba(212,168,67,0.2)' }}
+          style={{ background: accentBg, border: `1px solid ${accentBorder}` }}
         >
-          <CheckCircle size={12} style={{ color: '#d4a843' }} />
-          <span style={{ color: '#d4a843', fontSize: '0.7rem', fontWeight: 500 }}>
+          <CheckCircle size={12} style={{ color: accentColor }} />
+          <span style={{ color: accentColor, fontSize: '0.7rem', fontWeight: 500 }}>
             Repondu : {myAnswer}
           </span>
         </div>
@@ -263,15 +289,15 @@ function TaskInput({ task, quest, state, playerId, onAnswer, cp, onOpenPlayerSel
         <div
           className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-md"
           style={{
-            background: showCorrect ? 'rgba(90,150,70,0.12)' : 'rgba(160,130,90,0.08)',
-            border: `1px solid ${showCorrect ? 'rgba(90,150,70,0.25)' : 'rgba(160,130,90,0.15)'}`,
+            background: showCorrect ? successBg : neutralBg,
+            border: `1px solid ${showCorrect ? successBorder : neutralBorder}`,
           }}
         >
           {showCorrect
-            ? <CheckCircle size={12} style={{ color: '#7ac462' }} />
+            ? <CheckCircle size={12} style={{ color: successColor }} />
             : <span style={{ color: cp.textDim, fontSize: '0.65rem' }}>?</span>
           }
-          <span style={{ color: showCorrect ? '#7ac462' : cp.textDim, fontSize: '0.7rem', fontWeight: 500 }}>
+          <span style={{ color: showCorrect ? successColor : cp.textDim, fontSize: '0.7rem', fontWeight: 500 }}>
             {showCorrect ? 'Correct' : 'Repondu'}
           </span>
         </div>
@@ -293,9 +319,13 @@ function TaskInput({ task, quest, state, playerId, onAnswer, cp, onOpenPlayerSel
         onClick={onOpenPlayerSelect}
         className="flex items-center gap-3 px-4 py-3 rounded-xl w-full mt-2"
         style={{
-          background: 'linear-gradient(135deg, #b8860b 0%, #d4a843 60%, #c9a040 100%)',
-          boxShadow: '0 3px 12px rgba(184,134,11,0.35), 0 1px 3px rgba(0,0,0,0.2)',
-          color: '#1a1207',
+          background: isDead
+            ? 'linear-gradient(135deg, #5a4e6a 0%, #7a6a90 60%, #6a5e7a 100%)'
+            : 'linear-gradient(135deg, #b8860b 0%, #d4a843 60%, #c9a040 100%)',
+          boxShadow: isDead
+            ? '0 3px 12px rgba(90,70,110,0.35), 0 1px 3px rgba(0,0,0,0.2)'
+            : '0 3px 12px rgba(184,134,11,0.35), 0 1px 3px rgba(0,0,0,0.2)',
+          color: isDead ? '#151218' : '#1a1207',
           fontSize: '0.8rem',
           fontWeight: 700,
           fontFamily: '"Cinzel", serif',
@@ -330,7 +360,7 @@ function TaskInput({ task, quest, state, playerId, onAnswer, cp, onOpenPlayerSel
               fontSize: '0.75rem',
             }}
           >
-            <span style={{ color: '#d4a843', fontWeight: 600, marginRight: '0.5rem' }}>
+            <span style={{ color: accentColor, fontWeight: 600, marginRight: '0.5rem' }}>
               {String.fromCharCode(65 + idx)}.
             </span>
             {choice}
@@ -399,17 +429,19 @@ function TaskInput({ task, quest, state, playerId, onAnswer, cp, onOpenPlayerSel
               className="w-11 h-13 text-center rounded-lg outline-none transition-all duration-150"
               style={{
                 background: draft[i]
-                  ? 'rgba(212,168,67,0.08)'
+                  ? (isDead ? 'rgba(130,130,140,0.08)' : 'rgba(212,168,67,0.08)')
                   : 'rgba(0,0,0,0.3)',
-                border: `1.5px solid ${draft[i] ? 'rgba(212,168,67,0.45)' : 'rgba(210,180,130,0.15)'}`,
+                border: `1.5px solid ${draft[i] ? (isDead ? 'rgba(155,139,184,0.45)' : 'rgba(212,168,67,0.45)') : 'rgba(210,180,130,0.15)'}`,
                 color: cp.title,
                 fontSize: '1.15rem',
                 fontFamily: 'monospace',
                 fontWeight: 700,
                 letterSpacing: '0.05em',
-                caretColor: '#d4a843',
+                caretColor: accentColor,
                 boxShadow: draft[i]
-                  ? '0 0 8px rgba(212,168,67,0.12), inset 0 1px 2px rgba(212,168,67,0.06)'
+                  ? (isDead
+                    ? '0 0 8px rgba(155,139,184,0.12), inset 0 1px 2px rgba(155,139,184,0.06)'
+                    : '0 0 8px rgba(212,168,67,0.12), inset 0 1px 2px rgba(212,168,67,0.06)')
                   : 'inset 0 1px 3px rgba(0,0,0,0.15)',
               }}
             />
@@ -439,9 +471,9 @@ function TaskInput({ task, quest, state, playerId, onAnswer, cp, onOpenPlayerSel
         className="px-3 py-1.5 rounded-md flex items-center gap-1 shrink-0"
         style={{
           background: draft.trim()
-            ? 'linear-gradient(135deg, #b8860b, #d4a843)'
-            : 'rgba(212,168,67,0.1)',
-          color: draft.trim() ? '#1a1207' : cp.textDim,
+            ? (isDead ? 'linear-gradient(135deg, #5a4e6a, #7a6a90)' : 'linear-gradient(135deg, #b8860b, #d4a843)')
+            : (isDead ? 'rgba(155,139,184,0.1)' : 'rgba(212,168,67,0.1)'),
+          color: draft.trim() ? (isDead ? '#151218' : '#1a1207') : cp.textDim,
           fontSize: '0.7rem',
           fontWeight: 600,
           opacity: draft.trim() ? 1 : 0.4,
@@ -455,10 +487,11 @@ function TaskInput({ task, quest, state, playerId, onAnswer, cp, onOpenPlayerSel
 
 // ── Page ──
 export const PlayerQuestTasksPage = React.memo(function PlayerQuestTasksPage({
-  quest, state, currentPlayerId, onBack, onAnswerTask, t,
+  quest, state, currentPlayerId, onBack, onAnswerTask, onSetHypothesis, t,
 }: PlayerQuestTasksPageProps) {
   const pid = currentPlayerId;
-  const cp = getCardPalette(state.phase);
+  const isDead = !state.players.find(p => p.id === pid)?.alive;
+  const cp = getCardPalette(state.phase, isDead);
   const isNight = state.phase === 'night';
   const myStatus = playerQuestStatus(quest, pid);
   const isResolved = myStatus === 'success' || myStatus === 'fail';
@@ -490,8 +523,32 @@ export const PlayerQuestTasksPage = React.memo(function PlayerQuestTasksPage({
     setPlayerSelectTarget(null);
   }, [playerSelectTarget, onAnswerTask]);
 
-  // Fullscreen image state
+  // Fullscreen image state (for task images)
   const [fullscreenImageUrl, setFullscreenImageUrl] = useState<string | null>(null);
+
+  // Fullscreen hint lightbox (for reward hints — with navigation across all revealed hints)
+  const [fullscreenHintId, setFullscreenHintId] = useState<number | null>(null);
+  // Hint-player associations for hypothesis mechanism
+  const [hintAssociations, setHintAssociations] = useState<Record<number, number>>(() =>
+    state.gameId ? getHintAssociations(state.gameId, pid) : {}
+  );
+  const handleSetHintAssociation = useCallback((hintId: number, targetPlayerId: number | null) => {
+    if (!state.gameId) return;
+    setHintAssoc(state.gameId, pid, hintId, targetPlayerId);
+    setHintAssociations(getHintAssociations(state.gameId, pid));
+  }, [state.gameId, pid]);
+  const revealedHintIds = React.useMemo(() => {
+    const playerHints = state.playerHints || [];
+    const hintIdSet = new Set((state.hints || []).map(h => h.id));
+    return playerHints
+      .filter(ph => ph.playerId === pid && ph.revealed && hintIdSet.has(ph.hintId))
+      .sort((a, b) => new Date(b.sentAt).getTime() - new Date(a.sentAt).getTime())
+      .map(ph => ph.hintId);
+  }, [state.playerHints, state.hints, pid]);
+
+  const deadAccent = isDead ? '#9b8bb8' : '#d4a843';
+  const deadSuccessColor = isDead ? '#8a7ba0' : '#7ac462';
+  const deadFailColor = isDead ? '#8a7080' : '#e06060';
 
   return (
     <div className="flex flex-col h-full relative">
@@ -503,7 +560,7 @@ export const PlayerQuestTasksPage = React.memo(function PlayerQuestTasksPage({
         <button
           onClick={onBack}
           className="flex items-center justify-center shrink-0 active:scale-95 transition-transform"
-          style={{ color: t.gold }}
+          style={{ color: isDead ? '#9b8bb8' : t.gold }}
           aria-label="Retour"
         >
           <ArrowLeft size={20} />
@@ -511,7 +568,7 @@ export const PlayerQuestTasksPage = React.memo(function PlayerQuestTasksPage({
         <div className="flex-1 min-w-0">
           <h2 style={{
             fontFamily: '"Cinzel", serif',
-            color: t.gold,
+            color: isDead ? '#9b8bb8' : t.gold,
             fontSize: '0.9rem',
             fontWeight: 700,
             whiteSpace: 'nowrap',
@@ -525,14 +582,18 @@ export const PlayerQuestTasksPage = React.memo(function PlayerQuestTasksPage({
           className="shrink-0 px-2.5 py-1 rounded-full"
           style={{
             background: isResolved
-              ? (myStatus === 'success' ? 'rgba(90,150,70,0.15)' : 'rgba(200,60,60,0.12)')
-              : 'rgba(212,168,67,0.12)',
+              ? (myStatus === 'success'
+                ? (isDead ? 'rgba(140,120,170,0.15)' : 'rgba(90,150,70,0.15)')
+                : (isDead ? 'rgba(140,100,130,0.12)' : 'rgba(200,60,60,0.12)'))
+              : (isDead ? 'rgba(155,139,184,0.12)' : 'rgba(212,168,67,0.12)'),
             border: `1px solid ${isResolved
-              ? (myStatus === 'success' ? 'rgba(90,150,70,0.3)' : 'rgba(200,60,60,0.25)')
-              : 'rgba(212,168,67,0.25)'}`,
+              ? (myStatus === 'success'
+                ? (isDead ? 'rgba(140,120,170,0.3)' : 'rgba(90,150,70,0.3)')
+                : (isDead ? 'rgba(140,100,130,0.25)' : 'rgba(200,60,60,0.25)'))
+              : (isDead ? 'rgba(155,139,184,0.25)' : 'rgba(212,168,67,0.25)')}`,
             color: isResolved
-              ? (myStatus === 'success' ? '#7ac462' : '#e06060')
-              : '#d4a843',
+              ? (myStatus === 'success' ? deadSuccessColor : deadFailColor)
+              : deadAccent,
             fontSize: '0.65rem',
             fontWeight: 700,
             fontFamily: '"Cinzel", serif',
@@ -547,7 +608,7 @@ export const PlayerQuestTasksPage = React.memo(function PlayerQuestTasksPage({
         <div className="flex flex-col gap-3">
           {/* Quest title reminder */}
           <div className="flex items-center gap-2 mb-1">
-            <Swords size={14} style={{ color: '#d4a843', opacity: 0.6 }} />
+            <Swords size={14} style={{ color: deadAccent, opacity: 0.6 }} />
             <span style={{
               fontFamily: '"Cinzel", serif',
               color: cp.title,
@@ -565,21 +626,21 @@ export const PlayerQuestTasksPage = React.memo(function PlayerQuestTasksPage({
               className="rounded-xl p-3.5 flex items-center gap-2.5"
               style={{
                 background: myStatus === 'success'
-                  ? 'rgba(90,150,70,0.12)'
-                  : 'rgba(200,60,60,0.1)',
+                  ? (isDead ? 'rgba(140,120,170,0.12)' : 'rgba(90,150,70,0.12)')
+                  : (isDead ? 'rgba(140,100,130,0.1)' : 'rgba(200,60,60,0.1)'),
                 border: `1px solid ${myStatus === 'success'
-                  ? 'rgba(90,150,70,0.25)'
-                  : 'rgba(200,60,60,0.2)'}`,
+                  ? (isDead ? 'rgba(140,120,170,0.25)' : 'rgba(90,150,70,0.25)')
+                  : (isDead ? 'rgba(140,100,130,0.2)' : 'rgba(200,60,60,0.2)')}`,
               }}
             >
               {myStatus === 'success'
-                ? <CheckCircle size={20} style={{ color: '#7ac462' }} />
-                : <XCircle size={20} style={{ color: '#e06060' }} />
+                ? <CheckCircle size={20} style={{ color: deadSuccessColor }} />
+                : <XCircle size={20} style={{ color: deadFailColor }} />
               }
               <div>
                 <p style={{
                   fontFamily: '"Cinzel", serif',
-                  color: myStatus === 'success' ? '#7ac462' : '#e06060',
+                  color: myStatus === 'success' ? deadSuccessColor : deadFailColor,
                   fontSize: '0.85rem',
                   fontWeight: 700,
                 }}>
@@ -598,17 +659,18 @@ export const PlayerQuestTasksPage = React.memo(function PlayerQuestTasksPage({
           {/* Reward hint for succeeded quests */}
           {hasRewardHint && rewardHint && (
             <div
-              className="rounded-xl p-3.5 flex items-start gap-2.5"
+              className="rounded-xl p-3.5 flex items-start gap-2.5 cursor-pointer active:opacity-80 transition-opacity"
               style={{
-                background: 'rgba(212,168,67,0.08)',
-                border: '1px solid rgba(212,168,67,0.2)',
+                background: isDead ? 'rgba(155,139,184,0.08)' : 'rgba(212,168,67,0.08)',
+                border: `1px solid ${isDead ? 'rgba(155,139,184,0.2)' : 'rgba(212,168,67,0.2)'}`,
               }}
+              onClick={() => setFullscreenHintId(rewardHint.id)}
             >
-              <Lightbulb size={18} className="shrink-0 mt-0.5" style={{ color: '#d4a843' }} />
+              <Lightbulb size={18} className="shrink-0 mt-0.5" style={{ color: deadAccent }} />
               <div className="flex-1 min-w-0">
                 <p style={{
                   fontFamily: '"Cinzel", serif',
-                  color: '#d4a843',
+                  color: deadAccent,
                   fontSize: '0.72rem',
                   fontWeight: 700,
                   marginBottom: '0.25rem',
@@ -631,7 +693,7 @@ export const PlayerQuestTasksPage = React.memo(function PlayerQuestTasksPage({
                     src={rewardHint.imageUrl}
                     alt="Indice"
                     className="rounded-lg max-h-40 object-contain mt-1"
-                    style={{ border: '1px solid rgba(212,168,67,0.2)' }}
+                    style={{ border: `1px solid ${isDead ? 'rgba(155,139,184,0.2)' : 'rgba(212,168,67,0.2)'}` }}
                   />
                 )}
               </div>
@@ -642,8 +704,8 @@ export const PlayerQuestTasksPage = React.memo(function PlayerQuestTasksPage({
             <div
               className="rounded-xl p-3 flex items-center gap-2"
               style={{
-                background: 'rgba(245,179,66,0.1)',
-                border: '1px solid rgba(245,179,66,0.2)',
+                background: isDead ? 'rgba(155,139,184,0.1)' : 'rgba(245,179,66,0.1)',
+                border: `1px solid ${isDead ? 'rgba(155,139,184,0.2)' : 'rgba(245,179,66,0.2)'}`,
               }}
             >
               <motion.div
@@ -651,9 +713,9 @@ export const PlayerQuestTasksPage = React.memo(function PlayerQuestTasksPage({
                 transition={{ duration: 2, repeat: Infinity, ease: 'linear' }}
                 className="shrink-0"
               >
-                <Clock size={14} style={{ color: '#f5b342' }} />
+                <Clock size={14} style={{ color: isDead ? '#9b8bb8' : '#f5b342' }} />
               </motion.div>
-              <p style={{ color: '#f5b342', fontSize: '0.7rem' }}>
+              <p style={{ color: isDead ? '#9b8bb8' : '#f5b342', fontSize: '0.7rem' }}>
                 Resolution en cours
                 <motion.span
                   animate={{ opacity: [0, 1, 0] }}
@@ -677,12 +739,16 @@ export const PlayerQuestTasksPage = React.memo(function PlayerQuestTasksPage({
                 transition={{ duration: 0.25, delay: idx * 0.06 }}
                 className="rounded-xl p-3.5"
                 style={{
-                  background: showPerTaskResult && myResult === true
-                    ? 'rgba(90,150,70,0.06)'
-                    : isNight ? 'rgba(18,20,42,0.55)' : '#E7DCC5',
-                  border: `1px solid ${showPerTaskResult && myResult === true
-                    ? 'rgba(90,150,70,0.15)'
-                    : cp.insetBorder}`,
+                  background: isDead
+                    ? (showPerTaskResult && myResult === true ? 'rgba(140,120,170,0.06)' : 'rgba(24,20,30,0.55)')
+                    : (showPerTaskResult && myResult === true
+                      ? 'rgba(90,150,70,0.06)'
+                      : isNight ? 'rgba(18,20,42,0.55)' : '#E7DCC5'),
+                  border: `1px solid ${isDead
+                    ? (showPerTaskResult && myResult === true ? 'rgba(140,120,170,0.15)' : cp.insetBorder)
+                    : (showPerTaskResult && myResult === true
+                      ? 'rgba(90,150,70,0.15)'
+                      : cp.insetBorder)}`,
                 }}
               >
                 <div className="flex items-start gap-2.5">
@@ -740,6 +806,7 @@ export const PlayerQuestTasksPage = React.memo(function PlayerQuestTasksPage({
                       onAnswer={(answer) => onAnswerTask(quest.id, task.id, answer)}
                       cp={cp}
                       onOpenPlayerSelect={() => handleOpenPlayerSelect(quest.id, task.id)}
+                      isDead={isDead}
                     />
                   </div>
                 </div>
@@ -809,6 +876,18 @@ export const PlayerQuestTasksPage = React.memo(function PlayerQuestTasksPage({
         </AnimatePresence>,
         document.body
       )}
+
+      {/* Fullscreen Hint Lightbox with navigation */}
+      <HintFullscreenLightbox
+        hints={state.hints || []}
+        revealedHintIds={revealedHintIds}
+        fullscreenHintId={fullscreenHintId}
+        setFullscreenHintId={setFullscreenHintId}
+        players={state.players}
+        hintAssociations={hintAssociations}
+        onSetHintAssociation={handleSetHintAssociation}
+        onSetHypothesis={onSetHypothesis}
+      />
     </div>
   );
 });

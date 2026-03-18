@@ -112,6 +112,52 @@ export function estimatePayloadSize(payload: unknown): number {
   }
 }
 
+/**
+ * Maximum broadcast payload size (bytes). Supabase Realtime has a ~256KB limit.
+ * We set a conservative threshold and strip heavy fields if exceeded.
+ */
+const MAX_BROADCAST_SIZE = 200_000; // 200KB
+
+/**
+ * Strip heavy fields from a full-state payload to fit within broadcast limits.
+ * Removes old events and resolved quest data progressively.
+ */
+export function fitBroadcastPayload(state: GameState): GameState {
+  let size = estimatePayloadSize(state);
+  if (size <= MAX_BROADCAST_SIZE) return state;
+
+  // Clone to avoid mutating the original
+  const slim = { ...state };
+
+  // 1. Trim events to last 50 (from 200 cap)
+  if (Array.isArray(slim.events) && slim.events.length > 50) {
+    slim.events = slim.events.slice(-50);
+    size = estimatePayloadSize(slim);
+    if (size <= MAX_BROADCAST_SIZE) return slim;
+  }
+
+  // 2. Strip voteHistory (can be reconstructed from events)
+  if (slim.voteHistory && Array.isArray(slim.voteHistory) && slim.voteHistory.length > 0) {
+    slim.voteHistory = [];
+    size = estimatePayloadSize(slim);
+    if (size <= MAX_BROADCAST_SIZE) return slim;
+  }
+
+  // 3. Strip phaseDeathHistory (keep only last 3)
+  if (Array.isArray(slim.phaseDeathHistory) && slim.phaseDeathHistory.length > 3) {
+    slim.phaseDeathHistory = slim.phaseDeathHistory.slice(-3);
+    size = estimatePayloadSize(slim);
+    if (size <= MAX_BROADCAST_SIZE) return slim;
+  }
+
+  // 4. Trim events even further
+  if (Array.isArray(slim.events) && slim.events.length > 20) {
+    slim.events = slim.events.slice(-20);
+  }
+
+  return slim;
+}
+
 // ── Version tracker (GM side) ──
 let _broadcastVersion = 0;
 export function nextBroadcastVersion(): number {

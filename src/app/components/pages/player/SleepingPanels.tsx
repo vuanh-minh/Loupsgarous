@@ -35,7 +35,7 @@ export function DiscoveryRecapPanel({
   allPlayers: Player[];
   alivePlayers: Player[];
   onDismiss: () => void;
-  onWerewolfVote?: (wolfId: number, targetId: number) => void;
+  onWerewolfVote?: (wolfId: number, targetId: number, message?: string) => void;
   t: GameThemeTokens;
 }) {
   const [showChangeTarget, setShowChangeTarget] =

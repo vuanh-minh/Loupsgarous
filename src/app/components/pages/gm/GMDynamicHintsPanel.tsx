@@ -1,11 +1,12 @@
 import React, { useState, useMemo, useCallback, useRef, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'motion/react';
 import {
   Plus, Trash2, Send, Eye, Users, Shield, Skull,
   ChevronDown, AlertTriangle, Target,
   ClipboardPaste, X, Check, Clock, MessageSquarePlus, Download,
   Lightbulb, ImagePlus, Home, Image, Search,
-  ChevronUp, Minus, Lock, UserX,
+  ChevronUp, Minus, Lock, UserX, FileText,
 } from 'lucide-react';
 import type { GameState, DynamicHint, Player, Hint } from '../../../context/gameTypes';
 import type { GameThemeTokens } from '../../../context/gameTheme';
@@ -39,18 +40,27 @@ function computeRecipientTeam(player: Player): RecipientTeam {
   return null;
 }
 
-/** Resolve {role} placeholder in hint text — includes French article (le/la) with auto-capitalization */
+/** Resolve {role} and {durole} placeholders in hint text — includes French articles with auto-capitalization */
 function resolveHintText(text: string, player: Player): string {
   const role = getRoleById(player.role);
-  if (!role) return text.replace(/\{role\}/gi, player.role);
-  return text.replace(/\{role\}/gi, (_match, offset: number) => {
-    // Capitalize article if {role} is at the very start of the text
+  if (!role) return text.replace(/\{role\}/gi, player.role).replace(/\{durole\}/gi, player.role);
+  // {role} → "le Loup-Garou", "la Voyante" (auto-cap at start)
+  let result = text.replace(/\{role\}/gi, (_match, offset: number) => {
     const capitalize = offset === 0;
     const art = capitalize
       ? role.article.charAt(0).toUpperCase() + role.article.slice(1)
       : role.article;
     return `${art} ${role.name}`;
   });
+  // {durole} → "du Loup-Garou" (le→du), "de la Voyante" (la→de la), auto-cap at start
+  result = result.replace(/\{durole\}/gi, (_match, offset: number) => {
+    const capitalize = offset === 0;
+    if (role.article === 'le') {
+      return capitalize ? `Du ${role.name}` : `du ${role.name}`;
+    }
+    return capitalize ? `De la ${role.name}` : `de la ${role.name}`;
+  });
+  return result;
 }
 
 /** Get next dynamic hint ID */
@@ -137,27 +147,33 @@ export function GMDynamicHintsPanel({
   const [bulkText, setBulkText] = useState('');
   const [bulkErrors, setBulkErrors] = useState<string[]>([]);
   const [collapsedSections, setCollapsedSections] = useState<Set<string>>(new Set(['village', 'wolves', 'villageois', 'pending', 'villageois-neutral']));
+  const [globalHintsTab, setGlobalHintsTab] = useState<'list' | 'byPlayer'>('list');
+  const [expandedHintPlayers, setExpandedHintPlayers] = useState<Set<number>>(new Set());
   const [uploadingDynImage, setUploadingDynImage] = useState<number | null>(null); // playerId currently uploading for
   const dynImageInputRef = useRef<HTMLInputElement | null>(null);
   const [dynImageTargetPlayer, setDynImageTargetPlayer] = useState<number | null>(null);
+  const dynImageTextRef = useRef<string>('');
   const inputRef = useRef<HTMLInputElement | null>(null);
   const [galleryTargetPlayer, setGalleryTargetPlayer] = useState<number | null>(null);
+  const [shareHintPlayerId, setShareHintPlayerId] = useState<number | null>(null);
+  const [shareHintSearch, setShareHintSearch] = useState('');
 
   // Select an image from the gallery as a dynamic hint
-  const handleGalleryImageSelect = useCallback((imageUrl: string, playerId: number) => {
+  const handleGalleryImageSelect = useCallback((imageUrl: string, playerId: number, text?: string) => {
     const id = nextDynamicHintId(dynamicHints);
     onUpdateState((s) => ({
       ...s,
       dynamicHints: [
         ...(s.dynamicHints ?? []),
-        { id, targetPlayerId: playerId, text: '', imageUrl, priority: newPriority, revealed: false, createdAt: new Date().toISOString() },
+        { id, targetPlayerId: playerId, text: text || '', imageUrl, priority: newPriority, revealed: false, createdAt: new Date().toISOString() },
       ],
     }));
     setGalleryTargetPlayer(null);
-  }, [dynamicHints, newPriority, onUpdateState]);
+    setNewText('');
+  }, [dynamicHints, newPriority, onUpdateState, setNewText]);
 
   // Upload an image as a dynamic hint for a specific player
-  const handleDynImageUpload = useCallback(async (file: File, playerId: number) => {
+  const handleDynImageUpload = useCallback(async (file: File, playerId: number, text?: string) => {
     setUploadingDynImage(playerId);
     try {
       const formData = new FormData();
@@ -179,9 +195,10 @@ export function GMDynamicHintsPanel({
           ...s,
           dynamicHints: [
             ...(s.dynamicHints ?? []),
-            { id, targetPlayerId: playerId, text: '', imageUrl: data.imageUrl, priority: newPriority, revealed: false, createdAt: new Date().toISOString() },
+            { id, targetPlayerId: playerId, text: text || '', imageUrl: data.imageUrl, priority: newPriority, revealed: false, createdAt: new Date().toISOString() },
           ],
         }));
+        setNewText('');
       } else {
         console.error('Dynamic hint image upload failed:', data.error);
       }
@@ -190,7 +207,7 @@ export function GMDynamicHintsPanel({
     } finally {
       setUploadingDynImage(null);
     }
-  }, [dynamicHints, newPriority, onUpdateState, state.gameId]);
+  }, [dynamicHints, newPriority, onUpdateState, state.gameId, setNewText]);
 
   // Auto-focus input when selecting a player
   useEffect(() => {
@@ -345,24 +362,25 @@ export function GMDynamicHintsPanel({
     if (overrideRecipientIds) {
       recipientPlayerIds = overrideRecipientIds;
     } else if (recipientTeam === 'village') {
+      // Dead players also receive hints
       recipientPlayerIds = players
-        .filter((p) => p.alive && getRoleById(p.role)?.team !== 'werewolf')
+        .filter((p) => getRoleById(p.role)?.team !== 'werewolf')
         .map((p) => p.id);
     } else if (recipientTeam === 'wolves') {
       // Wolves receive hints about village-team special powers
       const wolfIds = players
-        .filter((p) => p.alive && getRoleById(p.role)?.team === 'werewolf')
+        .filter((p) => getRoleById(p.role)?.team === 'werewolf')
         .map((p) => p.id);
       // Villageois (simple villagers) also receive hints about special powers,
       // but never about their own role — exclude the target player.
       const villageoisIds = players
-        .filter((p) => p.alive && p.id !== targetPlayer.id && getRoleById(p.role)?.id === 'villageois')
+        .filter((p) => p.id !== targetPlayer.id && getRoleById(p.role)?.id === 'villageois')
         .map((p) => p.id);
       recipientPlayerIds = [...wolfIds, ...villageoisIds];
     } else if (recipientTeam === 'villageois') {
-      // Hints about simple villagers → all alive players except the target
+      // Hints about simple villagers → all players except the target (dead included)
       recipientPlayerIds = players
-        .filter((p) => p.alive && p.id !== targetPlayer.id)
+        .filter((p) => p.id !== targetPlayer.id)
         .map((p) => p.id);
     } else {
       recipientPlayerIds = [];
@@ -402,6 +420,13 @@ export function GMDynamicHintsPanel({
     setConfirmRevealId(null);
     setExcludedRecipients(new Set());
   }, [players, state, onUpdateState]);
+
+  // Send a picked dynamic hint directly to a specific player
+  const sendPickedHint = useCallback((cat: CategorizedHint, playerId: number) => {
+    revealHint(cat, [playerId]);
+    setShareHintPlayerId(null);
+    setShareHintSearch('');
+  }, [revealHint]);
 
   // ── Styles ──
   const cardBg = 'rgba(255,255,255,0.03)';
@@ -450,6 +475,29 @@ export function GMDynamicHintsPanel({
   }, [categorized]);
 
   const globalHintCount = (state.hints ?? []).filter((h) => !h.fromDynamic).length;
+
+  // ── Per-player hint aggregation for "Indices par joueurs" tab ──
+  const perPlayerHints = useMemo(() => {
+    const hints = state.hints ?? [];
+    const playerHints = state.playerHints ?? [];
+    const hintMap = new Map(hints.map(h => [h.id, h]));
+    const grouped = new Map<number, { hint: Hint; sentAt: string; revealed: boolean }[]>();
+    for (const ph of playerHints) {
+      const hint = hintMap.get(ph.hintId);
+      if (!hint) continue;
+      if (!grouped.has(ph.playerId)) grouped.set(ph.playerId, []);
+      grouped.get(ph.playerId)!.push({ hint, sentAt: ph.sentAt, revealed: ph.revealed });
+    }
+    return players
+      .filter(p => grouped.has(p.id))
+      .map(p => ({
+        player: p,
+        hints: grouped.get(p.id)!.sort((a, b) => new Date(b.sentAt).getTime() - new Date(a.sentAt).getTime()),
+      }))
+      .sort((a, b) => b.hints.length - a.hints.length);
+  }, [state.hints, state.playerHints, players]);
+
+  const playersWithHintsCount = perPlayerHints.length;
 
   return (
     <div className="space-y-5">
@@ -503,16 +551,209 @@ export function GMDynamicHintsPanel({
               transition={{ duration: 0.25 }}
               className="overflow-hidden"
             >
-              <div className="mt-3">
-                <GMHintPanel
-                  state={state}
-                  onUpdateState={onUpdateState}
-                  t={t}
-                  isMobile={isMobile}
-                  externalPerPlayerTarget={externalPerPlayerTarget}
-                  onClearExternalTarget={onClearExternalTarget}
-                />
+              {/* ── Tab navigation ── */}
+              <div className="flex gap-1 mt-3 mb-3 p-0.5 rounded-lg" style={{ background: `rgba(${t.overlayChannel}, 0.04)` }}>
+                <button
+                  onClick={() => setGlobalHintsTab('list')}
+                  className="flex-1 flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-md transition-all"
+                  style={{
+                    background: globalHintsTab === 'list' ? 'rgba(245,158,11,0.15)' : 'transparent',
+                    color: globalHintsTab === 'list' ? '#f59e0b' : t.textDim,
+                    fontSize: '0.6rem',
+                    fontFamily: '"Cinzel", serif',
+                    fontWeight: globalHintsTab === 'list' ? 700 : 400,
+                    border: globalHintsTab === 'list' ? '1px solid rgba(245,158,11,0.25)' : '1px solid transparent',
+                  }}
+                >
+                  <Lightbulb size={11} /> Indices en jeu
+                </button>
+                <button
+                  onClick={() => setGlobalHintsTab('byPlayer')}
+                  className="flex-1 flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-md transition-all"
+                  style={{
+                    background: globalHintsTab === 'byPlayer' ? 'rgba(245,158,11,0.15)' : 'transparent',
+                    color: globalHintsTab === 'byPlayer' ? '#f59e0b' : t.textDim,
+                    fontSize: '0.6rem',
+                    fontFamily: '"Cinzel", serif',
+                    fontWeight: globalHintsTab === 'byPlayer' ? 700 : 400,
+                    border: globalHintsTab === 'byPlayer' ? '1px solid rgba(245,158,11,0.25)' : '1px solid transparent',
+                  }}
+                >
+                  <Users size={11} /> Par joueur
+                  {playersWithHintsCount > 0 && (
+                    <span
+                      className="px-1.5 py-0 rounded-full"
+                      style={{ background: 'rgba(245,158,11,0.12)', color: '#f59e0b', fontSize: '0.5rem', fontWeight: 700 }}
+                    >
+                      {playersWithHintsCount}
+                    </span>
+                  )}
+                </button>
               </div>
+
+              {/* ── Tab: Indices en jeu (existing) ── */}
+              {globalHintsTab === 'list' && (
+                <div>
+                  <GMHintPanel
+                    state={state}
+                    onUpdateState={onUpdateState}
+                    t={t}
+                    isMobile={isMobile}
+                    externalPerPlayerTarget={externalPerPlayerTarget}
+                    onClearExternalTarget={onClearExternalTarget}
+                  />
+                </div>
+              )}
+
+              {/* ── Tab: Indices par joueur ── */}
+              {globalHintsTab === 'byPlayer' && (
+                <div className="space-y-1.5">
+                  {perPlayerHints.length === 0 ? (
+                    <div className="text-center py-6">
+                      <Users size={24} style={{ color: t.textDim, margin: '0 auto 0.5rem' }} />
+                      <p style={{ color: t.textMuted, fontSize: '0.7rem', fontFamily: '"Cinzel", serif' }}>
+                        Aucun joueur n'a reçu d'indice
+                      </p>
+                    </div>
+                  ) : perPlayerHints.map(({ player: p, hints: pHints }) => {
+                    const isExpanded = expandedHintPlayers.has(p.id);
+                    return (
+                      <div key={p.id} className="rounded-lg overflow-hidden" style={{ border: `1px solid rgba(${t.overlayChannel}, 0.08)` }}>
+                        <button
+                          onClick={() => setExpandedHintPlayers(prev => {
+                            const next = new Set(prev);
+                            if (next.has(p.id)) next.delete(p.id); else next.add(p.id);
+                            return next;
+                          })}
+                          className="w-full flex items-center gap-3 p-3 transition-colors"
+                          style={{
+                            background: isExpanded ? 'rgba(245,158,11,0.06)' : `rgba(${t.overlayChannel}, 0.02)`,
+                          }}
+                        >
+                          <div className="w-8 h-8 rounded-full overflow-hidden flex-shrink-0">
+                            <AvatarSmall player={p} size={8} />
+                          </div>
+                          <div className="flex-1 text-left min-w-0">
+                            <p className="truncate" style={{ color: t.text, fontSize: '0.75rem', fontFamily: '"Cinzel", serif' }}>
+                              {p.name}
+                            </p>
+                            <p style={{ color: t.textDim, fontSize: '0.55rem' }}>
+                              {pHints.length} indice{pHints.length > 1 ? 's' : ''}
+                            </p>
+                          </div>
+                          {!p.alive && (
+                            <Skull size={12} style={{ color: '#ef4444', flexShrink: 0 }} />
+                          )}
+                          <span
+                            className="px-1.5 py-0.5 rounded-md flex-shrink-0"
+                            style={{ background: 'rgba(245,158,11,0.12)', color: '#f59e0b', fontSize: '0.55rem', fontWeight: 700, fontFamily: '"Cinzel", serif' }}
+                          >
+                            {pHints.length}
+                          </span>
+                          <motion.div
+                            animate={{ rotate: isExpanded ? 0 : -90 }}
+                            transition={{ duration: 0.2 }}
+                          >
+                            <ChevronDown size={12} style={{ color: t.textDim }} />
+                          </motion.div>
+                        </button>
+
+                        <AnimatePresence initial={false}>
+                          {isExpanded && (
+                            <motion.div
+                              initial={{ height: 0, opacity: 0 }}
+                              animate={{ height: 'auto', opacity: 1 }}
+                              exit={{ height: 0, opacity: 0 }}
+                              transition={{ duration: 0.2 }}
+                              className="overflow-hidden"
+                            >
+                              <div className="px-3 pb-3 space-y-2">
+                                <div className="h-px" style={{ background: `rgba(${t.overlayChannel}, 0.08)` }} />
+                                {/* Share a hint from pool */}
+                                <button
+                                  onClick={(e) => { e.stopPropagation(); setShareHintPlayerId(p.id); setShareHintSearch(''); }}
+                                  className="relative z-10 flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg transition-colors hover:bg-white/5 mt-1"
+                                  style={{
+                                    background: 'rgba(245,158,11,0.06)',
+                                    border: '1px solid rgba(245,158,11,0.15)',
+                                    color: '#f59e0b',
+                                    fontSize: '0.6rem',
+                                    fontFamily: '"Cinzel", serif',
+                                    pointerEvents: 'auto',
+                                  }}
+                                >
+                                  <Send size={10} />
+                                  Partager un indice
+                                </button>
+                                {pHints.map(({ hint, sentAt, revealed }, idx) => (
+                                  <div
+                                    key={hint.id}
+                                    className="flex items-start gap-2.5 p-2.5 rounded-lg"
+                                    style={{
+                                      background: `rgba(${t.overlayChannel}, 0.03)`,
+                                      border: `1px solid rgba(${t.overlayChannel}, 0.06)`,
+                                    }}
+                                  >
+                                    <div className="flex-shrink-0 mt-0.5">
+                                      {hint.imageUrl ? (
+                                        <Image size={12} style={{ color: '#f59e0b' }} />
+                                      ) : (
+                                        <Lightbulb size={12} style={{ color: '#f59e0b' }} />
+                                      )}
+                                    </div>
+                                    <div className="flex-1 min-w-0">
+                                      {hint.text && (
+                                        <p style={{
+                                          color: t.text,
+                                          fontSize: '0.65rem',
+                                          lineHeight: 1.5,
+                                          fontFamily: '"IM Fell English", serif',
+                                          fontStyle: 'italic',
+                                        }}>
+                                          &ldquo;{hint.text}&rdquo;
+                                        </p>
+                                      )}
+                                      {hint.imageUrl && (
+                                        <img
+                                          src={hint.imageUrl}
+                                          alt="Indice"
+                                          className="rounded-lg max-h-20 object-contain mt-1.5"
+                                          style={{ border: `1px solid rgba(${t.overlayChannel}, 0.1)` }}
+                                          draggable={false}
+                                        />
+                                      )}
+                                      <div className="flex items-center gap-2 mt-1.5">
+                                        <Clock size={9} style={{ color: t.textDim }} />
+                                        <span style={{ color: t.textDim, fontSize: '0.5rem' }}>
+                                          {new Date(sentAt).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}
+                                        </span>
+                                        {hint.fromDynamic && (
+                                          <span className="px-1.5 py-0 rounded-full" style={{ background: 'rgba(139,92,246,0.12)', color: '#8b5cf6', fontSize: '0.45rem' }}>
+                                            dynamique
+                                          </span>
+                                        )}
+                                        {revealed ? (
+                                          <span className="px-1.5 py-0 rounded-full" style={{ background: 'rgba(107,142,90,0.12)', color: '#6b8e5a', fontSize: '0.45rem' }}>
+                                            <Eye size={8} className="inline mr-0.5" style={{ verticalAlign: '-1px' }} /> lu
+                                          </span>
+                                        ) : (
+                                          <span className="px-1.5 py-0 rounded-full" style={{ background: 'rgba(245,158,11,0.1)', color: '#f59e0b', fontSize: '0.45rem' }}>
+                                            non lu
+                                          </span>
+                                        )}
+                                      </div>
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            </motion.div>
+                          )}
+                        </AnimatePresence>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
             </motion.div>
           )}
         </AnimatePresence>
@@ -613,10 +854,11 @@ export function GMDynamicHintsPanel({
         onChange={(e) => {
           const file = e.target.files?.[0];
           if (file && dynImageTargetPlayer !== null) {
-            handleDynImageUpload(file, dynImageTargetPlayer);
+            handleDynImageUpload(file, dynImageTargetPlayer, dynImageTextRef.current);
           }
           e.target.value = '';
           setDynImageTargetPlayer(null);
+          dynImageTextRef.current = '';
         }}
       />
 
@@ -641,7 +883,7 @@ export function GMDynamicHintsPanel({
               <textarea
                 value={bulkText}
                 onChange={(e) => setBulkText(e.target.value)}
-                placeholder={`Alice;{role} porte du rouge;P1\nBob;{role} a les cheveux blonds;P2\nCharlie;{role} est arrive en retard`}
+                placeholder={`Alice;{role} porte du rouge;P1\nBob;Les cheveux {durole} sont blonds;P2\nCharlie;{role} est arrive en retard`}
                 rows={5}
                 className="w-full px-3 py-2 rounded-lg text-sm outline-none resize-y"
                 style={{ background: inputBg, border: `1px solid ${inputBorder}`, color: t.text, fontFamily: 'monospace', fontSize: '0.65rem', lineHeight: 1.8 }}
@@ -830,7 +1072,7 @@ export function GMDynamicHintsPanel({
                       onReveal={(hintId) => { setConfirmRevealId(hintId); setExcludedRecipients(new Set()); }}
                       onDelete={deleteHint}
                       onAddHint={addHintForPlayer}
-                      onImageUpload={(pid) => { setDynImageTargetPlayer(pid); dynImageInputRef.current?.click(); }}
+                      onImageUpload={(pid) => { dynImageTextRef.current = newText; setDynImageTargetPlayer(pid); dynImageInputRef.current?.click(); }}
                       onGalleryOpen={(pid) => setGalleryTargetPlayer(pid)}
                       uploadingImage={uploadingDynImage === player.id}
                       newText={newText}
@@ -921,7 +1163,7 @@ export function GMDynamicHintsPanel({
                           onReveal={(hintId) => { setConfirmRevealId(hintId); setExcludedRecipients(new Set()); }}
                           onDelete={deleteHint}
                           onAddHint={addHintForPlayer}
-                          onImageUpload={(pid) => { setDynImageTargetPlayer(pid); dynImageInputRef.current?.click(); }}
+                          onImageUpload={(pid) => { dynImageTextRef.current = newText; setDynImageTargetPlayer(pid); dynImageInputRef.current?.click(); }}
                           onGalleryOpen={(pid) => setGalleryTargetPlayer(pid)}
                           uploadingImage={uploadingDynImage === player.id}
                           newText={newText}
@@ -980,7 +1222,7 @@ export function GMDynamicHintsPanel({
                           onReveal={(hintId) => { setConfirmRevealId(hintId); setExcludedRecipients(new Set()); }}
                           onDelete={deleteHint}
                           onAddHint={addHintForPlayer}
-                          onImageUpload={(pid) => { setDynImageTargetPlayer(pid); dynImageInputRef.current?.click(); }}
+                          onImageUpload={(pid) => { dynImageTextRef.current = newText; setDynImageTargetPlayer(pid); dynImageInputRef.current?.click(); }}
                           onGalleryOpen={(pid) => setGalleryTargetPlayer(pid)}
                           uploadingImage={uploadingDynImage === player.id}
                           newText={newText}
@@ -1058,7 +1300,7 @@ export function GMDynamicHintsPanel({
                       onReveal={(hintId) => { setConfirmRevealId(hintId); setExcludedRecipients(new Set()); }}
                       onDelete={deleteHint}
                       onAddHint={addHintForPlayer}
-                      onImageUpload={(pid) => { setDynImageTargetPlayer(pid); dynImageInputRef.current?.click(); }}
+                      onImageUpload={(pid) => { dynImageTextRef.current = newText; setDynImageTargetPlayer(pid); dynImageInputRef.current?.click(); }}
                       onGalleryOpen={(pid) => setGalleryTargetPlayer(pid)}
                       uploadingImage={uploadingDynImage === player.id}
                       newText={newText}
@@ -1134,7 +1376,7 @@ export function GMDynamicHintsPanel({
                       onReveal={(hintId) => { setConfirmRevealId(hintId); setExcludedRecipients(new Set()); }}
                       onDelete={deleteHint}
                       onAddHint={addHintForPlayer}
-                      onImageUpload={(pid) => { setDynImageTargetPlayer(pid); dynImageInputRef.current?.click(); }}
+                      onImageUpload={(pid) => { dynImageTextRef.current = newText; setDynImageTargetPlayer(pid); dynImageInputRef.current?.click(); }}
                       onGalleryOpen={(pid) => setGalleryTargetPlayer(pid)}
                       uploadingImage={uploadingDynImage === player.id}
                       newText={newText}
@@ -1210,7 +1452,7 @@ export function GMDynamicHintsPanel({
                       onReveal={(hintId) => { setConfirmRevealId(hintId); setExcludedRecipients(new Set()); }}
                       onDelete={deleteHint}
                       onAddHint={addHintForPlayer}
-                      onImageUpload={(pid) => { setDynImageTargetPlayer(pid); dynImageInputRef.current?.click(); }}
+                      onImageUpload={(pid) => { dynImageTextRef.current = newText; setDynImageTargetPlayer(pid); dynImageInputRef.current?.click(); }}
                       onGalleryOpen={(pid) => setGalleryTargetPlayer(pid)}
                       uploadingImage={uploadingDynImage === player.id}
                       newText={newText}
@@ -1287,7 +1529,7 @@ export function GMDynamicHintsPanel({
                       onReveal={(hintId) => { setConfirmRevealId(hintId); setExcludedRecipients(new Set()); }}
                       onDelete={deleteHint}
                       onAddHint={addHintForPlayer}
-                      onImageUpload={(pid) => { setDynImageTargetPlayer(pid); dynImageInputRef.current?.click(); }}
+                      onImageUpload={(pid) => { dynImageTextRef.current = newText; setDynImageTargetPlayer(pid); dynImageInputRef.current?.click(); }}
                       onGalleryOpen={(pid) => setGalleryTargetPlayer(pid)}
                       uploadingImage={uploadingDynImage === player.id}
                       newText={newText}
@@ -1311,7 +1553,7 @@ export function GMDynamicHintsPanel({
       </div>
 
       {/* ── Confirm Reveal Modal ── */}
-      <AnimatePresence>
+      {createPortal(<AnimatePresence>
         {confirmRevealId !== null && (() => {
           const cat = categorized.find((c) => c.hint.id === confirmRevealId);
           if (!cat) return null;
@@ -1575,7 +1817,7 @@ export function GMDynamicHintsPanel({
             </motion.div>
           );
         })()}
-      </AnimatePresence>
+      </AnimatePresence>, document.body)}
       </div>{/* end Indices Dynamiques wrapper */}
 
       {/* ── Hint Image Gallery Modal ── */}
@@ -1584,13 +1826,217 @@ export function GMDynamicHintsPanel({
           <HintImageGalleryModal
             open
             onClose={() => setGalleryTargetPlayer(null)}
-            onSelect={(imageUrl) => handleGalleryImageSelect(imageUrl, galleryTargetPlayer)}
+            onSelect={(imageUrl, text) => handleGalleryImageSelect(imageUrl, galleryTargetPlayer, text)}
             players={players}
             targetPlayerName={players.find(p => p.id === galleryTargetPlayer)?.name ?? ''}
             t={t}
+            initialText={newText}
           />
         )}
       </AnimatePresence>
+
+      {/* ══════════════════════════════════════════════════
+          MODAL — Pick a hint from pool to share with a player
+         ══════════════════════════════════════════════════ */}
+      {createPortal(
+      <AnimatePresence>
+        {shareHintPlayerId !== null && (() => {
+          const targetPlayer = players.find(p => p.id === shareHintPlayerId);
+          if (!targetPlayer) return null;
+          const availablePool = categorized.filter(c => !c.hint.revealed);
+          const q = shareHintSearch.toLowerCase();
+          const filtered = q
+            ? availablePool.filter(c =>
+                c.resolvedText.toLowerCase().includes(q) ||
+                (c.targetPlayer?.name.toLowerCase().includes(q)) ||
+                (c.recipientTeam && TEAM_COLORS[c.recipientTeam]?.label.toLowerCase().includes(q))
+              )
+            : availablePool;
+          return (
+            <motion.div
+              key="share-hint-modal"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.2 }}
+              className="fixed inset-0 z-[9999] flex items-center justify-center p-4"
+              style={{ background: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(4px)' }}
+              onClick={() => { setShareHintPlayerId(null); setShareHintSearch(''); }}
+            >
+              <motion.div
+                initial={{ scale: 0.92, opacity: 0, y: 20 }}
+                animate={{ scale: 1, opacity: 1, y: 0 }}
+                exit={{ scale: 0.92, opacity: 0, y: 20 }}
+                transition={{ duration: 0.25 }}
+                className="w-full max-w-lg max-h-[80vh] flex flex-col rounded-2xl overflow-hidden"
+                style={{
+                  background: t.isDay
+                    ? 'linear-gradient(145deg, rgba(245,240,228,0.98), rgba(235,228,210,0.98))'
+                    : 'linear-gradient(145deg, rgba(30,25,40,0.98), rgba(20,15,30,0.98))',
+                  border: `1px solid ${t.goldBorder}`,
+                  boxShadow: t.isDay
+                    ? '0 25px 60px rgba(0,0,0,0.15), 0 0 40px rgba(160,120,8,0.08)'
+                    : '0 25px 60px rgba(0,0,0,0.5), 0 0 40px rgba(245,158,11,0.08)',
+                }}
+                onClick={(e) => e.stopPropagation()}
+              >
+                {/* Header */}
+                <div className="flex items-center gap-3 px-5 py-4" style={{ borderBottom: `1px solid rgba(${t.overlayChannel}, 0.06)` }}>
+                  <div className="w-9 h-9 rounded-full overflow-hidden flex-shrink-0">
+                    <AvatarSmall player={targetPlayer} size={9} />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <h3 style={{ fontFamily: '"Cinzel", serif', color: t.gold, fontSize: '0.9rem' }}>
+                      Partager un indice
+                    </h3>
+                    <p className="truncate" style={{ color: t.textDim, fontSize: '0.6rem' }}>
+                      Envoyer à <strong style={{ color: t.text }}>{targetPlayer.name}</strong>
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => { setShareHintPlayerId(null); setShareHintSearch(''); }}
+                    className="p-2 rounded-lg transition-colors hover:bg-white/5"
+                    style={{ color: t.textDim }}
+                  >
+                    <X size={16} />
+                  </button>
+                </div>
+
+                {/* Search */}
+                <div className="px-5 py-3" style={{ borderBottom: `1px solid rgba(${t.overlayChannel}, 0.04)` }}>
+                  <div className="relative">
+                    <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2" style={{ color: t.textDim }} />
+                    <input
+                      type="text"
+                      value={shareHintSearch}
+                      onChange={(e) => setShareHintSearch(e.target.value)}
+                      placeholder="Rechercher un indice..."
+                      autoFocus
+                      className="w-full pl-9 pr-3 py-2 rounded-lg outline-none"
+                      style={{
+                        background: t.isDay ? 'rgba(0,0,0,0.05)' : 'rgba(0,0,0,0.3)',
+                        border: `1px solid rgba(${t.overlayChannel}, 0.1)`,
+                        color: t.text,
+                        fontSize: '0.7rem',
+                        fontFamily: '"IM Fell English", serif',
+                      }}
+                    />
+                  </div>
+                </div>
+
+                {/* Hint list */}
+                <div className="flex-1 overflow-y-auto px-5 py-3 space-y-2" style={{ minHeight: 0 }}>
+                  {filtered.length === 0 ? (
+                    <div className="text-center py-8">
+                      <Lightbulb size={28} style={{ color: t.textDim, margin: '0 auto 0.75rem' }} />
+                      <p style={{ color: t.textMuted, fontSize: '0.7rem', fontFamily: '"Cinzel", serif' }}>
+                        {availablePool.length === 0 ? 'Aucun indice disponible dans le pool' : 'Aucun résultat'}
+                      </p>
+                    </div>
+                  ) : filtered.map((cat) => {
+                    const teamStyle = cat.recipientTeam ? TEAM_COLORS[cat.recipientTeam] : TEAM_COLORS.neutral;
+                    return (
+                      <button
+                        key={cat.hint.id}
+                        onClick={() => sendPickedHint(cat, shareHintPlayerId!)}
+                        className="w-full text-left flex items-start gap-3 p-3 rounded-xl transition-all hover:brightness-110 group/hint"
+                        style={{
+                          background: `rgba(${t.overlayChannel}, 0.03)`,
+                          border: `1px solid rgba(${t.overlayChannel}, 0.08)`,
+                        }}
+                      >
+                        {/* Priority badge */}
+                        <div
+                          className="flex-shrink-0 w-6 h-6 rounded-md flex items-center justify-center mt-0.5"
+                          style={{
+                            background: cat.hint.priority === 3 ? 'rgba(239,68,68,0.15)' : cat.hint.priority === 2 ? 'rgba(245,158,11,0.15)' : 'rgba(107,142,90,0.15)',
+                            color: cat.hint.priority === 3 ? '#ef4444' : cat.hint.priority === 2 ? '#f59e0b' : '#6b8e5a',
+                            fontSize: '0.55rem',
+                            fontWeight: 700,
+                            fontFamily: '"Cinzel", serif',
+                          }}
+                        >
+                          P{cat.hint.priority ?? 1}
+                        </div>
+
+                        <div className="flex-1 min-w-0">
+                          {cat.resolvedText && (
+                            <p style={{
+                              color: t.text,
+                              fontSize: '0.7rem',
+                              lineHeight: 1.5,
+                              fontFamily: '"IM Fell English", serif',
+                              fontStyle: 'italic',
+                            }}>
+                              &ldquo;{cat.resolvedText}&rdquo;
+                            </p>
+                          )}
+                          {cat.hint.imageUrl && (
+                            <img
+                              src={cat.hint.imageUrl}
+                              alt="Indice"
+                              className="rounded-lg max-h-16 object-contain mt-1.5"
+                              style={{ border: `1px solid rgba(${t.overlayChannel}, 0.1)` }}
+                              draggable={false}
+                            />
+                          )}
+                          <div className="flex items-center gap-2 mt-1.5 flex-wrap">
+                            {cat.targetPlayer && (
+                              <span className="flex items-center gap-1" style={{ fontSize: '0.5rem', color: t.textDim }}>
+                                <AvatarSmall player={cat.targetPlayer} size={4} />
+                                {cat.targetPlayer.name}
+                              </span>
+                            )}
+                            <span
+                              className="px-1.5 py-0 rounded-full"
+                              style={{ background: teamStyle.bg, color: teamStyle.text, fontSize: '0.45rem', fontWeight: 600 }}
+                            >
+                              {teamStyle.emoji} {teamStyle.label}
+                            </span>
+                            {!cat.available && (
+                              <span className="flex items-center gap-0.5 px-1.5 py-0 rounded-full" style={{ background: 'rgba(255,255,255,0.04)', color: t.textDim, fontSize: '0.45rem' }}>
+                                <Lock size={8} /> Verrouillé
+                              </span>
+                            )}
+                          </div>
+                        </div>
+
+                        <div
+                          className="flex-shrink-0 mt-1 opacity-40 group-hover/hint:opacity-100 transition-opacity"
+                          style={{ color: '#6b8e5a' }}
+                        >
+                          <Send size={14} />
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+
+                {/* Footer count */}
+                <div className="px-5 py-3 flex items-center justify-between" style={{ borderTop: `1px solid rgba(${t.overlayChannel}, 0.06)` }}>
+                  <span style={{ color: t.textDim, fontSize: '0.55rem', fontFamily: '"Cinzel", serif' }}>
+                    {filtered.length} indice{filtered.length !== 1 ? 's' : ''} disponible{filtered.length !== 1 ? 's' : ''}
+                  </span>
+                  <button
+                    onClick={() => { setShareHintPlayerId(null); setShareHintSearch(''); }}
+                    className="px-3 py-1.5 rounded-lg transition-colors hover:bg-white/5"
+                    style={{
+                      background: `rgba(${t.overlayChannel}, 0.04)`,
+                      border: `1px solid rgba(${t.overlayChannel}, 0.08)`,
+                      color: t.textDim,
+                      fontSize: '0.6rem',
+                      fontFamily: '"Cinzel", serif',
+                    }}
+                  >
+                    Annuler
+                  </button>
+                </div>
+              </motion.div>
+            </motion.div>
+          );
+        })()}
+      </AnimatePresence>
+      , document.body)}
     </div>
   );
 }
@@ -1606,17 +2052,20 @@ function HintImageGalleryModal({
   players,
   targetPlayerName,
   t,
+  initialText = '',
 }: {
   open: boolean;
   onClose: () => void;
-  onSelect: (imageUrl: string) => void;
+  onSelect: (imageUrl: string, text?: string) => void;
   players: Player[];
   targetPlayerName: string;
   t: GameThemeTokens;
+  initialText?: string;
 }) {
   const [search, setSearch] = useState('');
   const [selected, setSelected] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<'players' | 'gallery'>('players');
+  const [optionalText, setOptionalText] = useState('');
   const searchRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -1624,9 +2073,10 @@ function HintImageGalleryModal({
       setSearch('');
       setSelected(null);
       setActiveTab('players');
+      setOptionalText(initialText);
       setTimeout(() => searchRef.current?.focus(), 200);
     }
-  }, [open]);
+  }, [open, initialText]);
 
   useEffect(() => {
     if (!open) return;
@@ -1657,12 +2107,12 @@ function HintImageGalleryModal({
 
   const handleConfirm = useCallback(() => {
     if (selected) {
-      onSelect(selected);
+      onSelect(selected, optionalText.trim() || undefined);
       onClose();
     }
-  }, [selected, onSelect, onClose]);
+  }, [selected, optionalText, onSelect, onClose]);
 
-  return (
+  return createPortal(
     <motion.div
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
@@ -1872,6 +2322,48 @@ function HintImageGalleryModal({
           )}
         </div>
 
+        {/* Optional text input (visible when image selected) */}
+        <AnimatePresence>
+          {selected && (
+            <motion.div
+              initial={{ height: 0, opacity: 0 }}
+              animate={{ height: 'auto', opacity: 1 }}
+              exit={{ height: 0, opacity: 0 }}
+              transition={{ duration: 0.2 }}
+              className="overflow-hidden shrink-0"
+            >
+              <div className="px-5 py-3" style={{ borderTop: '1px solid rgba(255,255,255,0.06)' }}>
+                <div className="flex items-center gap-2 mb-2">
+                  <FileText size={12} style={{ color: '#d4a843' }} />
+                  <span style={{ color: '#e8dcc8', fontSize: '0.7rem', fontFamily: '"Cinzel", serif' }}>
+                    Texte associé <span style={{ color: '#4a5568' }}>(optionnel)</span>
+                  </span>
+                </div>
+                <input
+                  type="text"
+                  value={optionalText}
+                  onChange={(e) => setOptionalText(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === 'Enter' && selected) handleConfirm(); }}
+                  placeholder="Ex: Ce joueur est {role}... / les yeux {durole}..."
+                  className="w-full px-3 py-2 rounded-lg text-sm outline-none"
+                  style={{
+                    background: 'rgba(255,255,255,0.04)',
+                    border: `1px solid ${optionalText ? 'rgba(212,168,67,0.3)' : 'rgba(255,255,255,0.06)'}`,
+                    color: '#e8dcc8',
+                    fontSize: '0.75rem',
+                    fontFamily: '"Cinzel", serif',
+                  }}
+                />
+                {(optionalText.includes('{role}') || optionalText.includes('{durole}')) && (
+                  <p style={{ color: '#6b8e5a', fontSize: '0.6rem', marginTop: '0.35rem' }}>
+                    ✓ <span style={{ fontFamily: '"Cinzel", serif' }}>{'{role}'}</span> → le/la · <span style={{ fontFamily: '"Cinzel", serif' }}>{'{durole}'}</span> → du/de la — résolu avec le rôle du joueur
+                  </p>
+                )}
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
         {/* Footer */}
         <div className="px-5 py-3 flex items-center justify-between shrink-0" style={{ borderTop: '1px solid rgba(255,255,255,0.06)' }}>
           <span style={{ color: '#4a5568', fontSize: '0.65rem' }}>
@@ -1910,7 +2402,8 @@ function HintImageGalleryModal({
           </div>
         </div>
       </motion.div>
-    </motion.div>
+    </motion.div>,
+    document.body
   );
 }
 
@@ -1999,9 +2492,9 @@ function PlayerHintRow({
           <p style={{ color: t.textDim, fontSize: '0.65rem', fontStyle: 'italic' }}>(vide)</p>
         ) : null}
         {/* Role resolution preview */}
-        {hint.text && hint.text.includes('{role}') && !isRevealed && (
+        {hint.text && (hint.text.includes('{role}') || hint.text.includes('{durole}')) && !isRevealed && (
           <p style={{ color: isPending ? '#f59e0b' : t.textDim, fontSize: '0.48rem', marginTop: 1, fontStyle: 'italic' }}>
-            {isPending ? '⏳ {role} résolu après attribution' : `→ ${resolvedText}`}
+            {isPending ? '⏳ {role}/{durole} résolu après attribution' : `→ ${resolvedText}`}
           </p>
         )}
         {isRevealed && hint.revealedAt && (
@@ -2073,7 +2566,7 @@ function PlayerHintRow({
       </div>
 
       {/* Recipients modal */}
-      <AnimatePresence>
+      {createPortal(<AnimatePresence>
         {showRecipientsModal && recipients && recipients.length > 0 && (
           <motion.div
             key="recipients-modal-backdrop"
@@ -2187,7 +2680,7 @@ function PlayerHintRow({
             </motion.div>
           </motion.div>
         )}
-      </AnimatePresence>
+      </AnimatePresence>, document.body)}
     </motion.div>
   );
 }
@@ -2400,7 +2893,7 @@ function PlayerCard({
                     value={newText}
                     onChange={(e) => setNewText(e.target.value)}
                     onKeyDown={(e) => { if (e.key === 'Enter' && newText.trim()) onAddHint(player.id); }}
-                    placeholder="{role} porte du rouge..."
+                    placeholder="{role} porte du rouge... / les yeux {durole}..."
                     className="w-full pl-8 pr-3 py-2 rounded-lg text-sm outline-none"
                     style={{
                       background: inputBg,
@@ -2523,13 +3016,14 @@ function PlayerCard({
               {/* Helper text (only if no hints yet) */}
               {playerHints.length === 0 && !newText.trim() && (
                 <p style={{ color: t.textDim, fontSize: '0.5rem', lineHeight: 1.5 }}>
-                  💡 Utilisez <code style={{ color: '#8b5cf6', background: 'rgba(139,92,246,0.15)', padding: '1px 3px', borderRadius: 2, fontSize: '0.5rem' }}>{'{role}'}</code> pour insérer le rôle avec son article (le/la) automatiquement.
+                  💡 Utilisez <code style={{ color: '#8b5cf6', background: 'rgba(139,92,246,0.15)', padding: '1px 3px', borderRadius: 2, fontSize: '0.5rem' }}>{'{role}'}</code> (le/la) ou <code style={{ color: '#8b5cf6', background: 'rgba(139,92,246,0.15)', padding: '1px 3px', borderRadius: 2, fontSize: '0.5rem' }}>{'{durole}'}</code> (du/de la) pour insérer le rôle automatiquement.
                 </p>
               )}
             </div>
           </motion.div>
         )}
       </AnimatePresence>
+
     </div>
   );
 }

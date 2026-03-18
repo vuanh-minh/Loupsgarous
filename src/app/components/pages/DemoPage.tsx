@@ -106,8 +106,30 @@ export function DemoPage() {
   const canFlip = state.phase === 'night' && currentPlayer?.alive === true;
   const hasRole = useCallback((roleId: string) => state.players.some(p => p.role === roleId && p.alive), [state.players]);
 
+  // ── Compute badge counts ──
+  const myAssignedQuestIds = userPlayerId !== null
+    ? (state.questAssignments || {})[userPlayerId] || []
+    : [];
+  const myVisibleQuests = (state.quests || []).filter(q => {
+    if (!myAssignedQuestIds.includes(q.id)) return false;
+    if ((q.questType || 'individual') === 'collaborative') {
+      const myGroup = (q.collaborativeGroups || []).find(g => g.includes(userPlayerId!));
+      if (!myGroup || myGroup.length < 2) return false;
+    }
+    return true;
+  });
+  const unreadQuestCount = myVisibleQuests.filter(q => !readQuestIds.has(q.id)).length;
+
+  const unrevealedHintCount = useMemo(() => {
+    if (userPlayerId === null) return 0;
+    const hints = state.hints ?? [];
+    const pHints = state.playerHints ?? [];
+    const hintIdSet = new Set(hints.map(h => h.id));
+    return pHints.filter(ph => ph.playerId === userPlayerId && !ph.revealed && hintIdSet.has(ph.hintId)).length;
+  }, [state.hints, state.playerHints, userPlayerId]);
+
   // ── Swipe navigation ──
-  const panels: PanelId[] = ['game', 'village', 'quests'];
+  const panels: PanelId[] = ['game', 'quests', 'village'];
   const { containerRef, isDragging, dragOffset, containerWidth } = useSwipeNavigation({
     panels,
     activePanel,
@@ -122,12 +144,18 @@ export function DemoPage() {
   // ── Tabs ──
   const visibleTabs: { id: PanelId; icon: React.ReactNode; label: string }[] = [
     { id: 'game', icon: <Swords size={18} />, label: 'Jeu' },
+    { id: 'quests', icon: <Map size={18} />, label: 'Quêtes' },
     { id: 'village', icon: <Users size={18} />, label: 'Village' },
-    { id: 'quests', icon: <Map size={18} />, label: 'Quetes' },
   ];
+
+  // Close quest detail overlay when switching tabs
+  useEffect(() => {
+    setOpenQuestId(null);
+  }, [activePanel]);
 
   // ── Navigation helper ──
   const navigateToPlayer = useCallback((playerId: number) => {
+    setOpenQuestId(null);
     setActivePanel('village');
     setHighlightedPlayerId(null);
     setTimeout(() => {
@@ -175,11 +203,16 @@ export function DemoPage() {
     });
   }, [updateState]);
 
-  const handleWerewolfVote = useCallback((wolfId: number, targetId: number) => {
-    updateState(s => ({
-      ...s,
-      werewolfVotes: { ...s.werewolfVotes, [wolfId]: targetId },
-    }));
+  const handleWerewolfVote = useCallback((wolfId: number, targetId: number, message?: string) => {
+    updateState(s => {
+      const msgs = { ...(s.werewolfVoteMessages || {}) };
+      if (message && message.trim()) { msgs[wolfId] = message.trim(); } else { delete msgs[wolfId]; }
+      return {
+        ...s,
+        werewolfVotes: { ...s.werewolfVotes, [wolfId]: targetId },
+        werewolfVoteMessages: msgs,
+      };
+    });
   }, [updateState]);
 
   const handleSeerTarget = useCallback((targetId: number) => {
@@ -243,14 +276,14 @@ export function DemoPage() {
     }));
   }, [currentPlayer, updateState]);
 
-  const handleCorbeauTarget = useCallback((targetId: number, message: string) => {
+  const handleCorbeauTarget = useCallback((targetId: number, message: string, imageUrl?: string) => {
     if (!currentPlayer) return;
     const hintId = Date.now() + Math.floor(Math.random() * 10000);
     updateState(s => ({
       ...s,
       corbeauTargets: { ...(s.corbeauTargets ?? {}), [currentPlayer.id]: targetId },
       corbeauMessages: { ...(s.corbeauMessages ?? {}), [currentPlayer.id]: message },
-      hints: [...(s.hints ?? []), { id: hintId, text: message, createdAt: new Date().toISOString() }],
+      hints: [...(s.hints ?? []), { id: hintId, text: message, ...(imageUrl ? { imageUrl } : {}), createdAt: new Date().toISOString() }],
       playerHints: [...(s.playerHints ?? []), { hintId, playerId: targetId, sentAt: new Date().toISOString(), revealed: false }],
     }));
   }, [currentPlayer, updateState]);
@@ -329,6 +362,8 @@ export function DemoPage() {
     updateState(s => {
       const target = s.players.find(p => p.id === targetId);
       const hunter = s.hunterShooterId !== null ? s.players.find(p => p.id === s.hunterShooterId) : null;
+      let chainHunterPending = false;
+      let chainHunterShooterId: number | null = null;
       let newPlayers = s.players.map(p =>
         p.id === targetId ? { ...p, alive: false } : p
       );
@@ -361,11 +396,13 @@ export function DemoPage() {
                 message: `💔 ${lover.name} meurt de chagrin — son amoureux a ete elimine.`,
                 timestamp: new Date().toISOString(),
               });
+              // Chain-hunter: if the heartbroken lover is also a chasseur, trigger their last shot
+              if (lover.role === 'chasseur') { chainHunterPending = true; chainHunterShooterId = loverId; }
             }
           }
         }
       }
-      return { ...s, players: newPlayers, hunterPending: false, hunterShooterId: null, events };
+      return { ...s, players: newPlayers, hunterPending: chainHunterPending, hunterShooterId: chainHunterShooterId, events };
     });
   }, [updateState]);
 
@@ -934,7 +971,7 @@ export function DemoPage() {
                 style={{ width: containerWidth > 0 ? panelCount * containerWidth : `${panelCount * 100}%` }}
               >
                 {/* Panel 1 — Game */}
-                <div style={{ width: containerWidth > 0 ? containerWidth : `${100 / panelCount}%` }} className="h-full overflow-y-auto">
+                <div style={{ width: containerWidth > 0 ? containerWidth : `${100 / panelCount}%`, WebkitOverflowScrolling: 'touch', overscrollBehaviorY: 'contain' }} className="h-full overflow-y-auto">
                   {(currentPlayer?.alive ?? false) && (
                     <GamePanel
                       alivePlayers={alivePlayers}
@@ -1015,8 +1052,24 @@ export function DemoPage() {
                   )}
                 </div>
 
-                {/* Panel 2 — Village */}
-                <div ref={villagePanelRef} style={{ width: containerWidth > 0 ? containerWidth : `${100 / panelCount}%` }} className="h-full overflow-y-auto">
+                {/* Panel 2 — Quêtes */}
+                <div ref={questsScrollRef} style={{ width: containerWidth > 0 ? containerWidth : `${100 / panelCount}%`, WebkitOverflowScrolling: 'touch', overscrollBehaviorY: 'contain' }} className="h-full overflow-y-auto">
+                  <PlayerQuestsPanel
+                    state={state}
+                    currentPlayerId={userPlayerId}
+                    onAnswerTask={handleAnswerTask}
+                    onCollabVote={handleCollabVote}
+                    onCancelCollabVote={handleCancelCollabVote}
+                    onOpenQuest={handleOpenQuest}
+                    readQuestIds={readQuestIds}
+                    isActive={activePanel === 'quests'}
+                    onNavigateToPlayer={navigateToPlayer}
+                    t={t}
+                  />
+                </div>
+
+                {/* Panel 3 — Village */}
+                <div ref={villagePanelRef} style={{ width: containerWidth > 0 ? containerWidth : `${100 / panelCount}%`, WebkitOverflowScrolling: 'touch', overscrollBehaviorY: 'contain' }} className="h-full overflow-y-auto">
                   <VillageListPanel
                     alivePlayers={alivePlayers}
                     deadPlayers={deadPlayers}
@@ -1031,22 +1084,6 @@ export function DemoPage() {
                     onCancelEarlyVote={handleCancelEarlyVote}
                     highlightedPlayerId={highlightedPlayerId}
                     playerTags={state.playerTags || {}}
-                    t={t}
-                  />
-                </div>
-
-                {/* Panel 3 — Quetes */}
-                <div ref={questsScrollRef} style={{ width: containerWidth > 0 ? containerWidth : `${100 / panelCount}%` }} className="h-full overflow-y-auto">
-                  <PlayerQuestsPanel
-                    state={state}
-                    currentPlayerId={userPlayerId}
-                    onAnswerTask={handleAnswerTask}
-                    onCollabVote={handleCollabVote}
-                    onCancelCollabVote={handleCancelCollabVote}
-                    onOpenQuest={handleOpenQuest}
-                    readQuestIds={readQuestIds}
-                    isActive={activePanel === 'quests'}
-                    onNavigateToPlayer={navigateToPlayer}
                     t={t}
                   />
                 </div>
@@ -1066,15 +1103,22 @@ export function DemoPage() {
               paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 12px)',
             }}
           >
-            {visibleTabs.map((tab) => {
+            {visibleTabs.map((tab, tabIdx) => {
               const isActive = activePanel === tab.id;
+              const isGameTab = tabIdx === 0;
               const tabColor = isActive ? t.gold : t.textDim;
               return (
                 <button
                   key={tab.id}
                   onClick={() => {
-                    if (tab.id === 'game' && activePanel === 'game' && isFlipped) {
+                    if (isGameTab && activePanel === 'game' && isFlipped) {
                       setIsFlipped(false);
+                    } else if (tab.id === 'quests' && activePanel === 'quests') {
+                      if (openQuestId !== null) {
+                        setOpenQuestId(null);
+                      } else {
+                        questsScrollRef.current?.scrollTo({ top: 0, behavior: 'smooth' });
+                      }
                     } else {
                       setActivePanel(tab.id);
                     }
@@ -1090,16 +1134,63 @@ export function DemoPage() {
                       transition={{ type: 'spring', stiffness: 400, damping: 30 }}
                     />
                   )}
-                  <span style={{ color: tabColor }}>{tab.icon}</span>
-                  <span
-                    style={{
-                      fontFamily: '"Cinzel", serif',
-                      fontSize: '0.55rem',
-                      color: tabColor,
-                    }}
-                  >
-                    {tab.label}
-                  </span>
+                  <AnimatePresence mode="wait" initial={false}>
+                    <motion.div
+                      key={tab.id}
+                      initial={false}
+                      animate={{ opacity: 1 }}
+                      className="flex flex-col items-center gap-1"
+                    >
+                      <span className="relative" style={{ color: tabColor }}>
+                        {tab.icon}
+                        {tab.id === 'game' && unrevealedHintCount > 0 && !isActive && (
+                          <span
+                            className="absolute -top-1.5 -right-2.5 flex items-center justify-center rounded-full"
+                            style={{
+                              minWidth: '15px',
+                              height: '15px',
+                              padding: '0 4px',
+                              background: 'linear-gradient(135deg, #f59e0b, #d97706)',
+                              color: '#fff',
+                              fontSize: '0.5rem',
+                              fontWeight: 800,
+                              boxShadow: '0 1px 4px rgba(245,158,11,0.5)',
+                              lineHeight: 1,
+                            }}
+                          >
+                            {unrevealedHintCount}
+                          </span>
+                        )}
+                        {tab.id === 'quests' && unreadQuestCount > 0 && !isActive && (
+                          <span
+                            className="absolute -top-1.5 -right-2.5 flex items-center justify-center rounded-full"
+                            style={{
+                              minWidth: '15px',
+                              height: '15px',
+                              padding: '0 4px',
+                              background: 'linear-gradient(135deg, #e53e3e, #c53030)',
+                              color: '#fff',
+                              fontSize: '0.5rem',
+                              fontWeight: 800,
+                              boxShadow: '0 1px 4px rgba(229,62,62,0.5)',
+                              lineHeight: 1,
+                            }}
+                          >
+                            {unreadQuestCount}
+                          </span>
+                        )}
+                      </span>
+                      <span
+                        style={{
+                          fontFamily: '"Cinzel", serif',
+                          fontSize: '0.55rem',
+                          color: tabColor,
+                        }}
+                      >
+                        {tab.label}
+                      </span>
+                    </motion.div>
+                  </AnimatePresence>
                 </button>
               );
             })}

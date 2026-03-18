@@ -34,14 +34,14 @@ export function RoleActionsPanel({
   setSelectedTarget: (v: number | null) => void;
   allPlayers: Player[];
   onFlipBack?: () => void;
-  onWerewolfVote: (wolfId: number, targetId: number) => void;
+  onWerewolfVote: (wolfId: number, targetId: number, message?: string) => void;
   onSeerTarget: (targetId: number) => void;
   onWitchHeal: () => void;
   onWitchKill: (targetId: number) => void;
   onCancelWitchKill: () => void;
   onCupidLink: (id1: number, id2: number) => void;
   onGuardTarget: (targetId: number) => void;
-  onCorbeauTarget: (targetId: number, message: string) => void;
+  onCorbeauTarget: (targetId: number, message: string, imageUrl?: string) => void;
   onHunterPreTarget?: (targetId: number | null) => void;
   onFoxTarget?: (playerIds: number[]) => void;
   onConciergeTarget?: (targetId: number) => void;

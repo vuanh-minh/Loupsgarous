@@ -1,6 +1,6 @@
 import React from 'react';
-import { motion } from 'motion/react';
-import { Eye, Check } from 'lucide-react';
+import { motion, AnimatePresence } from 'motion/react';
+import { Eye, Check, Copy, CheckCheck } from 'lucide-react';
 import { UserX } from 'lucide-react';
 import { useGamePanelContext } from './GamePanelContext';
 import { buildNightActions, computeVoteData } from './useGMGameLogic';
@@ -28,7 +28,11 @@ export function MobileControlsView({ phaseOutcomePreview }: MobileControlsViewPr
     nightActionsTab, setNightActionsTab,
     setMobileView,
     handleNightActionClick: onNightActionClick,
+    onNavigateToPlayersTab,
   } = useGamePanelContext();
+
+  const [revealSelectedPlayer, setRevealSelectedPlayer] = React.useState<Player | null>(null);
+  const [codeCopied, setCodeCopied] = React.useState(false);
 
   const nightActions = React.useMemo(() => {
     const allActions = buildNightActions(state, hasRole, alivePlayers);
@@ -48,7 +52,7 @@ export function MobileControlsView({ phaseOutcomePreview }: MobileControlsViewPr
     const compact = totalPlayers > 16;
 
     return (
-      <div className="px-3 py-4 space-y-4">
+      <div className="px-3 py-4 space-y-4 flex flex-col flex-1 min-h-0">
         {/* Rotating card animation + title */}
         <motion.div
           initial={{ opacity: 0, scale: 0.9 }}
@@ -78,9 +82,67 @@ export function MobileControlsView({ phaseOutcomePreview }: MobileControlsViewPr
           </div>
         </motion.div>
 
+        {/* Selected player code display */}
+        <AnimatePresence>
+          {revealSelectedPlayer && (
+            <motion.div
+              initial={{ opacity: 0, height: 0 }}
+              animate={{ opacity: 1, height: 'auto' }}
+              exit={{ opacity: 0, height: 0 }}
+              className="overflow-hidden"
+            >
+              <div
+                className="rounded-xl p-3 flex items-center justify-between gap-3"
+                style={{
+                  background: 'rgba(212,168,67,0.08)',
+                  border: '1px solid rgba(212,168,67,0.25)',
+                }}
+              >
+                <div className="flex items-center gap-2.5 min-w-0">
+                  <GMAvatar player={revealSelectedPlayer} size="text-lg" />
+                  <div className="min-w-0">
+                    <span style={{ color: '#8090b0', fontSize: '0.65rem' }}>{revealSelectedPlayer.name}</span>
+                    <div className="flex items-center gap-2 mt-0.5">
+                      <span style={{ fontFamily: '"Cinzel", serif', color: '#d4a843', fontSize: '1.2rem', fontWeight: 700, letterSpacing: '0.15em' }}>
+                        {revealSelectedPlayer.shortCode}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+                <button
+                  onClick={() => {
+                    const text = revealSelectedPlayer.shortCode;
+                    const ta = document.createElement('textarea');
+                    ta.value = text;
+                    ta.style.position = 'fixed';
+                    ta.style.opacity = '0';
+                    document.body.appendChild(ta);
+                    ta.select();
+                    document.execCommand('copy');
+                    document.body.removeChild(ta);
+                    setCodeCopied(true);
+                    setTimeout(() => setCodeCopied(false), 2000);
+                  }}
+                  className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg transition-all cursor-pointer flex-shrink-0"
+                  style={{
+                    background: codeCopied ? 'rgba(107,142,90,0.2)' : 'rgba(212,168,67,0.15)',
+                    border: `1px solid ${codeCopied ? 'rgba(107,142,90,0.4)' : 'rgba(212,168,67,0.3)'}`,
+                    color: codeCopied ? '#6b8e5a' : '#d4a843',
+                    fontSize: '0.7rem',
+                    fontWeight: 600,
+                  }}
+                >
+                  {codeCopied ? <CheckCheck size={13} /> : <Copy size={13} />}
+                  {codeCopied ? 'Copie !' : 'Copier'}
+                </button>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
         {/* Village grid with role-seen status */}
         <div
-          className="rounded-xl p-3"
+          className="rounded-xl p-3 flex-1 min-h-0 overflow-y-auto"
           style={{
             background: `rgba(${t.overlayChannel}, 0.02)`,
             border: `1px solid rgba(${t.overlayChannel}, 0.06)`,
@@ -89,6 +151,7 @@ export function MobileControlsView({ phaseOutcomePreview }: MobileControlsViewPr
           <div className={compact ? 'grid grid-cols-5 gap-2' : 'grid grid-cols-4 gap-2.5'}>
             {state.players.map((p: Player) => {
               const hasSeen = revealedBy.includes(p.id);
+              const isSelected = revealSelectedPlayer?.id === p.id;
               const avatarSize = compact ? 'w-9 h-9' : 'w-11 h-11';
               const badgeSize = compact ? 'w-3.5 h-3.5' : 'w-4 h-4';
               const emojiSize = compact ? 'text-base' : 'text-lg';
@@ -98,15 +161,16 @@ export function MobileControlsView({ phaseOutcomePreview }: MobileControlsViewPr
                   key={p.id}
                   className="flex flex-col items-center gap-1"
                   onClick={() => {
-                    sessionStorage.setItem('__gm_preview', '1');
-                    navigate(`/player/${p.shortCode}`);
+                    setRevealSelectedPlayer(p);
+                    setCodeCopied(false);
                   }}
                 >
                   <div
                     className={`${avatarSize} rounded-full flex items-center justify-center relative transition-all`}
                     style={{
-                      background: hasSeen ? 'rgba(107,142,90,0.12)' : 'rgba(255,255,255,0.04)',
-                      border: `2px solid ${hasSeen ? 'rgba(107,142,90,0.4)' : 'rgba(255,255,255,0.1)'}`,
+                      background: isSelected ? 'rgba(212,168,67,0.18)' : hasSeen ? 'rgba(107,142,90,0.12)' : 'rgba(255,255,255,0.04)',
+                      border: `2px solid ${isSelected ? 'rgba(212,168,67,0.6)' : hasSeen ? 'rgba(107,142,90,0.4)' : 'rgba(255,255,255,0.1)'}`,
+                      boxShadow: isSelected ? '0 0 8px rgba(212,168,67,0.3)' : 'none',
                     }}
                   >
                     <GMAvatar player={p} size={emojiSize} />
@@ -174,7 +238,7 @@ export function MobileControlsView({ phaseOutcomePreview }: MobileControlsViewPr
         }
         selectedPlayer={selectedPlayer}
         maireId={state.maireId}
-        onPlayerClick={(id) => { setSelectedPlayer(id); setMobileView('players'); }}
+        onPlayerClick={(id) => { if (onNavigateToPlayersTab) { onNavigateToPlayersTab(id); } else { setSelectedPlayer(selectedPlayer === id ? null : id); setMobileView('players'); } }}
         t={t}
         compact
         playerTags={state.playerTags}
@@ -209,7 +273,7 @@ export function MobileControlsView({ phaseOutcomePreview }: MobileControlsViewPr
                     border: selectedPlayer === p.id ? '1px solid rgba(245,158,11,0.2)' : '1px solid transparent',
                     opacity: 0.55,
                   }}
-                  onClick={() => { setSelectedPlayer(selectedPlayer === p.id ? null : p.id); setMobileView('players'); }}
+                  onClick={() => { if (onNavigateToPlayersTab) { onNavigateToPlayersTab(p.id); } else { setSelectedPlayer(selectedPlayer === p.id ? null : p.id); setMobileView('players'); } }}
                 >
                   <div
                     className="w-10 h-10 rounded-full flex items-center justify-center"

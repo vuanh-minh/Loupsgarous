@@ -6,4 +6,5 @@
 export { NightActionPlayerPickerModal } from './GMNightActionPlayerPickerModal';
 export { ReviveConfirmModal } from './GMReviveConfirmModal';
 export { GMHunterShotModal } from './GMHunterShotModal';
+export { GMMaireSuccessionModal } from './GMMaireSuccessionModal';
 export { EndGameOverlay } from './GMEndGameOverlay';

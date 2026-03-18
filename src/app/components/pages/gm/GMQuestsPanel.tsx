@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useRef } from 'react';
+import React, { useState, useCallback, useRef, useMemo, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import {
   Plus, Trash2, CheckCircle, XCircle, Clock,
@@ -7,13 +7,15 @@ import {
   Shuffle, Package, Zap, Send, UserPlus,
   Upload, Download, FileSpreadsheet, X,
   Tag, Pencil, Save, ArrowUpDown, Repeat,
+  ImagePlus, UserCircle, Library, Link2, Unlink,
 } from 'lucide-react';
-import type { GameState, Quest, QuestTaskInputType, QuestType } from '../../../context/gameTypes';
+import type { GameState, Quest, QuestTaskInputType, QuestType, TaskTemplate, Player } from '../../../context/gameTypes';
 import type { GameThemeTokens } from '../../../context/gameTheme';
-import { projectId, publicAnonKey } from '../../../context/apiConfig';
-import { ImagePlus, UserCircle } from 'lucide-react';
+import type { PlayerEntry } from '../setup/setupConstants';
+import { projectId, publicAnonKey, API_BASE, jsonAuthHeaders } from '../../../context/apiConfig';
 import { GMAvatar } from './GMAvatar';
 import { distributeQuestRound } from './gmPureHelpers';
+import type { GalleryPreQuest, GalleryPreQuestList } from './GalleryQuestsTab';
 
 interface GMQuestsPanelProps {
   state: GameState;
@@ -21,6 +23,7 @@ interface GMQuestsPanelProps {
   t: GameThemeTokens;
   isMobile: boolean;
   onNavigateToPlayer?: (playerId: number) => void;
+  playerEntries?: PlayerEntry[];
 }
 
 const INPUT_TYPE_OPTIONS: { value: QuestTaskInputType; label: string; icon: React.ReactNode }[] = [
@@ -120,7 +123,23 @@ function playersWithQuest(questId: number, assignments: Record<number, number[]>
   return pids;
 }
 
-export function GMQuestsPanel({ state, updateState, t, isMobile, onNavigateToPlayer }: GMQuestsPanelProps) {
+export function GMQuestsPanel({ state, updateState, t, isMobile, onNavigateToPlayer, playerEntries }: GMQuestsPanelProps) {
+  // During setup, state.players is empty — use playerEntries as fallback
+  const players: Player[] = useMemo(() => {
+    if (state.players.length > 0) return state.players;
+    if (!playerEntries || playerEntries.length === 0) return [];
+    return playerEntries.map((e) => ({
+      id: e.id,
+      name: e.name,
+      avatar: e.avatar,
+      avatarUrl: e.avatarUrl,
+      role: '',
+      alive: true,
+      shortCode: e.shortCode ?? '',
+      votesReceived: 0,
+    } as Player));
+  }, [state.players, playerEntries]);
+
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [expandedQuestId, setExpandedQuestId] = useState<number | null>(null);
   const [editingQuestId, setEditingQuestId] = useState<number | null>(null);
@@ -183,20 +202,32 @@ export function GMQuestsPanel({ state, updateState, t, isMobile, onNavigateToPla
   const [newTargetMode, setNewTargetMode] = useState<'everyone' | 'tags'>('everyone');
   const [newTargetTags, setNewTargetTags] = useState<string[]>([]);
   const [newDistributionOrder, setNewDistributionOrder] = useState<number | 'random' | 'available'>('random');
-  const [newTasks, setNewTasks] = useState<Array<{
-    question: string;
-    inputType: QuestTaskInputType;
-    correctAnswer: string;
-    choices: string[];
-    imageUrl: string;
-    referencedPlayerId?: number;
-  }>>([{ question: '', inputType: 'text', correctAnswer: '', choices: ['', ''], imageUrl: '' }]);
-  const [uploadingTaskIdx, setUploadingTaskIdx] = useState<number | null>(null);
+
+  // ── Task library state ──
+  const [showTaskCreateForm, setShowTaskCreateForm] = useState(false);
+  const [editingTaskId, setEditingTaskId] = useState<number | null>(null);
+  const [taskQuestion, setTaskQuestion] = useState('');
+  const [taskInputType, setTaskInputType] = useState<QuestTaskInputType>('text');
+  const [taskCorrectAnswer, setTaskCorrectAnswer] = useState('');
+  const [taskChoices, setTaskChoices] = useState<string[]>(['', '']);
+  const [taskImageUrl, setTaskImageUrl] = useState('');
+  const [taskReferencedPlayerId, setTaskReferencedPlayerId] = useState<number | undefined>(undefined);
+  const [uploadingLibraryTask, setUploadingLibraryTask] = useState(false);
+
+  // ── Selected task IDs for quest creation ──
+  const [selectedTaskIds, setSelectedTaskIds] = useState<Set<number>>(new Set());
+
+  // ── Gallery pre-quests (loaded from server) ──
+  const [galleryPreQuests, setGalleryPreQuests] = useState<GalleryPreQuestList>([]);
+  const [loadingGalleryPreQuests, setLoadingGalleryPreQuests] = useState(false);
+  const galleryPreQuestsLoadedRef = useRef(false);
+
+  const taskLibrary = state.taskLibrary || [];
 
   const quests = state.quests || [];
   const assignments = state.questAssignments || {};
   const presentSet = state.villagePresentIds ? new Set(state.villagePresentIds) : null;
-  const alivePlayers = state.players.filter(p => p.alive && (!presentSet || presentSet.has(p.id)));
+  const alivePlayers = players.filter(p => p.alive && (!presentSet || presentSet.has(p.id)));
   const alivePlayerIds = alivePlayers.map(p => p.id);
 
   // Compute distribution stats
@@ -227,7 +258,7 @@ export function GMQuestsPanel({ state, updateState, t, isMobile, onNavigateToPla
   // Can we distribute? Need at least 1 quest that some alive eligible player doesn't have yet
   // Can distribute if any player (alive or dead) can receive at least one quest
   // Dead players can only receive individual quests
-  const canDistribute = quests.length > 0 && state.players.some(p => {
+  const canDistribute = quests.length > 0 && players.some(p => {
     const myQids = assignments[p.id] || [];
     return quests.some(q => {
       if (myQids.includes(q.id)) return false;
@@ -245,16 +276,36 @@ export function GMQuestsPanel({ state, updateState, t, isMobile, onNavigateToPla
     for (const [k, v] of Object.entries(s.questAssignments || {})) {
       newAssign[Number(k)] = [...v];
     }
+    const eligibleIds: number[] = [];
     for (const p of allPlayers) {
       if (isCollab && !aliveSet.has(p.id)) continue;
       const myQids = newAssign[p.id] || [];
       if (myQids.includes(quest.id)) continue;
-      if (isCollab && quest.targetTags && quest.targetTags.length > 0) {
+      if (quest.targetTags && quest.targetTags.length > 0) {
         const pidTags = (s.playerTags || {})[p.id] || [];
         if (!quest.targetTags.some(tag => pidTags.includes(tag))) continue;
       }
       if (!newAssign[p.id]) newAssign[p.id] = [];
       newAssign[p.id].push(quest.id);
+      eligibleIds.push(p.id);
+    }
+    // Form collaborative groups from eligible players
+    if (isCollab && eligibleIds.length > 0) {
+      const groupSize = quest.collaborativeGroupSize || 2;
+      const groups: number[][] = [...(quest.collaborativeGroups || []).map(g => [...g])];
+      for (const pid of eligibleIds) {
+        // Check if player is already in a group
+        const alreadyGrouped = groups.some(g => g.includes(pid));
+        if (alreadyGrouped) continue;
+        // Try to join an existing incomplete group
+        const incomplete = groups.find(g => g.length < groupSize);
+        if (incomplete) {
+          incomplete.push(pid);
+        } else {
+          groups.push([pid]);
+        }
+      }
+      quest.collaborativeGroups = groups;
     }
     return newAssign;
   }, []);
@@ -267,7 +318,7 @@ export function GMQuestsPanel({ state, updateState, t, isMobile, onNavigateToPla
     setNewTargetMode('everyone');
     setNewTargetTags([]);
     setNewDistributionOrder('random');
-    setNewTasks([{ question: '', inputType: 'text', correctAnswer: '', choices: ['', ''], imageUrl: '' }]);
+    setSelectedTaskIds(new Set());
     setShowCreateForm(false);
     setEditingQuestId(null);
   }, []);
@@ -287,14 +338,14 @@ export function GMQuestsPanel({ state, updateState, t, isMobile, onNavigateToPla
       setNewTargetTags([]);
     }
     setNewDistributionOrder(quest.distributionOrder ?? 'random');
-    setNewTasks(quest.tasks.map(task => ({
-      question: task.question,
-      inputType: task.inputType,
-      correctAnswer: task.correctAnswer,
-      choices: task.choices ? [...task.choices] : ['', ''],
-      imageUrl: task.imageUrl || '',
-      referencedPlayerId: task.referencedPlayerId,
-    })));
+    // Select library-based tasks
+    const libraryIds = new Set<number>();
+    for (const task of quest.tasks) {
+      if (task.templateId) {
+        libraryIds.add(task.templateId);
+      }
+    }
+    setSelectedTaskIds(libraryIds);
     setShowCreateForm(true);
     setExpandedQuestId(null);
     setSharingQuestId(null);
@@ -304,12 +355,30 @@ export function GMQuestsPanel({ state, updateState, t, isMobile, onNavigateToPla
     if (!editingQuestId || !newTitle.trim()) return;
     const resolvedTargetTags = newTargetMode === 'tags' && newTargetTags.length > 0 ? newTargetTags : undefined;
     const isCollab = newQuestType === 'collaborative';
-    const validTasks = isCollab ? [] : newTasks.filter(t => t.question.trim() && t.correctAnswer.trim());
-    if (!isCollab && validTasks.length === 0) return;
+    const librarySelected = isCollab ? [] : (state.taskLibrary || []).filter(t => selectedTaskIds.has(t.id));
+    if (!isCollab && librarySelected.length === 0) return;
 
     updateState((s) => {
       const existingQuest = (s.quests || []).find(q => q.id === editingQuestId);
       if (!existingQuest) return s;
+
+      let taskIdx = 0;
+      const mergedTasks = isCollab ? [] : librarySelected.map((tpl) => {
+        // Preserve existing playerAnswers/playerResults if same templateId existed
+        const existing = existingQuest.tasks.find(t => t.templateId === tpl.id);
+        return {
+          id: existing?.id ?? (editingQuestId * 100 + taskIdx++),
+          question: tpl.question,
+          inputType: tpl.inputType,
+          correctAnswer: tpl.correctAnswer,
+          choices: tpl.choices ? [...tpl.choices] : undefined,
+          imageUrl: tpl.imageUrl,
+          referencedPlayerId: tpl.referencedPlayerId,
+          playerAnswers: existing?.playerAnswers ?? {},
+          playerResults: existing?.playerResults ?? {},
+          templateId: tpl.id,
+        };
+      });
 
       const updatedQuest: Quest = {
         ...existingQuest,
@@ -319,20 +388,7 @@ export function GMQuestsPanel({ state, updateState, t, isMobile, onNavigateToPla
         collaborativeGroupSize: isCollab ? newGroupSize : undefined,
         targetTags: resolvedTargetTags,
         distributionOrder: newDistributionOrder,
-        tasks: isCollab ? [] : validTasks.map((t, idx) => {
-          const existingTask = existingQuest.tasks[idx];
-          return {
-            id: existingTask?.id ?? (editingQuestId * 100 + idx),
-            question: t.question.trim(),
-            inputType: t.inputType,
-            correctAnswer: t.correctAnswer.trim(),
-            choices: t.inputType === 'multiple-choice' ? t.choices.filter(c => c.trim()) : undefined,
-            imageUrl: t.imageUrl || undefined,
-            referencedPlayerId: t.referencedPlayerId || undefined,
-            playerAnswers: existingTask?.playerAnswers ?? {},
-            playerResults: existingTask?.playerResults ?? {},
-          };
-        }),
+        tasks: mergedTasks,
       };
 
       const ns = {
@@ -345,7 +401,7 @@ export function GMQuestsPanel({ state, updateState, t, isMobile, onNavigateToPla
       return ns;
     });
     resetForm();
-  }, [editingQuestId, newTitle, newDescription, newQuestType, newGroupSize, newTasks, newTargetMode, newTargetTags, newDistributionOrder, updateState, resetForm, autoAssignAvailableQuest]);
+  }, [editingQuestId, newTitle, newDescription, newQuestType, newGroupSize, selectedTaskIds, state.taskLibrary, newTargetMode, newTargetTags, newDistributionOrder, updateState, resetForm, autoAssignAvailableQuest]);
 
   const handleCreateQuest = useCallback(() => {
     if (!newTitle.trim()) return;
@@ -379,26 +435,31 @@ export function GMQuestsPanel({ state, updateState, t, isMobile, onNavigateToPla
       return;
     }
 
-    const validTasks = newTasks.filter(t => t.question.trim() && t.correctAnswer.trim());
-    if (validTasks.length === 0) return;
+    // Build tasks from selected library tasks
+    const librarySelected = (state.taskLibrary || []).filter(t => selectedTaskIds.has(t.id));
+    if (librarySelected.length === 0) return;
 
     const questId = Date.now() + Math.floor(Math.random() * 10000);
+    let taskIdx = 0;
+    const questTasks = librarySelected.map((tpl) => ({
+      id: questId * 100 + taskIdx++,
+      question: tpl.question,
+      inputType: tpl.inputType,
+      correctAnswer: tpl.correctAnswer,
+      choices: tpl.choices ? [...tpl.choices] : undefined,
+      imageUrl: tpl.imageUrl,
+      referencedPlayerId: tpl.referencedPlayerId,
+      playerAnswers: {} as Record<number, string>,
+      playerResults: {} as Record<number, boolean>,
+      templateId: tpl.id,
+    }));
+
     const quest: Quest = {
       id: questId,
       title: newTitle.trim(),
       description: newDescription.trim() || 'Resolution : debut du prochain Jour',
       playerStatuses: {},
-      tasks: validTasks.map((t, idx) => ({
-        id: questId * 100 + idx,
-        question: t.question.trim(),
-        inputType: t.inputType,
-        correctAnswer: t.correctAnswer.trim(),
-        choices: t.inputType === 'multiple-choice' ? t.choices.filter(c => c.trim()) : undefined,
-        imageUrl: t.imageUrl || undefined,
-        referencedPlayerId: t.referencedPlayerId || undefined,
-        playerAnswers: {},
-        playerResults: {},
-      })),
+      tasks: questTasks,
       createdAt: new Date().toISOString(),
       hidden: true,
       targetTags: resolvedTargetTags,
@@ -412,8 +473,9 @@ export function GMQuestsPanel({ state, updateState, t, isMobile, onNavigateToPla
       }
       return ns;
     });
+    setSelectedTaskIds(new Set());
     resetForm();
-  }, [newTitle, newDescription, newQuestType, newGroupSize, newTasks, newTargetMode, newTargetTags, newDistributionOrder, updateState, resetForm, autoAssignAvailableQuest]);
+  }, [newTitle, newDescription, newQuestType, newGroupSize, selectedTaskIds, state.taskLibrary, newTargetMode, newTargetTags, newDistributionOrder, updateState, resetForm, autoAssignAvailableQuest]);
 
   const handleDeleteQuest = useCallback((questId: number) => {
     updateState((s) => {
@@ -520,65 +582,142 @@ export function GMQuestsPanel({ state, updateState, t, isMobile, onNavigateToPla
     });
   }, [updateState]);
 
-  const addTask = useCallback(() => {
-    setNewTasks(prev => [...prev, { question: '', inputType: 'text', correctAnswer: '', choices: ['', ''], imageUrl: '' }]);
+
+
+  // ── Task Library CRUD ──
+
+  const resetTaskForm = useCallback(() => {
+    setTaskQuestion('');
+    setTaskInputType('text');
+    setTaskCorrectAnswer('');
+    setTaskChoices(['', '']);
+    setTaskImageUrl('');
+    setTaskReferencedPlayerId(undefined);
+    setShowTaskCreateForm(false);
+    setEditingTaskId(null);
   }, []);
 
-  const removeTask = useCallback((idx: number) => {
-    setNewTasks(prev => prev.filter((_, i) => i !== idx));
-  }, []);
+  const handleCreateTask = useCallback(() => {
+    if (!taskQuestion.trim() || !taskCorrectAnswer.trim()) return;
+    const id = Date.now() + Math.floor(Math.random() * 10000);
+    const newTask: TaskTemplate = {
+      id,
+      question: taskQuestion.trim(),
+      inputType: taskInputType,
+      correctAnswer: taskCorrectAnswer.trim(),
+      choices: taskInputType === 'multiple-choice' ? taskChoices.filter(c => c.trim()) : undefined,
+      imageUrl: taskImageUrl || undefined,
+      referencedPlayerId: taskReferencedPlayerId,
+      createdAt: new Date().toISOString(),
+    };
+    updateState((s) => ({ ...s, taskLibrary: [...(s.taskLibrary || []), newTask] }));
+    resetTaskForm();
+  }, [taskQuestion, taskInputType, taskCorrectAnswer, taskChoices, taskImageUrl, taskReferencedPlayerId, updateState, resetTaskForm]);
 
-  const updateTask = useCallback((idx: number, field: string, value: any) => {
-    setNewTasks(prev => prev.map((t, i) => i === idx ? { ...t, [field]: value } : t));
-  }, []);
-
-  const updateChoice = useCallback((taskIdx: number, choiceIdx: number, value: string) => {
-    setNewTasks(prev => prev.map((t, i) => {
-      if (i !== taskIdx) return t;
-      const choices = [...t.choices];
-      choices[choiceIdx] = value;
-      return { ...t, choices };
+  const handleSaveTaskEdit = useCallback(() => {
+    if (!editingTaskId || !taskQuestion.trim() || !taskCorrectAnswer.trim()) return;
+    updateState((s) => ({
+      ...s,
+      taskLibrary: (s.taskLibrary || []).map(t =>
+        t.id === editingTaskId
+          ? {
+              ...t,
+              question: taskQuestion.trim(),
+              inputType: taskInputType,
+              correctAnswer: taskCorrectAnswer.trim(),
+              choices: taskInputType === 'multiple-choice' ? taskChoices.filter(c => c.trim()) : undefined,
+              imageUrl: taskImageUrl || undefined,
+              referencedPlayerId: taskReferencedPlayerId,
+            }
+          : t,
+      ),
     }));
+    resetTaskForm();
+  }, [editingTaskId, taskQuestion, taskInputType, taskCorrectAnswer, taskChoices, taskImageUrl, taskReferencedPlayerId, updateState, resetTaskForm]);
+
+  const handleStartTaskEdit = useCallback((task: TaskTemplate) => {
+    setEditingTaskId(task.id);
+    setTaskQuestion(task.question);
+    setTaskInputType(task.inputType);
+    setTaskCorrectAnswer(task.correctAnswer);
+    setTaskChoices(task.choices ? [...task.choices] : ['', '']);
+    setTaskImageUrl(task.imageUrl || '');
+    setTaskReferencedPlayerId(task.referencedPlayerId);
+    setShowTaskCreateForm(true);
   }, []);
 
-  const addChoice = useCallback((taskIdx: number) => {
-    setNewTasks(prev => prev.map((t, i) => i === taskIdx ? { ...t, choices: [...t.choices, ''] } : t));
-  }, []);
+  const handleDeleteTask = useCallback((taskId: number) => {
+    updateState((s) => ({
+      ...s,
+      taskLibrary: (s.taskLibrary || []).filter(t => t.id !== taskId),
+    }));
+    setSelectedTaskIds(prev => { const n = new Set(prev); n.delete(taskId); return n; });
+  }, [updateState]);
 
-  const handleTaskImageUpload = useCallback(async (taskIdx: number, file: File) => {
-    setUploadingTaskIdx(taskIdx);
+  const handleLibraryTaskImageUpload = useCallback(async (file: File) => {
+    setUploadingLibraryTask(true);
     try {
       const formData = new FormData();
       formData.append('file', file);
       formData.append('gameId', state.gameId || '');
       formData.append('password', 'loupgarou');
-
       const res = await fetch(
         `https://${projectId}.supabase.co/functions/v1/make-server-2c00868b/game/quest-image`,
-        {
-          method: 'POST',
-          headers: { Authorization: `Bearer ${publicAnonKey}` },
-          body: formData,
-        }
+        { method: 'POST', headers: { Authorization: `Bearer ${publicAnonKey}` }, body: formData },
       );
       const data = await res.json();
-      if (data.imageUrl) {
-        updateTask(taskIdx, 'imageUrl', data.imageUrl);
-      } else {
-        console.error('Quest image upload failed:', data.error);
-      }
+      if (data.imageUrl) setTaskImageUrl(data.imageUrl);
+      else console.error('Task library image upload failed:', data.error);
     } catch (err) {
-      console.error('Quest image upload error:', err);
+      console.error('Task library image upload error:', err);
     } finally {
-      setUploadingTaskIdx(null);
+      setUploadingLibraryTask(false);
     }
-  }, [state.gameId, updateTask]);
+  }, [state.gameId]);
+
+  // Compute which task IDs are used in at least one quest
+  const assignedTaskIds = new Set<number>();
+  for (const q of quests) {
+    for (const t of q.tasks) {
+      if (t.templateId) assignedTaskIds.add(t.templateId);
+    }
+  }
+  const assignedTasks = taskLibrary.filter(t => assignedTaskIds.has(t.id));
+  const unassignedTasks = taskLibrary.filter(t => !assignedTaskIds.has(t.id));
+
+  // Compute how many OTHER quests (not the one being edited) use each task template
+  const taskUsageCount = useMemo(() => {
+    const counts = new Map<number, number>();
+    for (const q of quests) {
+      if (editingQuestId !== null && q.id === editingQuestId) continue;
+      for (const t of q.tasks) {
+        if (t.templateId) counts.set(t.templateId, (counts.get(t.templateId) || 0) + 1);
+      }
+    }
+    return counts;
+  }, [quests, editingQuestId]);
+
+  /** Return a unique quest title: if `base` already exists among `existing`, append " 1", " 2", etc. */
+  const deduplicateTitle = (base: string, existing: string[]): string => {
+    if (!existing.includes(base)) return base;
+    const escapedBase = base.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const re = new RegExp(`^${escapedBase} (\\d+)$`);
+    let max = 0;
+    for (const t of existing) {
+      if (t === base) max = Math.max(max, 0);
+      const m = t.match(re);
+      if (m) max = Math.max(max, parseInt(m[1], 10));
+    }
+    return `${base} ${max + 1}`;
+  };
 
   const handleAddTemplate = useCallback((template: QuestTemplate) => {
     const questId = Date.now() + Math.floor(Math.random() * 10000);
+    const existingTitles = (quests || []).map((q: Quest) => q.title);
+    const title = deduplicateTitle(template.title, existingTitles);
     const quest: Quest = {
       id: questId,
-      title: template.title,
+      title,
       description: template.description,
       playerStatuses: {},
       tasks: template.tasks.map((t, idx) => ({
@@ -595,15 +734,19 @@ export function GMQuestsPanel({ state, updateState, t, isMobile, onNavigateToPla
       ...(template.questType === 'collaborative' ? { questType: 'collaborative' as const, collaborativeGroupSize: template.collaborativeGroupSize || 2 } : {}),
     };
     updateState((s) => ({ ...s, quests: [...(s.quests || []), quest] }));
-  }, [updateState]);
+  }, [updateState, quests]);
 
   const handleAddAllTemplates = useCallback(() => {
     const now = Date.now();
+    const existingTitles = (quests || []).map((q: Quest) => q.title);
+    const allTitles = [...existingTitles];
     const newQuests: Quest[] = QUEST_TEMPLATES.map((template, tplIdx) => {
       const questId = now + tplIdx * 100 + Math.floor(Math.random() * 99);
+      const title = deduplicateTitle(template.title, allTitles);
+      allTitles.push(title);
       return {
         id: questId,
-        title: template.title,
+        title,
         description: template.description,
         playerStatuses: {},
         tasks: template.tasks.map((t, idx) => ({
@@ -622,7 +765,155 @@ export function GMQuestsPanel({ state, updateState, t, isMobile, onNavigateToPla
     });
     updateState((s) => ({ ...s, quests: [...(s.quests || []), ...newQuests] }));
     setShowTemplates(false);
-  }, [updateState]);
+  }, [updateState, quests]);
+
+  // ── Load gallery pre-quests when templates panel opens ──
+  useEffect(() => {
+    if (!showTemplates || galleryPreQuestsLoadedRef.current) return;
+    galleryPreQuestsLoadedRef.current = true;
+    setLoadingGalleryPreQuests(true);
+    (async () => {
+      try {
+        const res = await fetch(`${API_BASE}/gallery/quests`, { headers: jsonAuthHeaders() });
+        const data = await res.json();
+        if (data.quests) {
+          const list = Array.isArray(data.quests) ? data.quests : (data.quests.list ?? []);
+          setGalleryPreQuests(list);
+        }
+      } catch (err) {
+        console.error('Failed to load gallery pre-quests:', err);
+      } finally {
+        setLoadingGalleryPreQuests(false);
+      }
+    })();
+  }, [showTemplates]);
+
+  // ── Import a gallery pre-quest into the game ──
+  const handleAddGalleryPreQuest = useCallback((preQuest: GalleryPreQuest) => {
+    const questId = Date.now() + Math.floor(Math.random() * 10000);
+    const existingTitles = (quests || []).map((q: Quest) => q.title);
+    const title = deduplicateTitle(preQuest.title, existingTitles);
+    const isCollab = preQuest.questType === 'collaborative';
+
+    // For individual quests, also inject tasks into the task library
+    let newTaskLibEntries: import('../../../context/gameTypes').TaskTemplate[] = [];
+    let questTasks: Quest['tasks'] = [];
+
+    if (!isCollab && preQuest.tasks.length > 0) {
+      const existingLib = state.taskLibrary || [];
+      let nextTaskLibId = existingLib.length > 0 ? Math.max(...existingLib.map(t => t.id)) + 1 : 1;
+
+      newTaskLibEntries = preQuest.tasks.map(t => ({
+        id: nextTaskLibId++,
+        question: t.question,
+        inputType: t.inputType,
+        correctAnswer: t.correctAnswer,
+        choices: t.choices ? [...t.choices] : undefined,
+        imageUrl: t.imageUrl,
+        createdAt: new Date().toISOString(),
+      }));
+
+      questTasks = newTaskLibEntries.map((tpl, idx) => ({
+        id: questId * 100 + idx,
+        question: tpl.question,
+        inputType: tpl.inputType,
+        correctAnswer: tpl.correctAnswer,
+        choices: tpl.choices ? [...tpl.choices] : undefined,
+        imageUrl: tpl.imageUrl,
+        referencedPlayerId: tpl.referencedPlayerId,
+        playerAnswers: {} as Record<number, string>,
+        playerResults: {} as Record<number, boolean>,
+        templateId: tpl.id,
+      }));
+    }
+
+    const quest: Quest = {
+      id: questId,
+      title,
+      description: preQuest.description,
+      questType: isCollab ? 'collaborative' : undefined,
+      collaborativeGroupSize: isCollab ? (preQuest.collaborativeGroupSize || 3) : undefined,
+      playerStatuses: {},
+      tasks: questTasks,
+      createdAt: new Date().toISOString(),
+      hidden: true,
+      targetTags: preQuest.targetTags,
+      distributionOrder: preQuest.distributionOrder,
+    };
+
+    updateState((s) => ({
+      ...s,
+      quests: [...(s.quests || []), quest],
+      taskLibrary: [...(s.taskLibrary || []), ...newTaskLibEntries],
+    }));
+  }, [updateState, quests, state.taskLibrary]);
+
+  // ── Import ALL gallery pre-quests at once ──
+  const handleAddAllGalleryPreQuests = useCallback(() => {
+    if (galleryPreQuests.length === 0) return;
+    const now = Date.now();
+    const existingTitles = (quests || []).map((q: Quest) => q.title);
+    const allTitles = [...existingTitles];
+    const newQuests: Quest[] = [];
+    let allNewTaskLib: import('../../../context/gameTypes').TaskTemplate[] = [];
+    const existingLib = state.taskLibrary || [];
+    let nextTaskLibId = existingLib.length > 0 ? Math.max(...existingLib.map(t => t.id)) + 1 : 1;
+
+    galleryPreQuests.forEach((preQuest, tplIdx) => {
+      const questId = now + tplIdx * 100 + Math.floor(Math.random() * 99);
+      const title = deduplicateTitle(preQuest.title, allTitles);
+      allTitles.push(title);
+      const isCollab = preQuest.questType === 'collaborative';
+
+      let questTasks: Quest['tasks'] = [];
+      if (!isCollab && preQuest.tasks.length > 0) {
+        const newLibEntries = preQuest.tasks.map(t => ({
+          id: nextTaskLibId++,
+          question: t.question,
+          inputType: t.inputType,
+          correctAnswer: t.correctAnswer,
+          choices: t.choices ? [...t.choices] : undefined,
+          imageUrl: t.imageUrl,
+          createdAt: new Date().toISOString(),
+        }));
+        allNewTaskLib = [...allNewTaskLib, ...newLibEntries];
+
+        questTasks = newLibEntries.map((tpl, idx) => ({
+          id: questId * 100 + idx,
+          question: tpl.question,
+          inputType: tpl.inputType,
+          correctAnswer: tpl.correctAnswer,
+          choices: tpl.choices ? [...tpl.choices] : undefined,
+          imageUrl: tpl.imageUrl,
+          referencedPlayerId: tpl.referencedPlayerId,
+          playerAnswers: {} as Record<number, string>,
+          playerResults: {} as Record<number, boolean>,
+          templateId: tpl.id,
+        }));
+      }
+
+      newQuests.push({
+        id: questId,
+        title,
+        description: preQuest.description,
+        questType: isCollab ? 'collaborative' : undefined,
+        collaborativeGroupSize: isCollab ? (preQuest.collaborativeGroupSize || 3) : undefined,
+        playerStatuses: {},
+        tasks: questTasks,
+        createdAt: new Date().toISOString(),
+        hidden: true,
+        targetTags: preQuest.targetTags,
+        distributionOrder: preQuest.distributionOrder,
+      });
+    });
+
+    updateState((s) => ({
+      ...s,
+      quests: [...(s.quests || []), ...newQuests],
+      taskLibrary: [...(s.taskLibrary || []), ...allNewTaskLib],
+    }));
+    setShowTemplates(false);
+  }, [galleryPreQuests, updateState, quests, state.taskLibrary]);
 
   // ── CSV TEMPLATE DOWNLOAD ──
   const CSV_HEADER = 'title,description,emoji,questType,groupSize,question,inputType,correctAnswer,choices,targetTags';
@@ -797,7 +1088,7 @@ export function GMQuestsPanel({ state, updateState, t, isMobile, onNavigateToPla
   }, [parseCsvLine, updateState]);
 
   return (
-    <div className="flex flex-col gap-4">
+    <div className="flex flex-col gap-4" style={isMobile && quests.length > 0 ? { paddingBottom: '80px' } : undefined}>
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
@@ -969,6 +1260,90 @@ export function GMQuestsPanel({ state, updateState, t, isMobile, onNavigateToPla
                   );
                 })}
               </div>
+
+              {/* ── Gallery Pre-Quests section ── */}
+              <div className="mt-4 pt-4" style={{ borderTop: '1px solid rgba(217,119,6,0.15)' }}>
+                <div className="flex items-center justify-between mb-2">
+                  <div className="flex items-center gap-2">
+                    <MapIcon size={14} style={{ color: '#d97706' }} />
+                    <h4 style={{ fontFamily: '"Cinzel", serif', color: '#d97706', fontSize: '0.8rem' }}>
+                      Pre-quetes (Galerie)
+                    </h4>
+                  </div>
+                  {galleryPreQuests.length > 0 && (
+                    <motion.button
+                      whileTap={{ scale: 0.95 }}
+                      onClick={handleAddAllGalleryPreQuests}
+                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg"
+                      style={{
+                        background: 'linear-gradient(135deg, #b45309, #d97706)',
+                        color: '#fff',
+                        fontFamily: '"Cinzel", serif',
+                        fontSize: '0.6rem',
+                        fontWeight: 700,
+                      }}
+                    >
+                      <Plus size={11} />
+                      Ajouter les {galleryPreQuests.length}
+                    </motion.button>
+                  )}
+                </div>
+                {loadingGalleryPreQuests ? (
+                  <div className="flex items-center gap-2 py-3 justify-center">
+                    <Shuffle size={13} className="animate-spin" style={{ color: '#d97706', opacity: 0.5 }} />
+                    <span style={{ color: '#d97706', fontSize: '0.6rem', opacity: 0.6, fontFamily: '"Cinzel", serif' }}>Chargement...</span>
+                  </div>
+                ) : galleryPreQuests.length === 0 ? (
+                  <p style={{ color: t.textDim, fontSize: '0.55rem', fontStyle: 'italic', textAlign: 'center', padding: '8px 0' }}>
+                    Aucune pre-quete configuree dans la galerie
+                  </p>
+                ) : (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    {galleryPreQuests.map((pq) => {
+                      const isCollab = pq.questType === 'collaborative';
+                      const distLabel = pq.distributionOrder === 'available' ? 'Auto' : pq.distributionOrder === 'random' || !pq.distributionOrder ? 'Aleatoire' : `P${pq.distributionOrder}`;
+                      return (
+                        <motion.button
+                          key={pq.id}
+                          whileHover={{ scale: 1.01 }}
+                          whileTap={{ scale: 0.97 }}
+                          onClick={() => handleAddGalleryPreQuest(pq)}
+                          className="rounded-lg p-3 text-left flex gap-3 items-start"
+                          style={{
+                            background: 'rgba(217,119,6,0.04)',
+                            border: '1px solid rgba(217,119,6,0.15)',
+                          }}
+                        >
+                          <span style={{ fontSize: '1.4rem', lineHeight: 1, flexShrink: 0 }}>{isCollab ? '🤝' : '📜'}</span>
+                          <div className="flex-1 min-w-0">
+                            <p style={{ fontFamily: '"Cinzel", serif', color: t.text, fontSize: '0.75rem', fontWeight: 600 }}>
+                              {pq.title}
+                            </p>
+                            <p style={{ color: t.textDim, fontSize: '0.6rem', marginTop: '0.15rem' }}>
+                              {pq.description}
+                            </p>
+                            <div className="flex items-center gap-2 mt-1.5 flex-wrap">
+                              {isCollab ? (
+                                <span className="flex items-center gap-1 px-1.5 py-0.5 rounded" style={{ background: 'rgba(106,122,176,0.15)', fontSize: '0.5rem', color: '#9aabda', border: '1px solid rgba(106,122,176,0.3)' }}>
+                                  <Handshake size={9} /> Collab · {pq.collaborativeGroupSize || 3}j/grp
+                                </span>
+                              ) : (
+                                <span className="px-1.5 py-0.5 rounded" style={{ background: 'rgba(217,119,6,0.08)', color: '#d97706', fontSize: '0.55rem' }}>
+                                  {pq.tasks.length} tache{pq.tasks.length !== 1 ? 's' : ''}
+                                </span>
+                              )}
+                              <span className="px-1.5 py-0.5 rounded" style={{ background: 'rgba(217,119,6,0.06)', color: '#d97706', fontSize: '0.5rem' }}>
+                                {distLabel}
+                              </span>
+                            </div>
+                          </div>
+                          <Plus size={14} style={{ color: '#d97706', flexShrink: 0, marginTop: '0.15rem' }} />
+                        </motion.button>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
             </div>
           </motion.div>
         )}
@@ -1073,13 +1448,13 @@ export function GMQuestsPanel({ state, updateState, t, isMobile, onNavigateToPla
               )}
 
               {/* Player tag assignment */}
-              {availableTags.length > 0 && state.players.length > 0 && (
+              {availableTags.length > 0 && players.length > 0 && (
                 <div className="flex flex-col gap-2 mt-1">
                   <span style={{ fontFamily: '"Cinzel", serif', color: t.isDay ? '#7e3ba1' : '#c084fc', fontSize: '0.75rem', fontWeight: 600 }}>
                     Assigner aux joueurs
                   </span>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                    {state.players.map(player => {
+                    {players.map(player => {
                       const pTags = playerTags[player.id] || [];
                       const isExpanded = tagAssignPlayerId === player.id;
                       return (
@@ -1230,7 +1605,7 @@ export function GMQuestsPanel({ state, updateState, t, isMobile, onNavigateToPla
                   Type :
                 </span>
                 <button
-                  onClick={() => { setNewQuestType('individual'); setNewTasks(prev => prev.length === 0 ? [{ question: '', inputType: 'text', correctAnswer: '', choices: ['', ''], imageUrl: '' }] : prev); }}
+                  onClick={() => { setNewQuestType('individual'); }}
                   className="flex items-center gap-1 px-2.5 py-1 rounded-md"
                   style={{
                     background: newQuestType === 'individual' ? t.goldBg : 'rgba(255,255,255,0.04)',
@@ -1446,275 +1821,89 @@ export function GMQuestsPanel({ state, updateState, t, isMobile, onNavigateToPla
                 </span>
               </div>
 
-              {/* Tasks — hidden for collaborative quests */}
-              {newQuestType !== 'collaborative' && (
-              <div className="flex flex-col gap-3">
-                <div className="flex items-center justify-between">
-                  <span style={{ color: t.textMuted, fontSize: '0.7rem', fontFamily: '"Cinzel", serif' }}>
-                    Taches ({newTasks.length})
+              {/* Task picker from library — hidden for collaborative quests */}
+              {newQuestType !== 'collaborative' && taskLibrary.length === 0 && (
+                <div className="rounded-lg p-3 flex items-center gap-2" style={{ background: 'rgba(59,130,246,0.04)', border: '1px dashed rgba(59,130,246,0.15)' }}>
+                  <Library size={14} style={{ color: '#60a5fa', opacity: 0.6 }} />
+                  <span style={{ color: '#60a5fa', fontSize: '0.7rem', opacity: 0.7 }}>
+                    Aucune tache dans la bibliotheque — creez-en dans la section ci-dessous.
                   </span>
-                  <button
-                    onClick={addTask}
-                    className="flex items-center gap-1 px-2 py-1 rounded-md"
-                    style={{ background: 'rgba(255,255,255,0.04)', color: t.textMuted, fontSize: '0.7rem' }}
-                  >
-                    <Plus size={11} /> Ajouter
-                  </button>
                 </div>
-
-                {newTasks.map((task, idx) => (
-                  <div
-                    key={idx}
-                    className="rounded-lg p-3 flex flex-col gap-2"
-                    style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.06)' }}
-                  >
-                    <div className="flex items-center justify-between">
-                      <span style={{ color: t.gold, fontSize: '0.7rem', fontFamily: '"Cinzel", serif' }}>
-                        Tache {idx + 1}
-                      </span>
-                      {newTasks.length > 1 && (
-                        <button onClick={() => removeTask(idx)}>
-                          <Trash2 size={12} style={{ color: '#c41e3a' }} />
-                        </button>
-                      )}
-                    </div>
-
-                    <input
-                      type="text"
-                      placeholder="Question / Objectif..."
-                      value={task.question}
-                      onChange={(e) => updateTask(idx, 'question', e.target.value)}
-                      className="w-full px-3 py-1.5 rounded-md outline-none"
-                      style={{
-                        background: t.inputBg,
-                        border: `1px solid ${t.inputBorder}`,
-                        color: t.inputText,
-                        fontSize: '0.75rem',
-                      }}
-                    />
-
-                    {/* Referenced player selector */}
-                    <div className="flex flex-col gap-1.5">
-                      <div className="flex items-center gap-1.5">
-                        <UserCircle size={12} style={{ color: t.textMuted }} />
-                        <span style={{ color: t.textMuted, fontSize: '0.65rem' }}>Joueur concerne :</span>
-                        {task.referencedPlayerId && (() => {
-                          const rp = state.players.find(p => p.id === task.referencedPlayerId);
-                          if (!rp) return null;
-                          return (
-                            <span className="flex items-center gap-1 px-1.5 py-0.5 rounded-md" style={{ background: 'rgba(212,168,67,0.1)', border: '1px solid rgba(212,168,67,0.25)' }}>
-                              <span className="w-4 h-4 rounded-full overflow-hidden flex-shrink-0 inline-flex">
+              )}
+              {newQuestType !== 'collaborative' && taskLibrary.length > 0 && (
+                <div className="flex flex-col gap-2">
+                  <div className="flex items-center gap-2">
+                    <Library size={13} style={{ color: '#60a5fa' }} />
+                    <span style={{ color: '#60a5fa', fontSize: '0.7rem', fontFamily: '"Cinzel", serif', fontWeight: 600 }}>
+                      Selectionner depuis la bibliotheque ({selectedTaskIds.size}/{taskLibrary.length})
+                    </span>
+                  </div>
+                  <div className="flex flex-wrap gap-1.5">
+                    {taskLibrary.map(tpl => {
+                      const isSelected = selectedTaskIds.has(tpl.id);
+                      const usageCount = taskUsageCount.get(tpl.id) || 0;
+                      const typeLabel = INPUT_TYPE_OPTIONS.find(o => o.value === tpl.inputType)?.label || tpl.inputType;
+                      return (
+                        <button
+                          key={tpl.id}
+                          type="button"
+                          onClick={() => {
+                            setSelectedTaskIds(prev => {
+                              const next = new Set(prev);
+                              if (next.has(tpl.id)) next.delete(tpl.id);
+                              else next.add(tpl.id);
+                              return next;
+                            });
+                          }}
+                          className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg transition-all"
+                          style={{
+                            background: isSelected ? 'rgba(59,130,246,0.15)' : 'rgba(255,255,255,0.03)',
+                            border: `1px solid ${isSelected ? 'rgba(59,130,246,0.4)' : 'rgba(255,255,255,0.08)'}`,
+                            color: isSelected ? '#60a5fa' : t.textSecondary,
+                            fontSize: '0.65rem',
+                            cursor: 'pointer',
+                          }}
+                          title={usageCount > 0 ? `Utilisee dans ${usageCount} autre${usageCount > 1 ? 's' : ''} quete${usageCount > 1 ? 's' : ''}` : undefined}
+                        >
+                          {isSelected ? <CheckCircle size={11} style={{ color: '#3b82f6' }} /> : <Plus size={11} />}
+                          {usageCount > 0 && (
+                            <span className="flex items-center justify-center rounded-full flex-shrink-0" style={{
+                              width: '16px', height: '16px',
+                              background: 'rgba(212,168,67,0.18)',
+                              border: '1px solid rgba(212,168,67,0.35)',
+                              color: '#d4a843',
+                              fontSize: '0.5rem',
+                              fontWeight: 700,
+                            }}>{usageCount}</span>
+                          )}
+                          {tpl.referencedPlayerId != null && (() => {
+                            const rp = players.find(p => p.id === tpl.referencedPlayerId);
+                            if (!rp) return null;
+                            return (
+                              <span className="w-4 h-4 rounded-full overflow-hidden flex-shrink-0" style={{ border: '1.5px solid rgba(212,168,67,0.35)' }}>
                                 <GMAvatar player={rp} size="text-xs" />
                               </span>
-                              <span style={{ color: t.gold, fontSize: '0.6rem', fontWeight: 600 }}>{rp.name}</span>
-                              <button type="button" onClick={() => updateTask(idx, 'referencedPlayerId', undefined)} className="ml-0.5">
-                                <X size={9} style={{ color: t.textMuted }} />
-                              </button>
-                            </span>
-                          );
-                        })()}
-                      </div>
-                      {!task.referencedPlayerId && (
-                        <div className="flex flex-wrap gap-1">
-                          {state.players.map(p => (
-                            <button
-                              key={p.id}
-                              type="button"
-                              onClick={() => updateTask(idx, 'referencedPlayerId', p.id)}
-                              className="flex items-center gap-1 px-1.5 py-0.5 rounded-md transition-colors cursor-pointer"
-                              style={{
-                                background: 'rgba(255,255,255,0.03)',
-                                border: '1px solid rgba(255,255,255,0.06)',
-                                fontSize: '0.55rem',
-                                color: t.textSecondary,
-                              }}
-                            >
-                              <span className="w-3.5 h-3.5 rounded-full overflow-hidden flex-shrink-0 inline-flex">
-                                <GMAvatar player={p} size="text-xs" />
-                              </span>
-                              {p.name}
-                            </button>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Image upload */}
-                    <div className="flex items-center gap-2">
-                      {task.imageUrl ? (
-                        <div className="relative rounded-lg overflow-hidden" style={{ maxWidth: '160px' }}>
-                          <img src={task.imageUrl} alt="Task" className="w-full h-auto rounded-lg" style={{ maxHeight: '100px', objectFit: 'cover' }} />
-                          <button
-                            type="button"
-                            onClick={() => updateTask(idx, 'imageUrl', '')}
-                            className="absolute top-1 right-1 w-5 h-5 rounded-full flex items-center justify-center"
-                            style={{ background: 'rgba(0,0,0,0.6)', color: '#fff' }}
-                          >
-                            <X size={10} />
-                          </button>
-                        </div>
-                      ) : (
-                        <label
-                          className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-md cursor-pointer transition-colors"
-                          style={{
-                            background: 'rgba(255,255,255,0.03)',
-                            border: '1px solid rgba(255,255,255,0.08)',
-                            color: t.textMuted,
-                            fontSize: '0.65rem',
-                            opacity: uploadingTaskIdx === idx ? 0.5 : 1,
-                          }}
-                        >
-                          {uploadingTaskIdx === idx ? (
-                            <motion.div animate={{ rotate: 360 }} transition={{ duration: 1, repeat: Infinity, ease: 'linear' }}>
-                              <Clock size={12} />
-                            </motion.div>
-                          ) : (
-                            <ImagePlus size={12} />
-                          )}
-                          {uploadingTaskIdx === idx ? 'Upload...' : 'Image'}
-                          <input
-                            type="file"
-                            accept="image/*"
-                            className="hidden"
-                            disabled={uploadingTaskIdx === idx}
-                            onChange={(e) => {
-                              const file = e.target.files?.[0];
-                              if (file) handleTaskImageUpload(idx, file);
-                              e.target.value = '';
-                            }}
-                          />
-                        </label>
-                      )}
-                    </div>
-
-                    <div className="flex flex-wrap gap-1.5">
-                      {INPUT_TYPE_OPTIONS.map(opt => (
-                        <button
-                          key={opt.value}
-                          onClick={() => updateTask(idx, 'inputType', opt.value)}
-                          className="flex items-center gap-1 px-2 py-1 rounded-md transition-colors"
-                          style={{
-                            background: task.inputType === opt.value ? t.goldBg : 'rgba(255,255,255,0.03)',
-                            border: `1px solid ${task.inputType === opt.value ? t.goldBorder : 'rgba(255,255,255,0.06)'}`,
-                            color: task.inputType === opt.value ? t.gold : t.textMuted,
-                            fontSize: '0.65rem',
-                          }}
-                        >
-                          {opt.icon} {opt.label}
-                        </button>
-                      ))}
-                    </div>
-
-                    {task.inputType === 'multiple-choice' && (
-                      <div className="flex flex-col gap-1.5 pl-2">
-                        <span style={{ color: t.textDim, fontSize: '0.65rem' }}>Options :</span>
-                        {task.choices.map((choice, cIdx) => (
-                          <input
-                            key={cIdx}
-                            type="text"
-                            placeholder={`Option ${cIdx + 1}`}
-                            value={choice}
-                            onChange={(e) => updateChoice(idx, cIdx, e.target.value)}
-                            className="w-full px-2 py-1 rounded-md outline-none"
-                            style={{
-                              background: t.inputBg,
-                              border: `1px solid ${t.inputBorder}`,
-                              color: t.inputText,
-                              fontSize: '0.7rem',
-                            }}
-                          />
-                        ))}
-                        <button
-                          onClick={() => addChoice(idx)}
-                          className="self-start flex items-center gap-1 px-2 py-0.5 rounded-md"
-                          style={{ color: t.textMuted, fontSize: '0.6rem' }}
-                        >
-                          <Plus size={10} /> Option
-                        </button>
-                      </div>
-                    )}
-
-                    {task.inputType === 'player-select' && (
-                      <div className="flex flex-col gap-1.5 pl-2">
-                        <span style={{ color: t.textDim, fontSize: '0.65rem' }}>
-                          Selectionnez le(s) joueur(s) valides comme bonne reponse :
-                        </span>
-                        <div className="flex flex-wrap gap-1.5">
-                          {state.players.map(player => {
-                            const selected = task.correctAnswer
-                              .split('|')
-                              .map(s => s.trim())
-                              .filter(Boolean)
-                              .includes(player.name);
-                            return (
-                              <button
-                                key={player.id}
-                                type="button"
-                                onClick={() => {
-                                  const current = task.correctAnswer
-                                    .split('|')
-                                    .map(s => s.trim())
-                                    .filter(s => s && s !== 'placeholder');
-                                  let next: string[];
-                                  if (selected) {
-                                    next = current.filter(n => n !== player.name);
-                                  } else {
-                                    next = [...current, player.name];
-                                  }
-                                  updateTask(idx, 'correctAnswer', next.join('|'));
-                                }}
-                                className="flex items-center gap-1.5 px-2 py-1 rounded-md transition-all cursor-pointer"
-                                style={{
-                                  background: selected ? 'rgba(107,142,90,0.15)' : 'rgba(255,255,255,0.03)',
-                                  border: `1px solid ${selected ? 'rgba(107,142,90,0.35)' : 'rgba(255,255,255,0.06)'}`,
-                                  color: selected ? '#81c784' : t.textSecondary,
-                                  fontSize: '0.6rem',
-                                }}
-                              >
-                                <span style={{ fontSize: '0.75rem' }}>{player.avatar}</span>
-                                <span>{player.name}</span>
-                                {selected && (
-                                  <CheckCircle size={10} style={{ color: '#6b8e5a' }} />
-                                )}
-                              </button>
                             );
-                          })}
-                        </div>
-                        {task.correctAnswer && task.correctAnswer !== 'placeholder' && (
-                          <span style={{ color: '#6b8e5a', fontSize: '0.55rem', fontStyle: 'italic' }}>
-                            {task.correctAnswer.split('|').filter(Boolean).length} joueur(s) selectionne(s)
-                          </span>
-                        )}
-                        {(!task.correctAnswer || task.correctAnswer === 'placeholder') && (
-                          <span style={{ color: '#f59e0b', fontSize: '0.55rem', fontStyle: 'italic' }}>
-                            Aucun joueur selectionne — toute reponse sera incorrecte
-                          </span>
-                        )}
-                      </div>
-                    )}
-
-                    {task.inputType !== 'player-select' && (
-                      <div className="flex items-center gap-2">
-                        <span style={{ color: t.textDim, fontSize: '0.65rem', whiteSpace: 'nowrap' }}>Reponse :</span>
-                        <input
-                          type="text"
-                          placeholder="Reponse correcte..."
-                          value={task.correctAnswer}
-                          onChange={(e) => updateTask(idx, 'correctAnswer', e.target.value)}
-                          className="flex-1 px-2 py-1 rounded-md outline-none"
-                          style={{
-                            background: 'rgba(107,142,90,0.08)',
-                            border: '1px solid rgba(107,142,90,0.2)',
-                            color: '#6b8e5a',
-                            fontSize: '0.7rem',
-                          }}
-                        />
-                      </div>
-                    )}
+                          })()}
+                          <span className="truncate" style={{ maxWidth: '150px' }}>{tpl.question}</span>
+                          <span className="px-1 py-0.5 rounded" style={{
+                            background: isSelected ? 'rgba(59,130,246,0.12)' : 'rgba(255,255,255,0.04)',
+                            fontSize: '0.5rem',
+                            color: isSelected ? '#93c5fd' : t.textDim,
+                          }}>{typeLabel}</span>
+                        </button>
+                      );
+                    })}
                   </div>
-                ))}
-              </div>
+                  {selectedTaskIds.size > 0 && (
+                    <span style={{ color: '#60a5fa', fontSize: '0.55rem', fontStyle: 'italic' }}>
+                      {selectedTaskIds.size} tache{selectedTaskIds.size > 1 ? 's' : ''} de la bibliotheque selectionnee{selectedTaskIds.size > 1 ? 's' : ''}
+                    </span>
+                  )}
+                </div>
               )}
+
+              {/* Inline tasks removed — tasks are now managed via the library below */}
 
               <div className="flex justify-end gap-2 pt-1">
                 <button
@@ -1727,7 +1916,7 @@ export function GMQuestsPanel({ state, updateState, t, isMobile, onNavigateToPla
                 <motion.button
                   whileTap={{ scale: 0.95 }}
                   onClick={editingQuestId ? handleSaveEdit : handleCreateQuest}
-                  disabled={!newTitle.trim() || (newQuestType !== 'collaborative' && newTasks.every(t => !t.question.trim() || !t.correctAnswer.trim()))}
+                  disabled={!newTitle.trim() || (newQuestType !== 'collaborative' && selectedTaskIds.size === 0)}
                   className="flex items-center gap-1.5 px-4 py-1.5 rounded-lg"
                   style={{
                     background: editingQuestId
@@ -1737,7 +1926,7 @@ export function GMQuestsPanel({ state, updateState, t, isMobile, onNavigateToPla
                     fontFamily: '"Cinzel", serif',
                     fontSize: '0.75rem',
                     fontWeight: 700,
-                    opacity: (!newTitle.trim() || (newQuestType !== 'collaborative' && newTasks.every(t => !t.question.trim() || !t.correctAnswer.trim()))) ? 0.4 : 1,
+                    opacity: (!newTitle.trim() || (newQuestType !== 'collaborative' && selectedTaskIds.size === 0)) ? 0.4 : 1,
                   }}
                 >
                   {editingQuestId ? <Save size={13} /> : <Package size={13} />}
@@ -1794,8 +1983,8 @@ export function GMQuestsPanel({ state, updateState, t, isMobile, onNavigateToPla
         </div>
       )}
 
-      {/* ── Distribution section ── */}
-      {quests.length > 0 && (
+      {/* ── Distribution section (desktop only — mobile uses sticky footer) ── */}
+      {quests.length > 0 && !isMobile && (
         <div
           className="rounded-xl p-3 flex flex-col gap-3"
           style={{
@@ -2081,7 +2270,7 @@ export function GMQuestsPanel({ state, updateState, t, isMobile, onNavigateToPla
                                   {groupStatus === 'active' && <Clock size={10} style={{ color: '#f5b342' }} />}
                                 </div>
                                 {group.map(pid => {
-                                  const player = state.players.find(p => p.id === pid);
+                                  const player = players.find(p => p.id === pid);
                                   if (!player) return null;
                                   const vote = quest.collaborativeVotes?.[pid];
                                   const hasVoted = vote !== undefined;
@@ -2129,8 +2318,8 @@ export function GMQuestsPanel({ state, updateState, t, isMobile, onNavigateToPla
                           style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.05)' }}
                         >
                           <div className="flex items-start gap-2">
-                            {task.referencedPlayerId && (() => {
-                              const rp = state.players.find(p => p.id === task.referencedPlayerId);
+                            {task.referencedPlayerId != null && (() => {
+                              const rp = players.find(p => p.id === task.referencedPlayerId);
                               if (!rp) return null;
                               return (
                                 <span className="w-7 h-7 rounded-full overflow-hidden flex-shrink-0 mt-0.5" style={{ border: '2px solid rgba(212,168,67,0.35)' }}>
@@ -2141,6 +2330,11 @@ export function GMQuestsPanel({ state, updateState, t, isMobile, onNavigateToPla
                             <span className="flex-1" style={{ color: t.text, fontSize: '0.75rem' }}>
                               <span style={{ color: t.gold, fontWeight: 600 }}>{tIdx + 1}.</span> {task.question}
                             </span>
+                            {task.templateId && (
+                              <span className="flex items-center gap-1 px-1.5 py-0.5 rounded shrink-0" style={{ background: 'rgba(59,130,246,0.08)', fontSize: '0.45rem', color: '#60a5fa', border: '1px solid rgba(59,130,246,0.15)' }}>
+                                <Library size={8} /> Biblio
+                              </span>
+                            )}
                           </div>
                           {task.imageUrl && (
                             <div className="rounded-md overflow-hidden mt-1" style={{ maxWidth: '120px' }}>
@@ -2166,7 +2360,7 @@ export function GMQuestsPanel({ state, updateState, t, isMobile, onNavigateToPla
 
                           {/* Per-player answers */}
                           <div className="flex flex-col gap-1 mt-1">
-                            {state.players.filter(p => task.playerAnswers?.[p.id] !== undefined).map(player => {
+                            {players.filter(p => task.playerAnswers?.[p.id] !== undefined).map(player => {
                               const answer = task.playerAnswers?.[player.id];
                               const result = task.playerResults?.[player.id];
                               const status = quest.playerStatuses?.[player.id] || 'active';
@@ -2247,7 +2441,7 @@ export function GMQuestsPanel({ state, updateState, t, isMobile, onNavigateToPla
                                 </div>
                                 <div className="flex items-center gap-1.5">
                                   {(() => {
-                                    const eligiblePlayers = ((quest.questType || 'individual') === 'collaborative' ? alivePlayers : state.players)
+                                    const eligiblePlayers = ((quest.questType || 'individual') === 'collaborative' ? alivePlayers : players)
                                       .filter(player => isPlayerEligible(player.id, quest) && !(assignments[player.id] || []).includes(quest.id));
                                     const allSelected = eligiblePlayers.length > 0 && eligiblePlayers.every(p => selectedSharePlayerIds.has(p.id));
                                     return eligiblePlayers.length > 0 ? (
@@ -2291,7 +2485,7 @@ export function GMQuestsPanel({ state, updateState, t, isMobile, onNavigateToPla
                                 </div>
                               )}
                               <div className="flex flex-wrap gap-1.5">
-                                {((quest.questType || 'individual') === 'collaborative' ? alivePlayers : state.players).filter(player => isPlayerEligible(player.id, quest) || (assignments[player.id] || []).includes(quest.id)).map(player => {
+                                {((quest.questType || 'individual') === 'collaborative' ? alivePlayers : players).filter(player => isPlayerEligible(player.id, quest) || (assignments[player.id] || []).includes(quest.id)).map(player => {
                                   const alreadyHas = (assignments[player.id] || []).includes(quest.id);
                                   const isSelected = selectedSharePlayerIds.has(player.id);
                                   return (
@@ -2427,6 +2621,474 @@ export function GMQuestsPanel({ state, updateState, t, isMobile, onNavigateToPla
             </motion.div>
           );
         })}
+      </div>
+
+      {/* ══════════════════════════════════════════════ */}
+      {/* ── TASKS LIBRARY SECTION ── */}
+      {/* ══════════════════════════════════════════════ */}
+      <div className="mt-6 flex flex-col gap-4" style={{ borderTop: `2px solid ${t.isDay ? 'rgba(59,130,246,0.15)' : 'rgba(59,130,246,0.12)'}`, paddingTop: '1.5rem' }}>
+        {/* Tasks header */}
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Library size={18} style={{ color: '#60a5fa' }} />
+            <h2 style={{ fontFamily: '"Cinzel", serif', color: '#60a5fa', fontSize: '1rem', fontWeight: 700 }}>
+              Bibliotheque de taches
+            </h2>
+            <span
+              className="px-2 py-0.5 rounded-full text-xs"
+              style={{ background: 'rgba(59,130,246,0.1)', color: '#60a5fa', border: '1px solid rgba(59,130,246,0.2)' }}
+            >
+              {taskLibrary.length} tache{taskLibrary.length !== 1 ? 's' : ''}
+            </span>
+          </div>
+          <motion.button
+            whileTap={{ scale: 0.95 }}
+            onClick={() => { if (editingTaskId) { resetTaskForm(); } else { setShowTaskCreateForm(!showTaskCreateForm); } }}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg"
+            style={{
+              background: showTaskCreateForm ? 'rgba(59,130,246,0.15)' : 'rgba(59,130,246,0.08)',
+              border: '1px solid rgba(59,130,246,0.25)',
+              color: '#60a5fa',
+              fontFamily: '"Cinzel", serif',
+              fontSize: '0.75rem',
+            }}
+          >
+            <Plus size={14} />
+            Nouvelle tache
+          </motion.button>
+        </div>
+
+        {/* Task create/edit form */}
+        <AnimatePresence>
+          {showTaskCreateForm && (
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="rounded-xl"
+              style={{
+                background: editingTaskId
+                  ? 'linear-gradient(135deg, rgba(34,165,90,0.06), rgba(255,255,255,0.02))'
+                  : 'linear-gradient(135deg, rgba(59,130,246,0.06), rgba(255,255,255,0.02))',
+                border: `1px solid ${editingTaskId ? 'rgba(34,165,90,0.25)' : 'rgba(59,130,246,0.2)'}`,
+              }}
+            >
+              <div className="p-4 flex flex-col gap-3">
+                <div className="flex items-center justify-between">
+                  <h3 style={{ fontFamily: '"Cinzel", serif', color: editingTaskId ? '#22a55a' : '#60a5fa', fontSize: '0.85rem' }}>
+                    {editingTaskId ? 'Modifier la tache' : 'Creer une tache'}
+                  </h3>
+                  {editingTaskId && (
+                    <span
+                      className="flex items-center gap-1 px-2 py-0.5 rounded-full"
+                      style={{ background: 'rgba(34,165,90,0.1)', color: '#22a55a', fontSize: '0.55rem', border: '1px solid rgba(34,165,90,0.2)' }}
+                    >
+                      <Pencil size={9} /> Edition
+                    </span>
+                  )}
+                </div>
+
+                <input
+                  type="text"
+                  placeholder="Question / Objectif..."
+                  value={taskQuestion}
+                  onChange={(e) => setTaskQuestion(e.target.value)}
+                  className="w-full px-3 py-2 rounded-lg outline-none"
+                  style={{
+                    background: t.inputBg,
+                    border: `1px solid ${t.inputBorder}`,
+                    color: t.inputText,
+                    fontSize: '0.8rem',
+                  }}
+                />
+
+                {/* Input type */}
+                <div className="flex flex-wrap gap-1.5">
+                  {INPUT_TYPE_OPTIONS.map(opt => (
+                    <button
+                      key={opt.value}
+                      onClick={() => setTaskInputType(opt.value)}
+                      className="flex items-center gap-1 px-2 py-1 rounded-md transition-colors"
+                      style={{
+                        background: taskInputType === opt.value ? 'rgba(59,130,246,0.12)' : 'rgba(255,255,255,0.03)',
+                        border: `1px solid ${taskInputType === opt.value ? 'rgba(59,130,246,0.35)' : 'rgba(255,255,255,0.06)'}`,
+                        color: taskInputType === opt.value ? '#60a5fa' : t.textMuted,
+                        fontSize: '0.65rem',
+                      }}
+                    >
+                      {opt.icon} {opt.label}
+                    </button>
+                  ))}
+                </div>
+
+                {/* Choices for multiple-choice */}
+                {taskInputType === 'multiple-choice' && (
+                  <div className="flex flex-col gap-1.5 pl-2">
+                    <span style={{ color: t.textDim, fontSize: '0.65rem' }}>Options :</span>
+                    {taskChoices.map((choice, cIdx) => (
+                      <input
+                        key={cIdx}
+                        type="text"
+                        placeholder={`Option ${cIdx + 1}`}
+                        value={choice}
+                        onChange={(e) => {
+                          const nc = [...taskChoices];
+                          nc[cIdx] = e.target.value;
+                          setTaskChoices(nc);
+                        }}
+                        className="w-full px-2 py-1 rounded-md outline-none"
+                        style={{ background: t.inputBg, border: `1px solid ${t.inputBorder}`, color: t.inputText, fontSize: '0.7rem' }}
+                      />
+                    ))}
+                    <button
+                      onClick={() => setTaskChoices(prev => [...prev, ''])}
+                      className="self-start flex items-center gap-1 px-2 py-0.5 rounded-md"
+                      style={{ color: t.textMuted, fontSize: '0.6rem' }}
+                    >
+                      <Plus size={10} /> Option
+                    </button>
+                  </div>
+                )}
+
+                {/* Player select answer picker */}
+                {taskInputType === 'player-select' && players.length > 0 && (
+                  <div className="flex flex-col gap-1.5 pl-2">
+                    <span style={{ color: t.textDim, fontSize: '0.65rem' }}>Joueur(s) valide(s) :</span>
+                    <div className="flex flex-wrap gap-1.5">
+                      {players.map(player => {
+                        const selected = taskCorrectAnswer.split('|').map(s => s.trim()).filter(Boolean).includes(player.name);
+                        return (
+                          <button
+                            key={player.id}
+                            type="button"
+                            onClick={() => {
+                              const current = taskCorrectAnswer.split('|').map(s => s.trim()).filter(s => s && s !== 'placeholder');
+                              const next = selected ? current.filter(n => n !== player.name) : [...current, player.name];
+                              setTaskCorrectAnswer(next.join('|'));
+                            }}
+                            className="flex items-center gap-1 px-2 py-1 rounded-md transition-all cursor-pointer"
+                            style={{
+                              background: selected ? 'rgba(107,142,90,0.15)' : 'rgba(255,255,255,0.03)',
+                              border: `1px solid ${selected ? 'rgba(107,142,90,0.35)' : 'rgba(255,255,255,0.06)'}`,
+                              color: selected ? '#81c784' : t.textSecondary,
+                              fontSize: '0.6rem',
+                            }}
+                          >
+                            <span style={{ fontSize: '0.75rem' }}>{player.avatar}</span>
+                            {player.name}
+                            {selected && <CheckCircle size={10} style={{ color: '#6b8e5a' }} />}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+
+                {/* Correct answer */}
+                {taskInputType !== 'player-select' && (
+                  <div className="flex items-center gap-2">
+                    <span style={{ color: t.textDim, fontSize: '0.65rem', whiteSpace: 'nowrap' }}>Reponse :</span>
+                    <input
+                      type="text"
+                      placeholder="Reponse correcte..."
+                      value={taskCorrectAnswer}
+                      onChange={(e) => setTaskCorrectAnswer(e.target.value)}
+                      className="flex-1 px-2 py-1 rounded-md outline-none"
+                      style={{ background: 'rgba(107,142,90,0.08)', border: '1px solid rgba(107,142,90,0.2)', color: '#6b8e5a', fontSize: '0.7rem' }}
+                    />
+                  </div>
+                )}
+
+                {/* Referenced player (optional) */}
+                <div className="flex flex-col gap-1.5">
+                  <div className="flex items-center gap-1.5">
+                    <UserCircle size={13} style={{ color: t.gold, opacity: 0.7 }} />
+                    <span style={{ color: t.textDim, fontSize: '0.65rem' }}>Joueur lie (optionnel) :</span>
+                    {taskReferencedPlayerId != null && (() => {
+                      const rp = players.find(p => p.id === taskReferencedPlayerId);
+                      return rp ? (
+                        <span className="flex items-center gap-1 px-1.5 py-0.5 rounded-full" style={{ background: 'rgba(212,168,67,0.12)', border: '1px solid rgba(212,168,67,0.25)', fontSize: '0.55rem', color: t.gold }}>
+                          <span className="w-4 h-4 rounded-full overflow-hidden flex-shrink-0" style={{ border: '1.5px solid rgba(212,168,67,0.4)' }}>
+                            <GMAvatar player={rp} size="text-xs" />
+                          </span>
+                          {rp.name}
+                        </span>
+                      ) : null;
+                    })()}
+                  </div>
+                  {players.length > 0 ? (
+                    <div className="flex flex-wrap gap-1.5">
+                      {taskReferencedPlayerId != null && (
+                        <button
+                          type="button"
+                          onClick={() => setTaskReferencedPlayerId(undefined)}
+                          className="flex items-center gap-1 px-2 py-1 rounded-md transition-all cursor-pointer"
+                          style={{
+                            background: 'rgba(196,30,58,0.08)',
+                            border: '1px solid rgba(196,30,58,0.25)',
+                            color: '#e57373',
+                            fontSize: '0.6rem',
+                          }}
+                        >
+                          <X size={10} /> Retirer
+                        </button>
+                      )}
+                      {players.map(player => {
+                        const selected = taskReferencedPlayerId === player.id;
+                        return (
+                          <button
+                            key={player.id}
+                            type="button"
+                            onClick={() => setTaskReferencedPlayerId(selected ? undefined : player.id)}
+                            className="flex items-center gap-1 px-2 py-1 rounded-md transition-all cursor-pointer"
+                            style={{
+                              background: selected ? 'rgba(212,168,67,0.15)' : 'rgba(255,255,255,0.03)',
+                              border: `1px solid ${selected ? 'rgba(212,168,67,0.35)' : 'rgba(255,255,255,0.06)'}`,
+                              color: selected ? t.gold : t.textSecondary,
+                              fontSize: '0.6rem',
+                            }}
+                          >
+                            <span className="w-5 h-5 rounded-full overflow-hidden flex-shrink-0">
+                              <GMAvatar player={player} size="text-xs" />
+                            </span>
+                            {player.name}
+                            {selected && <UserCircle size={10} style={{ color: t.gold }} />}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <span style={{ color: t.textDim, fontSize: '0.55rem', fontStyle: 'italic' }}>Aucun joueur — ajoutez des joueurs pour lier une tache.</span>
+                  )}
+                </div>
+
+                {/* Image upload */}
+                <div className="flex items-center gap-2">
+                  {taskImageUrl ? (
+                    <div className="relative rounded-lg overflow-hidden" style={{ maxWidth: '160px' }}>
+                      <img src={taskImageUrl} alt="Task" className="w-full h-auto rounded-lg" style={{ maxHeight: '100px', objectFit: 'cover' }} />
+                      <button type="button" onClick={() => setTaskImageUrl('')} className="absolute top-1 right-1 w-5 h-5 rounded-full flex items-center justify-center" style={{ background: 'rgba(0,0,0,0.6)', color: '#fff' }}>
+                        <X size={10} />
+                      </button>
+                    </div>
+                  ) : (
+                    <label
+                      className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-md cursor-pointer transition-colors"
+                      style={{
+                        background: 'rgba(255,255,255,0.03)',
+                        border: '1px solid rgba(255,255,255,0.08)',
+                        color: t.textMuted,
+                        fontSize: '0.65rem',
+                        opacity: uploadingLibraryTask ? 0.5 : 1,
+                      }}
+                    >
+                      {uploadingLibraryTask ? (
+                        <motion.div animate={{ rotate: 360 }} transition={{ duration: 1, repeat: Infinity, ease: 'linear' }}>
+                          <Clock size={12} />
+                        </motion.div>
+                      ) : (
+                        <ImagePlus size={12} />
+                      )}
+                      {uploadingLibraryTask ? 'Upload...' : 'Image'}
+                      <input
+                        type="file"
+                        accept="image/*"
+                        className="hidden"
+                        disabled={uploadingLibraryTask}
+                        onChange={(e) => {
+                          const file = e.target.files?.[0];
+                          if (file) handleLibraryTaskImageUpload(file);
+                          e.target.value = '';
+                        }}
+                      />
+                    </label>
+                  )}
+                </div>
+
+                {/* Buttons */}
+                <div className="flex justify-end gap-2 pt-1">
+                  <button
+                    onClick={resetTaskForm}
+                    className="px-3 py-1.5 rounded-lg"
+                    style={{ color: t.textMuted, fontSize: '0.75rem' }}
+                  >
+                    Annuler
+                  </button>
+                  <motion.button
+                    whileTap={{ scale: 0.95 }}
+                    onClick={editingTaskId ? handleSaveTaskEdit : handleCreateTask}
+                    disabled={!taskQuestion.trim() || (taskInputType !== 'player-select' && !taskCorrectAnswer.trim())}
+                    className="flex items-center gap-1.5 px-4 py-1.5 rounded-lg"
+                    style={{
+                      background: editingTaskId
+                        ? 'linear-gradient(135deg, #0d7c3f, #22a55a)'
+                        : 'linear-gradient(135deg, #2563eb, #3b82f6)',
+                      color: '#fff',
+                      fontFamily: '"Cinzel", serif',
+                      fontSize: '0.75rem',
+                      fontWeight: 700,
+                      opacity: (!taskQuestion.trim() || (taskInputType !== 'player-select' && !taskCorrectAnswer.trim())) ? 0.4 : 1,
+                    }}
+                  >
+                    {editingTaskId ? <Save size={13} /> : <Plus size={13} />}
+                    {editingTaskId ? 'Sauvegarder' : 'Creer'}
+                  </motion.button>
+                </div>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* Assigned tasks */}
+        {assignedTasks.length > 0 && (
+          <div className="flex flex-col gap-2">
+            <div className="flex items-center gap-2">
+              <Link2 size={13} style={{ color: '#6b8e5a' }} />
+              <span style={{ fontFamily: '"Cinzel", serif', color: '#6b8e5a', fontSize: '0.8rem', fontWeight: 600 }}>
+                Taches assignees
+              </span>
+              <span className="px-1.5 py-0.5 rounded-full" style={{ background: 'rgba(107,142,90,0.1)', color: '#6b8e5a', fontSize: '0.55rem', border: '1px solid rgba(107,142,90,0.2)' }}>
+                {assignedTasks.length}
+              </span>
+            </div>
+            <div className="flex flex-col gap-1.5">
+              {assignedTasks.map(task => {
+                const typeLabel = INPUT_TYPE_OPTIONS.find(o => o.value === task.inputType)?.label || task.inputType;
+                const usedInQuests = quests.filter(q => q.tasks.some(t => t.templateId === task.id));
+                const refPlayer = task.referencedPlayerId != null ? players.find(p => p.id === task.referencedPlayerId) : undefined;
+                return (
+                  <div
+                    key={task.id}
+                    className="rounded-lg p-2.5 flex items-start gap-2"
+                    style={{ background: 'rgba(107,142,90,0.04)', border: '1px solid rgba(107,142,90,0.12)' }}
+                  >
+                    {refPlayer && (
+                      <span className="w-6 h-6 rounded-full overflow-hidden flex-shrink-0 mt-0.5" style={{ border: '2px solid rgba(212,168,67,0.35)' }} title={refPlayer.name}>
+                        <GMAvatar player={refPlayer} size="text-xs" />
+                      </span>
+                    )}
+                    <div className="flex-1 min-w-0">
+                      <p style={{ color: t.text, fontSize: '0.75rem' }}>{task.question}</p>
+                      <div className="flex items-center gap-2 mt-1 flex-wrap">
+                        <span className="px-1.5 py-0.5 rounded" style={{ background: 'rgba(59,130,246,0.08)', color: '#60a5fa', fontSize: '0.5rem' }}>
+                          {typeLabel}
+                        </span>
+                        <span style={{ color: '#6b8e5a', fontSize: '0.5rem' }}>
+                          Reponse: {task.correctAnswer}
+                        </span>
+                        <span className="flex items-center gap-1 px-1.5 py-0.5 rounded" style={{ background: 'rgba(107,142,90,0.08)', fontSize: '0.5rem', color: '#81c784' }}>
+                          <Link2 size={8} /> {usedInQuests.length} quete{usedInQuests.length > 1 ? 's' : ''}
+                        </span>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-1 shrink-0">
+                      <button
+                        onClick={() => handleStartTaskEdit(task)}
+                        className="p-1 rounded-md transition-colors"
+                        style={{ color: t.gold, background: 'rgba(212,168,67,0.08)' }}
+                        title="Modifier"
+                      >
+                        <Pencil size={12} />
+                      </button>
+                      <button
+                        onClick={() => handleDeleteTask(task.id)}
+                        className="p-1 rounded-md transition-colors"
+                        style={{ color: '#c41e3a', background: 'rgba(196,30,58,0.08)' }}
+                        title="Supprimer"
+                      >
+                        <Trash2 size={12} />
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* Unassigned tasks */}
+        {unassignedTasks.length > 0 && (
+          <div className="flex flex-col gap-2">
+            <div className="flex items-center gap-2">
+              <Unlink size={13} style={{ color: t.textMuted }} />
+              <span style={{ fontFamily: '"Cinzel", serif', color: t.textMuted, fontSize: '0.8rem', fontWeight: 600 }}>
+                Taches non assignees
+              </span>
+              <span className="px-1.5 py-0.5 rounded-full" style={{ background: 'rgba(255,255,255,0.05)', color: t.textDim, fontSize: '0.55rem', border: '1px solid rgba(255,255,255,0.08)' }}>
+                {unassignedTasks.length}
+              </span>
+            </div>
+            <div className="flex flex-col gap-1.5">
+              {unassignedTasks.map(task => {
+                const typeLabel = INPUT_TYPE_OPTIONS.find(o => o.value === task.inputType)?.label || task.inputType;
+                const refPlayer = task.referencedPlayerId != null ? players.find(p => p.id === task.referencedPlayerId) : undefined;
+                return (
+                  <div
+                    key={task.id}
+                    className="rounded-lg p-2.5 flex items-start gap-2"
+                    style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.06)' }}
+                  >
+                    {refPlayer && (
+                      <span className="w-6 h-6 rounded-full overflow-hidden flex-shrink-0 mt-0.5" style={{ border: '2px solid rgba(212,168,67,0.35)' }} title={refPlayer.name}>
+                        <GMAvatar player={refPlayer} size="text-xs" />
+                      </span>
+                    )}
+                    <div className="flex-1 min-w-0">
+                      <p style={{ color: t.text, fontSize: '0.75rem' }}>{task.question}</p>
+                      <div className="flex items-center gap-2 mt-1 flex-wrap">
+                        <span className="px-1.5 py-0.5 rounded" style={{ background: 'rgba(59,130,246,0.08)', color: '#60a5fa', fontSize: '0.5rem' }}>
+                          {typeLabel}
+                        </span>
+                        <span style={{ color: '#6b8e5a', fontSize: '0.5rem' }}>
+                          Reponse: {task.correctAnswer}
+                        </span>
+                        {task.imageUrl && (
+                          <span className="flex items-center gap-1 px-1.5 py-0.5 rounded" style={{ background: 'rgba(59,130,246,0.06)', fontSize: '0.5rem', color: '#93c5fd' }}>
+                            <ImagePlus size={8} /> Image
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-1 shrink-0">
+                      <button
+                        onClick={() => handleStartTaskEdit(task)}
+                        className="p-1 rounded-md transition-colors"
+                        style={{ color: t.gold, background: 'rgba(212,168,67,0.08)' }}
+                        title="Modifier"
+                      >
+                        <Pencil size={12} />
+                      </button>
+                      <button
+                        onClick={() => handleDeleteTask(task.id)}
+                        className="p-1 rounded-md transition-colors"
+                        style={{ color: '#c41e3a', background: 'rgba(196,30,58,0.08)' }}
+                        title="Supprimer"
+                      >
+                        <Trash2 size={12} />
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* Empty state */}
+        {taskLibrary.length === 0 && !showTaskCreateForm && (
+          <div
+            className="rounded-xl p-6 flex flex-col items-center gap-2"
+            style={{ background: 'rgba(255,255,255,0.02)', border: '1px dashed rgba(255,255,255,0.08)' }}
+          >
+            <Library size={28} style={{ color: t.textDim }} />
+            <p style={{ color: t.textMuted, fontSize: '0.75rem', textAlign: 'center' }}>
+              Aucune tache dans la bibliotheque.
+            </p>
+            <p style={{ color: t.textDim, fontSize: '0.65rem', textAlign: 'center' }}>
+              Creez des taches reutilisables, puis selectionnez-les lors de la creation de quetes.
+            </p>
+          </div>
+        )}
       </div>
 
       {/* ── CSV Import Modal ── */}
@@ -2614,6 +3276,79 @@ export function GMQuestsPanel({ state, updateState, t, isMobile, onNavigateToPla
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* ── Mobile sticky distribution footer ── */}
+      {isMobile && quests.length > 0 && (
+        <div
+          className="fixed left-0 right-0 flex flex-col gap-2 px-3 pt-2.5 pb-2"
+          style={{
+            bottom: 'calc(48px + env(safe-area-inset-bottom, 0px))',
+            zIndex: 50,
+            background: t.pageBgSolid,
+            borderTop: `1px solid rgba(59,130,246,0.15)`,
+            boxShadow: '0 -4px 16px rgba(0,0,0,0.2)',
+          }}
+        >
+          {/* Distribution result toast */}
+          <AnimatePresence>
+            {lastDistributionResult && (
+              <motion.div
+                initial={{ opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: 8 }}
+                className="rounded-lg px-3 py-1.5 flex items-center gap-2"
+                style={{ background: 'rgba(107,142,90,0.12)', border: '1px solid rgba(107,142,90,0.25)' }}
+              >
+                <CheckCircle size={12} style={{ color: '#6b8e5a' }} />
+                <span style={{ color: '#6b8e5a', fontSize: '0.6rem', fontWeight: 600 }}>
+                  {lastDistributionResult}
+                </span>
+              </motion.div>
+            )}
+          </AnimatePresence>
+
+          {/* Button row: indicator + distribute button */}
+          <div className="flex items-center gap-2">
+            {/* Compact indicator */}
+            {alivePlayerIds.length > 0 && minQuestsPerPlayer > 0 && (
+              <div
+                className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg shrink-0"
+                style={{ background: 'rgba(59,130,246,0.06)', border: '1px solid rgba(59,130,246,0.1)' }}
+              >
+                <Users size={12} style={{ color: '#60a5fa' }} />
+                <span style={{ color: '#60a5fa', fontSize: '0.6rem', fontWeight: 600 }}>
+                  {totalDistributed}/{quests.length}
+                </span>
+              </div>
+            )}
+
+            {/* Distribute button */}
+            <motion.button
+              whileTap={{ scale: 0.97 }}
+              onClick={handleDistributeRound}
+              disabled={!canDistribute}
+              className="flex-1 flex items-center justify-center gap-2 px-3 py-2.5 rounded-lg cursor-pointer"
+              style={{
+                background: canDistribute ? 'linear-gradient(135deg, #2563eb, #3b82f6)' : 'rgba(59,130,246,0.08)',
+                color: canDistribute ? '#fff' : 'rgba(59,130,246,0.3)',
+                fontFamily: '"Cinzel", serif',
+                fontSize: '0.7rem',
+                fontWeight: 700,
+                opacity: canDistribute ? 1 : 0.5,
+              }}
+            >
+              <Shuffle size={14} />
+              Distribuer
+            </motion.button>
+          </div>
+
+          {!canDistribute && quests.length > 0 && (
+            <span style={{ color: t.textDim, fontSize: '0.5rem', textAlign: 'center', fontStyle: 'italic' }}>
+              Tous les joueurs ont deja toutes les quetes.
+            </span>
+          )}
+        </div>
+      )}
     </div>
   );
 }

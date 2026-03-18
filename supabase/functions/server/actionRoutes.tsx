@@ -4,23 +4,22 @@
  */
 import { Hono } from "npm:hono";
 import * as kv from "./kv_store.tsx";
-import { resolveGameKey, gameTimerLockKey } from "./serverHelpers.tsx";
+import { resolveGameKey, gameTimerLockKey, capEvents } from "./serverHelpers.tsx";
 import { sendPushToPlayers } from "./push.tsx";
 
 export const actionRoutes = new Hono();
 
-// ── Per-game action lock with optimistic versioning ──
-const LOCK_TTL = 4000;
-const MAX_LOCK_RETRIES = 8;
-const RETRY_BASE = 25;
-
-function actionLockKey(gameKey: string) { return `action-lock:${gameKey}`; }
+// ── Pure optimistic concurrency (no KV-based lock — avoids non-atomic lock race) ──
+const MAX_RETRIES = 12;
+const RETRY_BASE = 20;
 
 /**
- * Wraps a read-modify-write operation with a KV-based per-game lock
- * and optimistic version checking. Each game state carries a `_kvVersion`
- * counter that is incremented on every write. If the version changes
- * between read and write (another request snuck in), we retry.
+ * Wraps a read-modify-write operation with optimistic version checking.
+ * Each game state carries a `_kvVersion` counter incremented on every write.
+ * If the version changes between read and write, we retry with fresh state.
+ *
+ * This avoids the non-atomic KV lock that could let two requests through
+ * simultaneously under high concurrency (40+ players).
  *
  * Returns null if game state not found, otherwise { state, result }.
  */
@@ -28,55 +27,45 @@ async function withGameLock(
   gameKey: string,
   mutate: (state: any) => any,
 ): Promise<{ state: any; result: any } | null> {
-  const lk = actionLockKey(gameKey);
-  for (let attempt = 0; attempt < MAX_LOCK_RETRIES; attempt++) {
-    const lock: any = await kv.get(lk);
-    if (lock && typeof lock === 'object' && lock.ts && Date.now() - lock.ts < LOCK_TTL) {
-      // Jitter: 25-105ms base + 20ms per attempt
-      await new Promise(r => setTimeout(r, RETRY_BASE + Math.random() * 80 + attempt * 20));
+  for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
+    const state = await kv.get(gameKey);
+    if (!state) return null;
+
+    // Read the current version
+    const readVersion = state._kvVersion || 0;
+
+    const result = mutate(state);
+
+    // Optimistic check: re-read version to detect concurrent writes
+    const freshState = await kv.get(gameKey);
+    const freshVersion = freshState?._kvVersion || 0;
+    if (freshVersion !== readVersion) {
+      // Concurrent write detected — jitter + retry with fresh state
+      const jitter = RETRY_BASE + Math.random() * 60 + attempt * 15;
+      console.log(`withGameLock: optimistic conflict for ${gameKey} (v${readVersion} != v${freshVersion}), retry #${attempt + 1} in ${Math.round(jitter)}ms`);
+      await new Promise(r => setTimeout(r, jitter));
       continue;
     }
-    // Acquire lock with unique owner for safer release
-    const lockOwner = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-    await kv.set(lk, { ts: Date.now(), owner: lockOwner });
-    try {
-      const state = await kv.get(gameKey);
-      if (!state) return null;
 
-      // Read the current version
-      const readVersion = state._kvVersion || 0;
-
-      const result = mutate(state);
-
-      // Optimistic check: re-read version to detect concurrent writes
-      const freshState = await kv.get(gameKey);
-      const freshVersion = freshState?._kvVersion || 0;
-      if (freshVersion !== readVersion) {
-        // Concurrent write detected — retry with fresh state
-        console.log(`withGameLock: optimistic conflict for ${gameKey} (v${readVersion} != v${freshVersion}), retrying...`);
-        continue;
-      }
-
-      // Increment version and write
-      state._kvVersion = readVersion + 1;
-      await kv.set(gameKey, state);
-      return { state, result };
-    } finally {
-      // Only release if we still own the lock
-      try {
-        const currentLock: any = await kv.get(lk);
-        if (currentLock?.owner === lockOwner) {
-          await kv.del(lk);
-        }
-      } catch { /* best-effort release */ }
-    }
+    // Increment version, cap events, and write
+    state._kvVersion = readVersion + 1;
+    capEvents(state);
+    await kv.set(gameKey, state);
+    return { state, result };
   }
-  // Fallback: proceed without lock (last resort)
-  console.log(`withGameLock: max retries exceeded for ${gameKey}, proceeding unlocked`);
+  // Max retries exceeded — last-chance write
+  console.log(`withGameLock: max retries (${MAX_RETRIES}) exceeded for ${gameKey}, attempting final write`);
   const state = await kv.get(gameKey);
   if (!state) return null;
+  const readVersion = state._kvVersion || 0;
   const result = mutate(state);
-  state._kvVersion = (state._kvVersion || 0) + 1;
+  const freshCheck = await kv.get(gameKey);
+  if ((freshCheck?._kvVersion || 0) !== readVersion) {
+    console.log(`withGameLock: final optimistic write failed for ${gameKey} — dropping action`);
+    throw new Error('Lock contention: action dropped after max retries');
+  }
+  state._kvVersion = readVersion + 1;
+  capEvents(state);
   await kv.set(gameKey, state);
   return { state, result };
 }
@@ -196,16 +185,27 @@ actionRoutes.post("/make-server-2c00868b/game/action/withdraw-candidacy", async 
 actionRoutes.post("/make-server-2c00868b/game/action/werewolf-vote", async (c) => {
   try {
     const body = await c.req.json();
-    const { wolfId, targetId } = body;
+    const { wolfId, targetId, message } = body;
     const key = await resolveGameKey(body);
 
     const res = await withGameLock(key, (state) => {
+      if (!state.werewolfVoteMessages) state.werewolfVoteMessages = {};
       if (state.werewolfVotes && state.werewolfVotes[wolfId] === targetId) {
         const votes = { ...state.werewolfVotes };
         delete votes[wolfId];
         state.werewolfVotes = votes;
+        const msgs = { ...state.werewolfVoteMessages };
+        delete msgs[wolfId];
+        state.werewolfVoteMessages = msgs;
       } else {
         state.werewolfVotes = { ...state.werewolfVotes, [wolfId]: targetId };
+        if (message && typeof message === 'string' && message.trim()) {
+          state.werewolfVoteMessages[wolfId] = message.trim().slice(0, 140);
+        } else {
+          const msgs = { ...state.werewolfVoteMessages };
+          delete msgs[wolfId];
+          state.werewolfVoteMessages = msgs;
+        }
       }
     });
     if (!res) return c.json({ error: "Aucune partie en cours" }, 404);
@@ -292,6 +292,98 @@ actionRoutes.post("/make-server-2c00868b/game/action/hunter-pre-target", async (
   }
 });
 
+// ── Hunter confirm shot ──
+actionRoutes.post("/make-server-2c00868b/game/action/hunter-shot", async (c) => {
+  try {
+    const body = await c.req.json();
+    const { hunterId, targetId } = body;
+    const key = await resolveGameKey(body);
+
+    const res = await withGameLock(key, (state) => {
+      if (!state.hunterPending) return;
+      if (state.hunterShooterId !== hunterId) return;
+
+      // Check target is alive and present
+      const vpSet = Array.isArray(state.villagePresentIds) ? new Set(state.villagePresentIds) : null;
+      const target = state.players.find((p: any) => p.id === targetId);
+      if (!target || !target.alive) return;
+      if (vpSet && !vpSet.has(targetId)) return;
+
+      const hunter = state.players.find((p: any) => p.id === hunterId);
+
+      // Kill the target
+      state.players = state.players.map((p: any) =>
+        p.id === targetId ? { ...p, alive: false } : p
+      );
+
+      // Event
+      let maxEventId = 0;
+      if (Array.isArray(state.events)) {
+        for (const e of state.events) { if (e.id > maxEventId) maxEventId = e.id; }
+      }
+      const nextEid = () => ++maxEventId;
+      if (!state.events) state.events = [];
+      state.events.push({
+        id: nextEid(), turn: state.turn, phase: state.phase,
+        message: `🏹 ${hunter?.name || 'Le Chasseur'} tire sur ${target?.name || 'un joueur'} dans son dernier souffle !`,
+        timestamp: new Date().toISOString(),
+      });
+
+      // Lover cascade
+      let chainHunterPending = false;
+      let chainHunterShooterId: number | null = null;
+      if (state.loverPairs) {
+        for (const [l1, l2] of state.loverPairs) {
+          let loverId: number | null = null;
+          if (targetId === l1) loverId = l2;
+          if (targetId === l2) loverId = l1;
+          if (loverId !== null) {
+            const lover = state.players.find((p: any) => p.id === loverId);
+            if (lover && lover.alive) {
+              state.players = state.players.map((p: any) =>
+                p.id === loverId ? { ...p, alive: false } : p
+              );
+              state.events.push({
+                id: nextEid(), turn: state.turn, phase: state.phase,
+                message: `💔 ${lover.name} meurt de chagrin — son amoureux a ete elimine.`,
+                timestamp: new Date().toISOString(),
+              });
+              if (lover.role === 'chasseur') { chainHunterPending = true; chainHunterShooterId = loverId; }
+            }
+          }
+        }
+      }
+
+      // Mayor succession
+      if (state.maireId !== null && state.maireId !== undefined) {
+        for (const p of state.players) {
+          if (!p.alive && p.id === state.maireId) {
+            state.events.push({
+              id: nextEid(), turn: state.turn, phase: state.phase,
+              message: `👑 Le Maire ${p.name || 'inconnu'} est mort. Un successeur doit etre designe.`,
+              timestamp: new Date().toISOString(),
+            });
+            state.maireSuccessionPending = true;
+            state.maireSuccessionFromId = state.maireId;
+            state.maireSuccessionPhase = state.phase;
+            state.maireId = null;
+            break;
+          }
+        }
+      }
+
+      // Resolve hunter pending — chain if another chasseur died in cascade
+      state.hunterPending = chainHunterPending;
+      state.hunterShooterId = chainHunterShooterId;
+    });
+    if (!res) return c.json({ error: "Aucune partie en cours" }, 404);
+    return c.json({ success: true });
+  } catch (err) {
+    console.log("Hunter shot action error:", err);
+    return c.json({ error: `Erreur tir chasseur: ${err}` }, 500);
+  }
+});
+
 // ── Fox target ──
 actionRoutes.post("/make-server-2c00868b/game/action/fox-target", async (c) => {
   try {
@@ -345,7 +437,7 @@ actionRoutes.post("/make-server-2c00868b/game/action/concierge-target", async (c
 actionRoutes.post("/make-server-2c00868b/game/action/corbeau-target", async (c) => {
   try {
     const body = await c.req.json();
-    const { actorId, playerId, message } = body;
+    const { actorId, playerId, message, imageUrl } = body;
     const key = await resolveGameKey(body);
 
     const res = await withGameLock(key, (state) => {
@@ -358,10 +450,23 @@ actionRoutes.post("/make-server-2c00868b/game/action/corbeau-target", async (c) 
       state.corbeauTargets[actorId] = playerId;
       if (message) state.corbeauMessages[actorId] = message;
 
-      const hintId = Date.now() + Math.floor(Math.random() * 10000);
+      // Dedup: skip hint creation if this player already has a hint with the same text
+      const hintText = message || "D'une source mysterieuse...";
+      const corbeauOwnedHintIds = new Set(
+        state.playerHints.filter((ph: any) => ph.playerId === playerId).map((ph: any) => ph.hintId)
+      );
+      const corbeauAlreadyHas = state.hints.some(
+        (h: any) => corbeauOwnedHintIds.has(h.id) && h.text && (h.text as string).trim().toLowerCase() === hintText.trim().toLowerCase()
+      );
+      if (corbeauAlreadyHas) {
+        return { hintId: null };
+      }
+
+      const hintId = Date.now() + Math.floor(Math.random() * 100000);
       state.hints.push({
         id: hintId,
         text: message || "D'une source mysterieuse...",
+        ...(imageUrl ? { imageUrl } : {}),
         createdAt: new Date().toISOString(),
       });
       state.playerHints.push({
@@ -611,6 +716,9 @@ actionRoutes.post("/make-server-2c00868b/game/action/timer-transition", async (c
     if (state.winner) {
       return c.json({ skipped: true, reason: "game over" });
     }
+    if (state.hunterPending) {
+      return c.json({ skipped: true, reason: "hunter pending" });
+    }
 
     // ── Distributed lock ──
     const gameId = body.gameId || '';
@@ -623,6 +731,9 @@ actionRoutes.post("/make-server-2c00868b/game/action/timer-transition", async (c
       return c.json({ skipped: true, reason: "locked", gameState: freshState });
     }
     await kv.set(lockKey, { endAt: state.phaseTimerEndAt, lockedAt: now });
+
+    // Capture version at read time for optimistic concurrency check before write
+    const timerReadVersion = state._kvVersion || 0;
 
     // Helper: next event ID
     let maxEventId = 0;
@@ -659,7 +770,7 @@ actionRoutes.post("/make-server-2c00868b/game/action/timer-transition", async (c
       addEvt('La nuit se termine. Les actions sont resolues.', 'night');
       for (const resolvedWolfTarget of resolvedWolfTargets) {
         if (guardProtectedIds.has(resolvedWolfTarget)) {
-          if (!guardBlocked) { guardBlocked = true; addEvt('🛡️ Quelque chose a interfere pendant la nuit.', 'night'); }
+          if (!guardBlocked) { guardBlocked = true; addEvt('Quelque chose a interfere pendant la nuit.', 'night'); }
         } else {
           state.players = state.players.map((p: any) => p.id === resolvedWolfTarget ? { ...p, alive: false } : p);
           const target = state.players.find((p: any) => p.id === resolvedWolfTarget);
@@ -687,7 +798,7 @@ actionRoutes.post("/make-server-2c00868b/game/action/timer-transition", async (c
       const witchKillTargetIds = new Set<number>(Object.values(state.witchKillTargets || {}) as number[]);
       for (const wkId of witchKillTargetIds) {
         if (guardProtectedIds.has(wkId)) {
-          if (!guardBlocked) { addEvt('🛡️ Quelque chose a interfere pendant la nuit.', 'night'); guardBlocked = true; }
+          if (!guardBlocked) { addEvt('Quelque chose a interfere pendant la nuit.', 'night'); guardBlocked = true; }
         } else {
           state.players = state.players.map((p: any) => p.id === wkId ? { ...p, alive: false } : p);
           const target = state.players.find((p: any) => p.id === wkId);
@@ -829,6 +940,7 @@ actionRoutes.post("/make-server-2c00868b/game/action/timer-transition", async (c
           state.nightStep = 'active';
           state.dayStep = 'discussion';
           state.werewolfVotes = {};
+          state.werewolfVoteMessages = {};
           state.werewolfTarget = null;
           state.witchHealedThisNight = {};
           state.witchKillTargets = {};
@@ -855,16 +967,14 @@ actionRoutes.post("/make-server-2c00868b/game/action/timer-transition", async (c
           const aliveIds = alivePlayers.map((p: any) => p.id);
           const aliveIdSet = new Set(aliveIds);
           const abstainerIds = new Set(alivePlayers.filter((p: any) => !(p.id in (state.votes || {}))).map((p: any) => p.id));
+          // Abstentions are treated as "vote blanc" — they don't count toward any candidate.
+          // No random vote assignment (unfair with 40 players and short timers).
           const updatedVotes: Record<number, number> = { ...(state.votes || {}) };
-          for (const p of alivePlayers) {
-            if (!(p.id in updatedVotes)) {
-              const candidates = aliveIds.filter((id: number) => id !== p.id);
-              if (candidates.length === 0) continue;
-              const randomTarget = candidates[Math.floor(Math.random() * candidates.length)];
-              updatedVotes[p.id] = randomTarget;
-              const targetPlayer = state.players.find((pl: any) => pl.id === randomTarget);
-              addEvt(`[Abstention] ${p.name} n'a pas vote → ${targetPlayer?.name || 'Joueur ' + randomTarget} (vote aleatoire)`, 'day');
-            }
+          if (abstainerIds.size > 0) {
+            const abstainerNames = alivePlayers
+              .filter((p: any) => abstainerIds.has(p.id))
+              .map((p: any) => p.name);
+            addEvt(`[Abstention] ${abstainerNames.length} joueur(s) n'ont pas voté : ${abstainerNames.join(', ')}`, 'day');
           }
 
           // ── Villager inactivity tracking ──
@@ -957,7 +1067,10 @@ actionRoutes.post("/make-server-2c00868b/game/action/timer-transition", async (c
               addEvt('Le vote est clos (temps ecoule). Aucune elimination - egalite des votes.', 'day');
             }
           } else {
-            addEvt('Le vote est clos (temps ecoule). Aucune elimination - egalite des votes.', 'day');
+            const reason = Object.keys(voteCounts).length === 0
+              ? 'Aucun vote exprime — pas d\'elimination.'
+              : 'Aucune elimination — egalite des votes.';
+            addEvt(`Le vote est clos (temps ecoule). ${reason}`, 'day');
           }
 
           // Advance to next night
@@ -968,6 +1081,7 @@ actionRoutes.post("/make-server-2c00868b/game/action/timer-transition", async (c
           state.dayStep = 'discussion';
           state.votes = {};
           state.werewolfVotes = {};
+          state.werewolfVoteMessages = {};
           state.werewolfTarget = null;
           state.witchHealedThisNight = {};
           state.witchKillTargets = {};
@@ -1002,6 +1116,124 @@ actionRoutes.post("/make-server-2c00868b/game/action/timer-transition", async (c
       }
     }
 
+    // ── Optimistic concurrency with retry: merge player-driven fields and write ──
+    // A player action may have written to KV between our read and this write.
+    // Re-read, merge append-only / player-driven fields, and retry if version changes during merge.
+    const TIMER_WRITE_RETRIES = 5;
+    for (let writeAttempt = 0; writeAttempt < TIMER_WRITE_RETRIES; writeAttempt++) {
+      const freshBeforeWrite = await kv.get(key);
+      const freshVersion = freshBeforeWrite?._kvVersion || 0;
+      const baseVersion = writeAttempt === 0 ? timerReadVersion : freshVersion;
+
+      if (freshVersion !== timerReadVersion && freshBeforeWrite) {
+        console.log(`Timer transition: concurrent write detected (v${timerReadVersion} → v${freshVersion}), merging player-driven fields (attempt ${writeAttempt + 1})`);
+        // Merge votes (only relevant if still in same phase — but safe to union)
+        if (freshBeforeWrite.votes && Object.keys(freshBeforeWrite.votes).length > 0 && Object.keys(state.votes || {}).length === 0) {
+          // Timer cleared votes (phase transition) — this is intentional, don't restore old votes
+        } else if (freshBeforeWrite.votes) {
+          state.votes = { ...(state.votes || {}), ...freshBeforeWrite.votes };
+        }
+        // Merge werewolf votes (same logic)
+        if (freshBeforeWrite.werewolfVotes && Object.keys(freshBeforeWrite.werewolfVotes).length > 0 && Object.keys(state.werewolfVotes || {}).length === 0) {
+          // Timer cleared werewolfVotes — intentional
+        } else if (freshBeforeWrite.werewolfVotes) {
+          state.werewolfVotes = { ...(state.werewolfVotes || {}), ...freshBeforeWrite.werewolfVotes };
+          state.werewolfVoteMessages = { ...(state.werewolfVoteMessages || {}), ...(freshBeforeWrite.werewolfVoteMessages || {}) };
+        }
+        // Union append-only fields
+        const freshRevealed: number[] = Array.isArray(freshBeforeWrite.roleRevealedBy) ? freshBeforeWrite.roleRevealedBy : [];
+        const stateRevealed: number[] = Array.isArray(state.roleRevealedBy) ? state.roleRevealedBy : [];
+        state.roleRevealedBy = [...new Set([...stateRevealed, ...freshRevealed])];
+
+        const freshPresent: number[] = Array.isArray(freshBeforeWrite.villagePresentIds) ? freshBeforeWrite.villagePresentIds : [];
+        const statePresent: number[] = Array.isArray(state.villagePresentIds) ? state.villagePresentIds : [];
+        state.villagePresentIds = [...new Set([...statePresent, ...freshPresent])];
+
+        const freshJoinIds: number[] = Array.isArray(freshBeforeWrite.midGameJoinIds) ? freshBeforeWrite.midGameJoinIds : [];
+        const stateJoinIds: number[] = Array.isArray(state.midGameJoinIds) ? state.midGameJoinIds : [];
+        state.midGameJoinIds = [...new Set([...stateJoinIds, ...freshJoinIds])];
+
+        // Merge seer/guard/hunter/fox/concierge targets (player choices)
+        if (freshBeforeWrite.seerTargets) state.seerTargets = { ...(state.seerTargets || {}), ...freshBeforeWrite.seerTargets };
+        if (freshBeforeWrite.seerResults) state.seerResults = { ...(state.seerResults || {}), ...freshBeforeWrite.seerResults };
+        if (freshBeforeWrite.guardTargets) state.guardTargets = { ...(state.guardTargets || {}), ...freshBeforeWrite.guardTargets };
+        if (freshBeforeWrite.hunterPreTargets) state.hunterPreTargets = { ...(state.hunterPreTargets || {}), ...freshBeforeWrite.hunterPreTargets };
+        if (freshBeforeWrite.foxTargets) state.foxTargets = { ...(state.foxTargets || {}), ...freshBeforeWrite.foxTargets };
+        if (freshBeforeWrite.foxResults) state.foxResults = { ...(state.foxResults || {}), ...freshBeforeWrite.foxResults };
+        if (freshBeforeWrite.conciergeTargets) state.conciergeTargets = { ...(state.conciergeTargets || {}), ...freshBeforeWrite.conciergeTargets };
+        if (freshBeforeWrite.earlyVotes) state.earlyVotes = { ...(state.earlyVotes || {}), ...freshBeforeWrite.earlyVotes };
+        if (freshBeforeWrite.lastWillUsed) state.lastWillUsed = { ...(state.lastWillUsed || {}), ...freshBeforeWrite.lastWillUsed };
+
+        // Merge hints & playerHints by id (union, never lose data)
+        const freshHints: any[] = Array.isArray(freshBeforeWrite.hints) ? freshBeforeWrite.hints : [];
+        const stateHints: any[] = Array.isArray(state.hints) ? state.hints : [];
+        if (freshHints.length > 0) {
+          const hintMap = new Map<number, any>();
+          for (const h of stateHints) hintMap.set(h.id, h);
+          for (const h of freshHints) { if (!hintMap.has(h.id)) hintMap.set(h.id, h); }
+          state.hints = Array.from(hintMap.values());
+        }
+        const freshPH: any[] = Array.isArray(freshBeforeWrite.playerHints) ? freshBeforeWrite.playerHints : [];
+        const statePH: any[] = Array.isArray(state.playerHints) ? state.playerHints : [];
+        if (freshPH.length > 0) {
+          const phKey = (ph: any) => `${ph.hintId}:${ph.playerId}`;
+          const phMap = new Map<string, any>();
+          for (const ph of statePH) phMap.set(phKey(ph), ph);
+          for (const ph of freshPH) {
+            const k = phKey(ph);
+            if (!phMap.has(k)) phMap.set(k, ph);
+            else if (ph.revealed && !phMap.get(k).revealed) phMap.set(k, { ...phMap.get(k), ...ph });
+          }
+          state.playerHints = Array.from(phMap.values());
+        }
+        // Merge dynamicHints
+        const freshDH: any[] = Array.isArray(freshBeforeWrite.dynamicHints) ? freshBeforeWrite.dynamicHints : [];
+        const stateDH: any[] = Array.isArray(state.dynamicHints) ? state.dynamicHints : [];
+        if (freshDH.length > 0) {
+          const dhMap = new Map<number, any>();
+          for (const dh of stateDH) dhMap.set(dh.id, dh);
+          for (const dh of freshDH) {
+            const existing_dh = dhMap.get(dh.id);
+            if (!existing_dh) {
+              dhMap.set(dh.id, dh);
+            } else {
+              const merged = { ...existing_dh, ...dh };
+              const existIds: number[] = existing_dh.grantedToPlayerIds || (existing_dh.revealed && existing_dh.grantedToPlayerId != null ? [existing_dh.grantedToPlayerId] : []);
+              const freshIds: number[] = dh.grantedToPlayerIds || (dh.revealed && dh.grantedToPlayerId != null ? [dh.grantedToPlayerId] : []);
+              merged.grantedToPlayerIds = [...new Set([...existIds, ...freshIds])];
+              if (dh.revealed || existing_dh.revealed) merged.revealed = true;
+              dhMap.set(dh.id, merged);
+            }
+          }
+          state.dynamicHints = Array.from(dhMap.values());
+        }
+        // Merge maire candidacy
+        if (freshBeforeWrite.maireCandidates) {
+          state.maireCandidates = [...new Set([...(state.maireCandidates || []), ...freshBeforeWrite.maireCandidates])];
+        }
+        if (freshBeforeWrite.maireCampaignMessages) {
+          state.maireCampaignMessages = { ...(state.maireCampaignMessages || {}), ...freshBeforeWrite.maireCampaignMessages };
+        }
+      }
+
+      // Version check before write: if another write happened during our merge, retry
+      const checkBeforeWrite = await kv.get(key);
+      const checkVersion = checkBeforeWrite?._kvVersion || 0;
+      if (checkVersion !== freshVersion) {
+        console.log(`Timer transition: version changed during merge (v${freshVersion} → v${checkVersion}), retrying write...`);
+        await new Promise(r => setTimeout(r, 30 + Math.random() * 50));
+        continue; // Retry the merge+write loop
+      }
+
+      state._kvVersion = Math.max(timerReadVersion, freshVersion) + 1;
+      capEvents(state);
+      await kv.set(key, state);
+      return c.json({ success: true, gameState: state });
+    }
+    // If all retries failed, write anyway (best effort)
+    console.log(`Timer transition: all write retries exhausted, force-writing state`);
+    state._kvVersion = (state._kvVersion || 0) + 1;
+    capEvents(state);
     await kv.set(key, state);
     return c.json({ success: true, gameState: state });
   } catch (err) {
@@ -1044,12 +1276,22 @@ function resolveHintTextServer(text: string, roleId: string): string {
   const entry = ROLE_DISPLAY_NAMES[roleId];
   const name = entry ? entry.name : roleId;
   const article = entry ? entry.article : 'le';
-  return text.replace(/\{role\}/gi, (_match: string, offset: number) => {
+  // {role} → "le Loup-Garou", "la Voyante"
+  let result = text.replace(/\{role\}/gi, (_match: string, offset: number) => {
     const cap = offset === 0
       ? article.charAt(0).toUpperCase() + article.slice(1)
       : article;
     return `${cap} ${name}`;
   });
+  // {durole} → "du Loup-Garou" (le→du), "de la Voyante" (la→de la)
+  result = result.replace(/\{durole\}/gi, (_match: string, offset: number) => {
+    const capitalize = offset === 0;
+    if (article === 'le') {
+      return capitalize ? `Du ${name}` : `du ${name}`;
+    }
+    return capitalize ? `De la ${name}` : `de la ${name}`;
+  });
+  return result;
 }
 
 /**
@@ -1063,8 +1305,7 @@ function grantDynamicHintReward(state: any, playerId: number): number | null {
   const players = state.players || [];
   const player = players.find((p: any) => p.id === playerId);
   if (!player || !player.role) return null;
-  // Dead or away players should not receive hint rewards
-  if (!player.alive) return null;
+  // Away players should not receive hint rewards (dead players can still receive hints)
   const vpIds: number[] | undefined = state.villagePresentIds;
   const isPlayerAway = vpIds ? !vpIds.includes(playerId) : false;
   if (isPlayerAway) return null;
@@ -1074,21 +1315,34 @@ function grantDynamicHintReward(state: any, playerId: number): number | null {
   // Wolf player   → wants hints about special roles only (not villageois, not wolves, not cupidon)
   // Fallback: if no more special/wolf hints, distribute simple villager hints
 
-  // Pre-compute revealed priorities per target player for priority gating
-  const revealedPrioritiesByTarget = new Map<number, Set<number>>();
+  // Pre-compute priorities THIS PLAYER has already received per target (per-player priority gating)
+  const playerPrioritiesByTarget = new Map<number, Set<number>>();
+  // Pre-compute hints granted to this player (used for target-lock in each pass)
+  const hintsGrantedToPlayer: any[] = [];
   for (const dh of dynamicHints) {
-    if (dh.revealed) {
-      if (!revealedPrioritiesByTarget.has(dh.targetPlayerId)) {
-        revealedPrioritiesByTarget.set(dh.targetPlayerId, new Set());
+    // Support both new grantedToPlayerIds array and legacy grantedToPlayerId scalar
+    const granted: number[] = dh.grantedToPlayerIds || (dh.revealed && dh.grantedToPlayerId === playerId ? [playerId] : []);
+    if (granted.includes(playerId)) {
+      hintsGrantedToPlayer.push(dh);
+      if (!playerPrioritiesByTarget.has(dh.targetPlayerId)) {
+        playerPrioritiesByTarget.set(dh.targetPlayerId, new Set());
       }
-      revealedPrioritiesByTarget.get(dh.targetPlayerId)!.add(dh.priority ?? 1);
+      playerPrioritiesByTarget.get(dh.targetPlayerId)!.add(dh.priority ?? 1);
     }
   }
 
-  // Pre-compute hints granted to this player (used for target-lock in each pass)
-  const hintsGrantedToPlayer = dynamicHints.filter(
-    (dh: any) => dh.revealed && dh.grantedToPlayerId === playerId
+  // Pre-compute hint texts already owned by this player (for deduplication)
+  const existingHints = state.hints || [];
+  const existingPlayerHints = state.playerHints || [];
+  const ownedHintIds = new Set(
+    existingPlayerHints.filter((ph: any) => ph.playerId === playerId).map((ph: any) => ph.hintId)
   );
+  const ownedHintTexts = new Set(
+    existingHints
+      .filter((h: any) => ownedHintIds.has(h.id) && h.text)
+      .map((h: any) => (h.text as string).trim().toLowerCase())
+  );
+
   const grantedTargets = new Map<number, Set<number>>();
   for (const dh of hintsGrantedToPlayer) {
     if (!grantedTargets.has(dh.targetPlayerId)) {
@@ -1109,8 +1363,8 @@ function grantDynamicHintReward(state: any, playerId: number): number | null {
       if (team === 'village') wolfHintCount++;
       else if (team === 'wolves') specialHintCount++;
     }
-    // Prefer the type with fewer grants (wolf first if equal)
-    const preferWolf = wolfHintCount <= specialHintCount;
+    // Prefer the type with fewer grants; randomize when equal so first hint isn't always about wolves
+    const preferWolf = wolfHintCount < specialHintCount || (wolfHintCount === specialHintCount && Math.random() < 0.5);
     const preferred = preferWolf ? ['village'] : ['wolves'];
     const secondary = preferWolf ? ['wolves'] : ['village'];
     // Search order: preferred → secondary → both combined → add villageois fallback
@@ -1133,31 +1387,38 @@ function grantDynamicHintReward(state: any, playerId: number): number | null {
       if (vpIds && !vpIds.includes(targetId)) continue;
       const team = computeRecipientTeamServer(targetPlayer.role);
       if (team === null || !wantedRecipientTeams.includes(team)) continue;
-      const hasUnrevealed = dynamicHints.some(
-        (dh: any) => !dh.revealed && dh.targetPlayerId === targetId
+      const hasUngranted = dynamicHints.some(
+        (dh: any) => dh.targetPlayerId === targetId && !(dh.grantedToPlayerIds || []).includes(playerId) && !(dh.revealed && dh.grantedToPlayerId === playerId)
       );
-      if (hasUnrevealed) {
+      if (hasUngranted) {
         lockedTargetId = targetId;
         break;
       }
     }
 
-    // Find unrevealed dynamic hints matching team AND respecting priority gating
+    // Find dynamic hints not yet granted to THIS player, matching team AND respecting per-player priority gating
     candidates = dynamicHints.filter((dh: any) => {
-      if (dh.revealed) return false;
+      // Skip if this player already received this hint
+      const grantedIds: number[] = dh.grantedToPlayerIds || (dh.revealed && dh.grantedToPlayerId != null ? [dh.grantedToPlayerId] : []);
+      if (grantedIds.includes(playerId)) return false;
+      // Don't give a player a hint about themselves
+      if (dh.targetPlayerId === playerId) return false;
       const target = players.find((p: any) => p.id === dh.targetPlayerId);
       if (!target || !target.role || !target.alive) return false;
       // Skip away targets
       if (vpIds && !vpIds.includes(dh.targetPlayerId)) return false;
       const team = computeRecipientTeamServer(target.role);
       if (team === null || !wantedRecipientTeams.includes(team)) return false;
-      // Priority gating: P2 requires revealed P1 on same target, P3 requires revealed P2
+      // Per-player priority gating: P2 requires this player has P1 on same target, P3 requires P2
       const priority = dh.priority ?? 1;
-      const revealedSet = revealedPrioritiesByTarget.get(dh.targetPlayerId);
-      if (priority === 2 && !revealedSet?.has(1)) return false;
-      if (priority === 3 && !revealedSet?.has(2)) return false;
+      const playerSet = playerPrioritiesByTarget.get(dh.targetPlayerId);
+      if (priority === 2 && !playerSet?.has(1)) return false;
+      if (priority === 3 && !playerSet?.has(2)) return false;
       // Target-lock: if this player has an in-progress sequence, only allow that target
       if (lockedTargetId !== null && dh.targetPlayerId !== lockedTargetId) return false;
+      // Deduplication: skip if resolved text matches a hint the player already owns
+      const resolvedCandidate = target ? resolveHintTextServer(dh.text, target.role) : dh.text;
+      if (ownedHintTexts.has(resolvedCandidate.trim().toLowerCase())) return false;
       return true;
     });
 
@@ -1169,19 +1430,42 @@ function grantDynamicHintReward(state: any, playerId: number): number | null {
   // Prefer lower priority hints first (P1 > P2 > P3) to enforce natural progression
   const minPriority = Math.min(...candidates.map((c: any) => c.priority ?? 1));
   const topCandidates = candidates.filter((c: any) => (c.priority ?? 1) === minPriority);
-  const picked = topCandidates[Math.floor(Math.random() * topCandidates.length)];
+
+  // ── Least-tracked-first target spread ──
+  // Count how many DISTINCT players are already tracking each target
+  // so hints spread across different targets instead of pile-on'ing one.
+  const targetTrackerCounts = new Map<number, number>();
+  for (const c of topCandidates) {
+    if (!targetTrackerCounts.has(c.targetPlayerId)) {
+      const trackingPlayers = new Set<number>();
+      for (const dh of dynamicHints) {
+        if (dh.targetPlayerId !== c.targetPlayerId) continue;
+        const granted: number[] = dh.grantedToPlayerIds || (dh.revealed && dh.grantedToPlayerId != null ? [dh.grantedToPlayerId] : []);
+        for (const pid of granted) trackingPlayers.add(pid);
+      }
+      // Don't count the current player
+      trackingPlayers.delete(playerId);
+      targetTrackerCounts.set(c.targetPlayerId, trackingPlayers.size);
+    }
+  }
+  const minTrackers = Math.min(...topCandidates.map((c: any) => targetTrackerCounts.get(c.targetPlayerId) ?? 0));
+  const spreadCandidates = topCandidates.filter(
+    (c: any) => (targetTrackerCounts.get(c.targetPlayerId) ?? 0) === minTrackers
+  );
+  const picked = spreadCandidates[Math.floor(Math.random() * spreadCandidates.length)];
   const target = players.find((p: any) => p.id === picked.targetPlayerId);
   const resolvedText = target ? resolveHintTextServer(picked.text, target.role) : picked.text;
 
   // Mark dynamic hint as revealed + record who received it (for target-lock tracking)
   picked.revealed = true;
   picked.revealedAt = new Date().toISOString();
-  picked.grantedToPlayerId = playerId;
+  // Append to grantedToPlayerIds array (supports multi-player grants)
+  if (!picked.grantedToPlayerIds) picked.grantedToPlayerIds = [];
+  picked.grantedToPlayerIds.push(playerId);
+  picked.grantedToPlayerId = playerId; // backwards compat (last grantee)
 
-  // Create a standard hint
-  const allHints = state.hints || [];
-  const maxHintId = allHints.length > 0 ? Math.max(...allHints.map((h: any) => h.id)) : 0;
-  const newHintId = maxHintId + 1;
+  // Create a standard hint (timestamp-based ID to avoid collisions with corbeau/GM hints)
+  const newHintId = Date.now() + Math.floor(Math.random() * 100000);
   if (!state.hints) state.hints = [];
   state.hints.push({
     id: newHintId,
@@ -1228,17 +1512,33 @@ actionRoutes.post("/make-server-2c00868b/game/action/grant-hint", async (c) => {
  * Auto-assign the next eligible quest to a player after they succeed one.
  * Picks the first unassigned quest by distribution order (ordered first, then random).
  * Returns the assigned quest ID or null.
+ * Optional `excludeIds` deprioritises quests already picked in the current distribution round
+ * (used by distributeQuestsToAlivePlayers to maximise variety).
  */
-function autoAssignNextQuest(state: any, playerId: number): number | null {
+function autoAssignNextQuest(state: any, playerId: number, excludeIds?: Set<number>): number | null {
   const quests: any[] = state.quests || [];
+  if (quests.length === 0) return null; // Early exit: no quests configured
   const assignments: Record<number, number[]> = state.questAssignments || {};
   const myAssignedIds = assignments[playerId] || [];
   const player = (state.players || []).find((p: any) => p.id === playerId);
   if (!player) return null;
 
+  // Pre-compute distributed quest IDs (O(n) once instead of O(n×m) per filter call)
+  const distributedQuestIds = new Set<number>();
+  for (const ids of Object.values(assignments)) {
+    if (Array.isArray(ids)) {
+      for (const id of ids) distributedQuestIds.add(id as number);
+    }
+  }
+  const isDistributed = (qId: number): boolean => distributedQuestIds.has(qId);
+
   const candidates = quests.filter((q: any) => {
     if (myAssignedIds.includes(q.id)) return false;
     if (q.distributionOrder === 'available') return false;
+    // Hidden quests with numeric distributionOrder are "locked" chain quests — eligible for auto-unlock.
+    // Hidden quests without numeric order are GM drafts — skip them.
+    // BUT: if the quest has already been distributed to at least one player, it's not a draft anymore.
+    if (q.hidden && typeof q.distributionOrder !== 'number' && !isDistributed(q.id)) return false;
     if (q.targetTags && q.targetTags.length > 0) {
       const playerTags = (state.playerTags || {})[playerId] || [];
       if (!q.targetTags.some((tag: string) => playerTags.includes(tag))) return false;
@@ -1253,13 +1553,29 @@ function autoAssignNextQuest(state: any, playerId: number): number | null {
     .sort((a: any, b: any) => (a.distributionOrder as number) - (b.distributionOrder as number));
   const randomPool = candidates.filter((q: any) => q.distributionOrder === 'random' || q.distributionOrder === undefined);
 
-  const picked = ordered.length > 0
-    ? ordered[0]
-    : randomPool.length > 0
-      ? randomPool[Math.floor(Math.random() * randomPool.length)]
+  // When called from bulk distribution, prefer quests not yet picked this round for variety.
+  // Fall back to the full list if every candidate was already picked.
+  const deprio = (list: any[]): any[] => {
+    if (!excludeIds || excludeIds.size === 0) return list;
+    const fresh = list.filter((q: any) => !excludeIds.has(q.id));
+    return fresh.length > 0 ? fresh : list;
+  };
+
+  const dOrdered = deprio(ordered);
+  const dRandom = deprio(randomPool);
+
+  const picked = dOrdered.length > 0
+    ? dOrdered[0]
+    : dRandom.length > 0
+      ? dRandom[Math.floor(Math.random() * dRandom.length)]
       : null;
 
   if (!picked) return null;
+
+  // Auto-unhide chain quests when assigned (makes them visible to players)
+  if (picked.hidden) {
+    picked.hidden = false;
+  }
 
   if (!state.questAssignments) state.questAssignments = {};
   if (!state.questAssignments[playerId]) state.questAssignments[playerId] = [];
@@ -1267,21 +1583,42 @@ function autoAssignNextQuest(state: any, playerId: number): number | null {
 
   if ((picked.questType || 'individual') === 'collaborative') {
     if (!picked.collaborativeGroups) picked.collaborativeGroups = [];
-    picked.collaborativeGroups.push([playerId]);
+    const groupSize = picked.collaborativeGroupSize || 2;
+    // Try to join an existing incomplete group (fewer members than groupSize)
+    const incompleteGroup = picked.collaborativeGroups.find(
+      (g: number[]) => g.length < groupSize
+    );
+    if (incompleteGroup) {
+      incompleteGroup.push(playerId);
+    } else {
+      // No incomplete group — create a new one
+      picked.collaborativeGroups.push([playerId]);
+    }
   }
 
   return picked.id;
 }
 
 /**
- * Distribute one quest to every alive player at the start of a new phase.
- * Calls autoAssignNextQuest for each alive player.
+ * Distribute one quest to every player (alive and dead) at the start of a new phase.
+ * Dead players only receive individual quests (collaborative quests are excluded via autoAssignNextQuest).
  */
 function distributeQuestsToAlivePlayers(state: any): void {
+  // Early exit: skip distribution entirely if no quests are configured
+  if (!state.quests || state.quests.length === 0) return;
   const players: any[] = state.players || [];
-  const alivePlayers = players.filter((p: any) => p.alive);
-  for (const p of alivePlayers) {
-    autoAssignNextQuest(state, p.id);
+  if (players.length === 0) return;
+  const pSet = state.villagePresentIds ? new Set(state.villagePresentIds) : null;
+  // Alive present players first, then dead players (dead can get individual quests)
+  const alivePlayers = players.filter((p: any) => p.alive && (!pSet || pSet.has(p.id)));
+  const deadPlayers = players.filter((p: any) => !p.alive);
+  const allEligible = [...alivePlayers, ...deadPlayers];
+  // Track picked quest IDs to maximise variety across players (round-robin style).
+  // Quests already picked are deprioritised but NOT excluded (all quests are shareable).
+  const pickedThisRound = new Set<number>();
+  for (const p of allEligible) {
+    const qId = autoAssignNextQuest(state, p.id, pickedThisRound);
+    if (qId !== null) pickedThisRound.add(qId);
   }
 }
 
@@ -1308,7 +1645,7 @@ actionRoutes.post("/make-server-2c00868b/game/action/quest-answer", async (c) =>
       if (!task.playerAnswers) task.playerAnswers = {};
       task.playerAnswers[playerId] = answer;
 
-      // Check if all tasks are answered by THIS player → auto-resolve immediately
+      // Check if all tasks are answered by THIS player ��� auto-resolve immediately
       const allAnswered = quest.tasks.every((t: any) => {
         if (!t.playerAnswers) return false;
         return t.playerAnswers[playerId] !== undefined && t.playerAnswers[playerId] !== '';
@@ -1331,36 +1668,39 @@ actionRoutes.post("/make-server-2c00868b/game/action/quest-answer", async (c) =>
         const allCorrect = quest.tasks.every((t: any) => t.playerResults[playerId] === true);
         quest.playerStatuses[playerId] = allCorrect ? 'success' : 'fail';
 
-        // ── Reward: grant 1 hint the player doesn't already have ──
+        // Stamp which phase this player's quest was resolved in
+        if (!quest.playerResolvedInPhase) quest.playerResolvedInPhase = {};
+        quest.playerResolvedInPhase[playerId] = `${state.turn}-${state.phase}`;
+
+        // ── Reward: grant 1 hint on success only ──
         if (allCorrect) {
           const hintId = grantDynamicHintReward(state, playerId);
           if (hintId) {
             if (!quest.rewardHintIds) quest.rewardHintIds = {};
             quest.rewardHintIds[playerId] = hintId;
           }
-
-          // ── Auto-assign next quest if under phase limit ──
-          if (!state.questCompletionsThisPhase) state.questCompletionsThisPhase = {};
-          const completions = state.questCompletionsThisPhase[playerId] || 0;
-          const limit = state.questsPerPhase ?? 1;
-          state.questCompletionsThisPhase[playerId] = completions + 1;
-          // Auto-assign if unlimited (0) or not yet reached the limit
-          let _autoAssignResult: any = null;
-          if (limit === 0 || completions < limit) {
-            const assignedQuestId = autoAssignNextQuest(state, playerId);
-            if (assignedQuestId !== null) {
-              const assignedQuest = state.quests.find((q: any) => q.id === assignedQuestId);
-              const player = state.players.find((p: any) => p.id === playerId);
-              _autoAssignResult = {
-                autoAssigned: true,
-                questTitle: assignedQuest?.title || 'Nouvelle quête',
-                playerShortCode: player?.shortCode,
-                gameId: state.gameId,
-              };
-            }
-          }
-          return _autoAssignResult;
         }
+
+        // ── Auto-assign next quest (success OR fail) if under phase limit ──
+        if (!state.questCompletionsThisPhase) state.questCompletionsThisPhase = {};
+        const completions = state.questCompletionsThisPhase[playerId] || 0;
+        const limit = state.questsPerPhase ?? 1;
+        state.questCompletionsThisPhase[playerId] = completions + 1;
+        let _autoAssignResult: any = null;
+        if (limit === 0 || completions < limit) {
+          const assignedQuestId = autoAssignNextQuest(state, playerId);
+          if (assignedQuestId !== null) {
+            const assignedQuest = state.quests.find((q: any) => q.id === assignedQuestId);
+            const player = state.players.find((p: any) => p.id === playerId);
+            _autoAssignResult = {
+              autoAssigned: true,
+              questTitle: assignedQuest?.title || 'Nouvelle quête',
+              playerShortCode: player?.shortCode,
+              gameId: state.gameId,
+            };
+          }
+        }
+        return _autoAssignResult;
       }
     });
     if (!res) return c.json({ error: "Aucune partie en cours" }, 404);
@@ -1426,8 +1766,11 @@ actionRoutes.post("/make-server-2c00868b/game/action/quest-collab-vote", async (
           const finalStatus = hasFail ? 'fail' : 'success';
 
           // Set all group members to the same final status
+          if (!quest.playerResolvedInPhase) quest.playerResolvedInPhase = {};
           for (const pid of playerGroup) {
             quest.playerStatuses[pid] = finalStatus;
+            // Stamp which phase this player's quest was resolved in
+            quest.playerResolvedInPhase[pid] = `${state.turn}-${state.phase}`;
           }
 
           // ── Reward: grant 1 hint per group member on success ──

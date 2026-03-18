@@ -1,7 +1,8 @@
 import React, { useState, useMemo, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'motion/react';
 import {
-  ChevronDown, ChevronUp, ScrollText, ArrowDown, Target, X, Vote,
+  ChevronDown, ChevronUp, ScrollText, ArrowDown, Target, X, Vote, Crown,
 } from 'lucide-react';
 import { type Player, type GameState, type GameEvent } from '../../../context/GameContext';
 import { ROLES, type RoleDefinition } from '../../../data/roles';
@@ -431,6 +432,8 @@ export function QuestsPanel({
   t,
   onRevealHint,
   onNavigateToPlayer,
+  onSetHypothesis,
+  gameId,
 }: {
   state: GameState;
   currentPlayer: Player | null;
@@ -438,6 +441,8 @@ export function QuestsPanel({
   t: GameThemeTokens;
   onRevealHint?: (hintId: number) => void;
   onNavigateToPlayer?: (playerId: number) => void;
+  onSetHypothesis?: (targetPlayerId: number, roleId: string) => void;
+  gameId?: string;
 }) {
   const alivePlayers = state.players.filter((p) => p.alive);
 
@@ -484,6 +489,9 @@ export function QuestsPanel({
             t={t}
             onReveal={(hintId) => onRevealHint?.(hintId)}
             variant="journal"
+            players={state.players}
+            onSetHypothesis={onSetHypothesis}
+            gameId={gameId}
           />
         </div>
       )}
@@ -623,6 +631,113 @@ export function HunterShotModal({
         </button>
       </div>
     </motion.div>
+  );
+}
+
+/* ---- Maire Succession Modal (Player side) ---- */
+export function MaireSuccessionModal({
+  players, dyingMaireId, onChooseSuccessor, t,
+}: {
+  players: Player[];
+  dyingMaireId: number | null;
+  onChooseSuccessor: (successorId: number) => void;
+  t: GameThemeTokens;
+}) {
+  const alive = players.filter((p) => p.alive && p.id !== dyingMaireId);
+  const [target, setTarget] = useState<number | null>(null);
+  const [announcementDismissed, setAnnouncementDismissed] = useState(false);
+
+  if (!announcementDismissed) {
+    return createPortal(
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0 }}
+        className="fixed inset-0 z-[10000] flex items-center justify-center"
+        style={{ background: 'rgba(0,0,0,0.85)' }}
+      >
+        <div className="w-[90%] max-w-sm rounded-2xl p-6 text-center"
+          style={{ background: '#0f1629', border: '2px solid rgba(212,168,67,0.4)' }}
+        >
+          <span className="text-5xl block mb-3">👑</span>
+          <h2 style={{ fontFamily: '"Cinzel", serif', color: '#d4a843', fontSize: '1.1rem' }}>
+            Le Maire est mort
+          </h2>
+          <p style={{ color: t.textMuted, fontSize: '0.75rem', marginTop: '0.5rem', lineHeight: 1.5 }}>
+            En tant que Maire mourant, vous devez designer votre successeur parmi les joueurs vivants.
+          </p>
+          <button
+            onClick={() => setAnnouncementDismissed(true)}
+            className="mt-5 w-full py-3 rounded-xl"
+            style={{
+              background: 'linear-gradient(135deg, #d4a843, #b8922e)',
+              color: 'white',
+              fontFamily: '"Cinzel", serif',
+              fontSize: '0.85rem',
+            }}
+          >
+            Choisir un successeur
+          </button>
+        </div>
+      </motion.div>,
+      document.body,
+    );
+  }
+
+  return createPortal(
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      className="fixed inset-0 z-[10000] flex items-center justify-center"
+      style={{ background: 'rgba(0,0,0,0.85)' }}
+    >
+      <div className="w-[90%] max-w-sm rounded-2xl p-6 flex flex-col"
+        style={{
+          background: '#0f1629',
+          border: '2px solid rgba(212,168,67,0.4)',
+          maxHeight: 'calc(100dvh - 2rem)',
+        }}
+      >
+        <div className="text-center flex-shrink-0">
+          <span className="text-4xl block mb-2">👑</span>
+          <h2 style={{ fontFamily: '"Cinzel", serif', color: '#d4a843', fontSize: '1rem' }}>
+            Designez votre successeur
+          </h2>
+          <p style={{ color: t.textMuted, fontSize: '0.7rem', marginTop: '0.25rem' }}>
+            Choisissez le prochain Maire du village
+          </p>
+        </div>
+        <div className="flex-1 min-h-0 overflow-y-auto mt-4 -mx-1 px-1">
+          <div className="grid grid-cols-4 gap-3">
+            {alive.map((p) => (
+              <PlayerAvatar
+                key={p.id}
+                player={p}
+                size="sm"
+                selected={target === p.id}
+                onClick={() => setTarget(p.id)}
+              />
+            ))}
+          </div>
+        </div>
+        <button
+          onClick={() => { if (target !== null) onChooseSuccessor(target); }}
+          disabled={target === null}
+          className="mt-4 w-full py-3 rounded-xl flex-shrink-0 flex items-center justify-center gap-2"
+          style={{
+            background: target !== null ? 'linear-gradient(135deg, #d4a843, #b8922e)' : `rgba(${t.overlayChannel}, 0.04)`,
+            color: target !== null ? 'white' : t.textDim,
+            fontFamily: '"Cinzel", serif',
+            fontSize: '0.8rem',
+          }}
+        >
+          <Crown size={14} />
+          Nommer Maire
+        </button>
+      </div>
+    </motion.div>,
+    document.body,
   );
 }
 

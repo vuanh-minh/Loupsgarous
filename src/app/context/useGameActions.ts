@@ -191,7 +191,28 @@ export function useGameActions({ setState, stateRef, localModeRef }: ActionsDeps
         hunterShooterId = playerId;
       }
 
-      return { ...s, players: newPlayers, events, hunterPending, hunterShooterId };
+      // Mayor succession: if any newly dead player was the Maire
+      let maireSuccessionPending = s.maireSuccessionPending;
+      let maireSuccessionFromId = s.maireSuccessionFromId;
+      let maireSuccessionPhase = s.maireSuccessionPhase;
+      let newMaireId = s.maireId;
+      for (const p of newPlayers) {
+        if (!p.alive && s.players.find(op => op.id === p.id)?.alive && newMaireId === p.id) {
+          const mp = s.players.find(pl => pl.id === newMaireId);
+          maireSuccessionPending = true;
+          maireSuccessionFromId = newMaireId;
+          maireSuccessionPhase = s.phase;
+          events.push({
+            id: nextEventId(), turn: s.turn, phase: s.phase,
+            message: `👑 Le Maire ${mp?.name || 'inconnu'} est mort. Un successeur doit etre designe.`,
+            timestamp: new Date().toISOString(),
+          });
+          newMaireId = null;
+          break;
+        }
+      }
+
+      return { ...s, players: newPlayers, events, hunterPending, hunterShooterId, maireSuccessionPending, maireSuccessionFromId, maireSuccessionPhase, maireId: newMaireId };
     });
   }, [setState]);
 
@@ -208,19 +229,26 @@ export function useGameActions({ setState, stateRef, localModeRef }: ActionsDeps
     setState((s) => ({
       ...s,
       werewolfTarget: playerId,
-      ...(playerId === null ? { werewolfVotes: {}, werewolfTargets: [] } : {}),
+      ...(playerId === null ? { werewolfVotes: {}, werewolfVoteMessages: {}, werewolfTargets: [] } : {}),
     }));
   }, [setState]);
 
-  const castWerewolfVote = useCallback((wolfId: number, targetId: number) => {
+  const castWerewolfVote = useCallback((wolfId: number, targetId: number, message?: string) => {
     setState((s) => {
       // Cannot target an away player
       if (isAway(s, targetId)) return s;
       if (s.werewolfVotes[wolfId] === targetId) {
         const { [wolfId]: _, ...rest } = s.werewolfVotes;
-        return { ...s, werewolfVotes: rest };
+        const { [wolfId]: _m, ...restMsg } = (s.werewolfVoteMessages || {});
+        return { ...s, werewolfVotes: rest, werewolfVoteMessages: restMsg };
       }
-      return { ...s, werewolfVotes: { ...s.werewolfVotes, [wolfId]: targetId } };
+      const msgs = { ...(s.werewolfVoteMessages || {}) };
+      if (message && message.trim()) {
+        msgs[wolfId] = message.trim();
+      } else {
+        delete msgs[wolfId];
+      }
+      return { ...s, werewolfVotes: { ...s.werewolfVotes, [wolfId]: targetId }, werewolfVoteMessages: msgs };
     });
   }, [setState]);
 
@@ -574,6 +602,27 @@ export function useGameActions({ setState, stateRef, localModeRef }: ActionsDeps
         }
       }
 
+      // Mayor succession in resolveVote: check if any newly dead player was the Maire
+      let maireSuccessionPending = s.maireSuccessionPending;
+      let maireSuccessionFromId = s.maireSuccessionFromId;
+      let maireSuccessionPhase = s.maireSuccessionPhase;
+      let resolvedMaireId = s.maireId;
+      for (const p of newPlayers) {
+        if (!p.alive && s.players.find(op => op.id === p.id)?.alive && resolvedMaireId === p.id) {
+          const mairePlayer = s.players.find(pl => pl.id === resolvedMaireId);
+          maireSuccessionPending = true;
+          maireSuccessionFromId = resolvedMaireId;
+          maireSuccessionPhase = s.phase;
+          events.push({
+            id: nextEventId(), turn: s.turn, phase: 'day' as GamePhase,
+            message: `👑 Le Maire ${mairePlayer?.name || 'inconnu'} est mort. Un successeur doit etre designe.`,
+            timestamp: new Date().toISOString(),
+          });
+          resolvedMaireId = null;
+          break;
+        }
+      }
+
       const primaryEliminated = allEliminated.length > 0 ? allEliminated[0] : null;
 
       return {
@@ -585,6 +634,10 @@ export function useGameActions({ setState, stateRef, localModeRef }: ActionsDeps
         events,
         hunterPending,
         hunterShooterId,
+        maireSuccessionPending,
+        maireSuccessionFromId,
+        maireSuccessionPhase,
+        maireId: resolvedMaireId,
         villagerMissedVotes: newVillagerMissed,
         voteHistory: [
           ...s.voteHistory,
@@ -766,6 +819,7 @@ export function useGameActions({ setState, stateRef, localModeRef }: ActionsDeps
       voteResult: null,
       voteResults: [],
       werewolfVotes: {},
+      werewolfVoteMessages: {},
       werewolfTarget: null,
       werewolfTargets: [],
       seerTargets: {},
@@ -815,6 +869,8 @@ export function useGameActions({ setState, stateRef, localModeRef }: ActionsDeps
 
       const target = s.players.find((p) => p.id === targetId);
       const hunter = s.hunterShooterId !== null ? s.players.find((p) => p.id === s.hunterShooterId) : null;
+      let chainHunterPending = false;
+      let chainHunterShooterId: number | null = null;
       let newPlayers = s.players.map((p) =>
         p.id === targetId ? { ...p, alive: false } : p
       );
@@ -843,12 +899,40 @@ export function useGameActions({ setState, stateRef, localModeRef }: ActionsDeps
                 message: `💔 ${lover.name} meurt de chagrin — son amoureux a ete elimine.`,
                 timestamp: new Date().toISOString(),
               });
+              // Chain-hunter: if the heartbroken lover is also a chasseur, trigger their last shot
+              if (lover.role === 'chasseur') { chainHunterPending = true; chainHunterShooterId = loverId; }
             }
           }
         }
       }
 
-      return { ...s, players: newPlayers, hunterPending: false, hunterShooterId: null, events };
+      // Mayor succession: if the hunter shot or a lover cascade killed the Maire
+      let maireSuccessionPending = s.maireSuccessionPending;
+      let maireSuccessionFromId = s.maireSuccessionFromId;
+      let maireSuccessionPhase = s.maireSuccessionPhase;
+      let newMaireId = s.maireId;
+      for (const p of newPlayers) {
+        if (!p.alive && s.players.find(op => op.id === p.id)?.alive && newMaireId === p.id) {
+          const mp = s.players.find(pl => pl.id === newMaireId);
+          maireSuccessionPending = true;
+          maireSuccessionFromId = newMaireId;
+          maireSuccessionPhase = s.phase;
+          events.push({
+            id: nextEventId(), turn: s.turn, phase: s.phase,
+            message: `👑 Le Maire ${mp?.name || 'inconnu'} est mort. Un successeur doit etre designe.`,
+            timestamp: new Date().toISOString(),
+          });
+          newMaireId = null;
+          break;
+        }
+      }
+
+      // If a chain-hunter was triggered (lover of the target was also a chasseur),
+      // keep hunterPending active for the next chasseur instead of clearing it.
+      const finalHunterPending = chainHunterPending ? true : false;
+      const finalHunterShooterId = chainHunterPending ? chainHunterShooterId : null;
+
+      return { ...s, players: newPlayers, hunterPending: finalHunterPending, hunterShooterId: finalHunterShooterId, events, maireSuccessionPending, maireSuccessionFromId, maireSuccessionPhase, maireId: newMaireId };
     });
   }, [setState]);
 

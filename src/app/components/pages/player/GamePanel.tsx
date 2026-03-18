@@ -55,6 +55,8 @@ export function GamePanel({
   isFlipped = false,
   onFlipBack: _onFlipBack,
   roleBackContent,
+  onSetHypothesis,
+  gameId,
 }: GamePanelProps) {
   const voteSectionRef = useRef<VoteSectionHandle>(null);
 
@@ -272,6 +274,9 @@ export function GamePanel({
               t={t}
               onReveal={(hintId) => onRevealHint?.(hintId)}
               compact
+              players={allPlayers}
+              onSetHypothesis={onSetHypothesis}
+              gameId={gameId}
             />
           </div>
         )}
@@ -286,6 +291,9 @@ export function GamePanel({
               t={t}
               onReveal={(hintId) => onRevealHint?.(hintId)}
               compact
+              players={allPlayers}
+              onSetHypothesis={onSetHypothesis}
+              gameId={gameId}
             />
           </div>
         )}

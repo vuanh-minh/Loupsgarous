@@ -3,16 +3,57 @@ import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'motion/react';
 import {
   MessageSquare, Plus, Edit3, Trash2, Send, Check, X,
-  Eye, Lock, Lightbulb, Users, ChevronDown, ChevronUp, Search, CheckSquare, Square,
+  Eye, Lock, Lightbulb, Users, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, Search, CheckSquare, Square,
   ScrollText, BookOpen, Upload, FileText, AlertCircle,
-  ImagePlus, Image as ImageIcon, Clock,
+  ImagePlus, Image as ImageIcon, Clock, UserPlus,
 } from 'lucide-react';
 import type { Player, Hint, PlayerHint, GameState } from '../context/GameContext';
 import type { GameThemeTokens } from '../context/gameTheme';
 import { sendPushNotifications } from '../context/useNotifications';
-import { getRoleById } from '../data/roles';
+import { getRoleById, ROLES } from '../data/roles';
 import { projectId, publicAnonKey } from '../context/apiConfig';
 import { resolveAvatarUrl } from '../data/avatarResolver';
+
+/* ================================================================
+   Helper: extract a role ID from hint text by matching known role names
+   ================================================================ */
+const ROLE_KEYWORDS: [string, RegExp][] = ROLES.map(r => [
+  r.id,
+  new RegExp(
+    r.name.replace(/[-]/g, '[\\s-]?'),
+    'i'
+  ),
+]);
+// Add common short forms
+ROLE_KEYWORDS.push(['loup-garou', /\bloup[s]?\b/i]);
+ROLE_KEYWORDS.push(['sorciere', /\bsorci[eè]re\b/i]);
+ROLE_KEYWORDS.push(['voyante', /\bvoyant[e]?\b/i]);
+ROLE_KEYWORDS.push(['petite-fille', /\bpetite[\s-]?fille\b/i]);
+
+export function extractRoleFromHintText(text: string): string | null {
+  for (const [roleId, re] of ROLE_KEYWORDS) {
+    if (re.test(text)) return roleId;
+  }
+  return null;
+}
+
+/* ================================================================
+   Helper: read/write hint-player associations from localStorage
+   ================================================================ */
+export function getHintAssociations(gameId: string, playerId: number): Record<number, number> {
+  try {
+    const raw = localStorage.getItem(`hint-hypo-${gameId}-${playerId}`);
+    return raw ? JSON.parse(raw) : {};
+  } catch { return {}; }
+}
+export function setHintAssociation(gameId: string, playerId: number, hintId: number, targetPlayerId: number | null) {
+  try {
+    const map = getHintAssociations(gameId, playerId);
+    if (targetPlayerId === null) { delete map[hintId]; }
+    else { map[hintId] = targetPlayerId; }
+    localStorage.setItem(`hint-hypo-${gameId}-${playerId}`, JSON.stringify(map));
+  } catch { /* ignore */ }
+}
 
 /* ================================================================
    Standalone tap-safe button for unrevealed hints.
@@ -92,13 +133,15 @@ function AvatarInline({ player, size = 'w-6 h-6' }: { player: Pick<Player, 'avat
   return <span className="text-sm">{player.avatar}</span>;
 }
 
-let hintIdCounter = 0;
-export function nextHintId(existingHints: Hint[]): number {
-  if (existingHints.length > 0) {
-    const maxId = Math.max(...existingHints.map(h => h.id));
-    if (maxId >= hintIdCounter) hintIdCounter = maxId;
-  }
-  return ++hintIdCounter;
+/** Generate a unique hint ID using timestamp + random suffix to avoid collisions
+ *  across GM frontend, server (corbeau/quest rewards), and player actions. */
+let _lastHintTs = 0;
+export function nextHintId(_existingHints?: Hint[]): number {
+  let id = Date.now() + Math.floor(Math.random() * 100000);
+  // Ensure monotonically increasing even if called in rapid succession
+  if (id <= _lastHintTs) id = _lastHintTs + 1;
+  _lastHintTs = id;
+  return id;
 }
 
 /* ================================================================
@@ -1217,6 +1260,9 @@ export function PlayerHintSection({
   onReveal,
   compact = false,
   variant = 'game',
+  players,
+  onSetHypothesis,
+  gameId,
 }: {
   hints: Hint[];
   playerHints: PlayerHint[];
@@ -1225,16 +1271,46 @@ export function PlayerHintSection({
   onReveal: (hintId: number) => void;
   compact?: boolean;
   variant?: 'game' | 'journal';
+  players?: Player[];
+  onSetHypothesis?: (targetPlayerId: number, roleId: string) => void;
+  gameId?: string;
 }) {
   // Only keep playerHints whose hintId actually exists in the hints array.
   // This guards against stale playerHints referencing deleted/not-yet-loaded hints.
   const hintIdSet = new Set(hints.map(h => h.id));
   const myHints = playerHints.filter(ph => ph.playerId === playerId && hintIdSet.has(ph.hintId));
   const [revealModalHintId, setRevealModalHintId] = useState<number | null>(null);
+  // Ordered list of hint IDs the player can navigate through in the reveal modal
+  const [revealModalHintIds, setRevealModalHintIds] = useState<number[]>([]);
   const [allHintsModalOpen, setAllHintsModalOpen] = useState(false);
-  const [fullscreenImageUrl, setFullscreenImageUrl] = useState<string | null>(null);
+  const [fullscreenHintId, setFullscreenHintId] = useState<number | null>(null);
   // Optimistic local set: hints revealed this session (before server sync)
   const [localRevealedIds, setLocalRevealedIds] = useState<Set<number>>(() => new Set());
+  // Hint-player associations (stored in localStorage)
+  const [hintAssociations, setHintAssociations] = useState<Record<number, number>>(() =>
+    gameId ? getHintAssociations(gameId, playerId) : {}
+  );
+  const handleSetHintAssociation = (hintId: number, targetPlayerId: number | null) => {
+    if (!gameId) return;
+    // Capture previous association before updating
+    const previousPlayerId = hintAssociations[hintId] ?? null;
+    setHintAssociation(gameId, playerId, hintId, targetPlayerId);
+    setHintAssociations(getHintAssociations(gameId, playerId));
+    // Clear hypothesis on the previous player when replacing
+    if (previousPlayerId !== null && previousPlayerId !== targetPlayerId && onSetHypothesis) {
+      onSetHypothesis(previousPlayerId, '');
+    }
+    // Auto-set hypothesis based on role extracted from hint text
+    if (targetPlayerId !== null && onSetHypothesis) {
+      const hint = hints.find(h => h.id === hintId);
+      if (hint?.text) {
+        const roleId = extractRoleFromHintText(hint.text);
+        if (roleId) {
+          onSetHypothesis(targetPlayerId, roleId);
+        }
+      }
+    }
+  };
 
   const isJournalDay = variant === 'journal' && t.isDay;
 
@@ -1253,6 +1329,8 @@ export function PlayerHintSection({
       onReveal(firstUnrevealed.hintId);
       setLocalRevealedIds(prev => new Set(prev).add(firstUnrevealed.hintId));
       setRevealModalHintId(firstUnrevealed.hintId);
+      // Build navigable list: current + remaining unrevealed
+      setRevealModalHintIds(unrevealed.map(ph => ph.hintId));
     } else {
       setAllHintsModalOpen(true);
     }
@@ -1274,6 +1352,9 @@ export function PlayerHintSection({
             onReveal(ph.hintId);
             setLocalRevealedIds(prev => new Set(prev).add(ph.hintId));
             setRevealModalHintId(ph.hintId);
+            // Build navigable list: put this hint first, then remaining unrevealed
+            const otherUnrevealed = unrevealed.filter(u => u.hintId !== ph.hintId).map(u => u.hintId);
+            setRevealModalHintIds([ph.hintId, ...otherUnrevealed]);
           }}
           inModal={inModal}
         />
@@ -1284,11 +1365,12 @@ export function PlayerHintSection({
     return (
       <div
         key={`${ph.hintId}-revealed`}
-        className="flex items-start gap-2 p-2.5 rounded-[12.5px]"
+        className="flex items-start gap-2 p-2.5 rounded-[12.5px] cursor-pointer active:opacity-80 transition-opacity"
         style={{
           background: inModal ? 'rgba(139,90,43,0.08)' : isJournalDay ? 'rgba(160,120,8,0.06)' : 'rgba(255,255,255,0.05)',
           border: `0.6px solid ${inModal ? 'rgba(139,90,43,0.18)' : isJournalDay ? t.goldBorder : '#685844'}`,
         }}
+        onClick={() => setFullscreenHintId(hint.id)}
       >
         {hint.imageUrl ? (
           <ImageIcon size={12} className="mt-0.5 shrink-0" style={{ color: inModal ? '#8b5a2b' : isJournalDay ? t.gold : '#f59e0b' }} />
@@ -1305,9 +1387,9 @@ export function PlayerHintSection({
             <img
               src={hint.imageUrl}
               alt="Indice"
-              className="rounded-lg max-h-40 object-contain cursor-pointer active:opacity-80 transition-opacity"
+              className="rounded-lg max-h-40 object-contain"
               style={{ border: `1px solid ${inModal ? 'rgba(139,90,43,0.15)' : 'rgba(245,158,11,0.15)'}` }}
-              onClick={(e) => { e.stopPropagation(); setFullscreenImageUrl(hint.imageUrl!); }}
+              draggable={false}
             />
           )}
         </div>
@@ -1319,9 +1401,22 @@ export function PlayerHintSection({
     <>
       {variant === 'game' ? (
         /* ── Game view: compact button only, no preview ── */
-        <button
+        <motion.button
           onClick={handleGameButtonClick}
           className="w-full flex items-center justify-center gap-2.5 py-3.5 rounded-[20px] transition-all active:scale-[0.97]"
+          animate={hasNewHint ? {
+            boxShadow: [
+              '0 0 16px rgba(212,165,74,0.15), inset 0 1px 0 rgba(222,195,150,0.15)',
+              '0 0 28px rgba(212,165,74,0.4), inset 0 1px 0 rgba(222,195,150,0.15)',
+              '0 0 16px rgba(212,165,74,0.15), inset 0 1px 0 rgba(222,195,150,0.15)',
+            ],
+            borderColor: [
+              'rgba(212,165,74,0.5)',
+              'rgba(232,197,96,0.8)',
+              'rgba(212,165,74,0.5)',
+            ],
+          } : {}}
+          transition={hasNewHint ? { duration: 2, repeat: Infinity, ease: 'easeInOut' } : {}}
           style={{
             background: hasNewHint
               ? 'linear-gradient(135deg, rgba(212,165,74,0.18) 0%, rgba(180,130,50,0.12) 100%)'
@@ -1370,7 +1465,7 @@ export function PlayerHintSection({
               {unrevealed.length}
             </span>
           )}
-        </button>
+        </motion.button>
       ) : (
         /* ── Journal view: full card with preview ── */
         <div
@@ -1514,51 +1609,160 @@ export function PlayerHintSection({
                   <div className="mt-2 h-px" style={{ background: 'linear-gradient(to right, transparent, rgba(139,90,43,0.3), transparent)' }} />
                 </div>
 
-                {/* Hint list */}
-                <div className="relative px-6 pb-2 overflow-y-auto min-h-0 flex-1" style={{ scrollbarWidth: 'thin', scrollbarColor: '#c4a06a #e8d5a8', WebkitOverflowScrolling: 'touch', overscrollBehavior: 'contain' }}>
-                  <div className="space-y-3">
-                    {sortedHints.map((ph, index) => (
-                      <motion.div
-                        key={`${ph.hintId}-all`}
-                        initial={{ opacity: 0, x: -10 }}
-                        animate={{ opacity: 1, x: 0 }}
-                        transition={{ delay: index * 0.06 }}
-                      >
-                        {/* Index number */}
-                        <div className="flex items-center gap-2 mb-1">
-                          <span
-                            className="w-5 h-5 rounded-full flex items-center justify-center shrink-0"
+                {/* Hint grid */}
+                <div className="relative px-4 pb-2 overflow-y-auto min-h-0 flex-1" style={{ scrollbarWidth: 'thin', scrollbarColor: '#c4a06a #e8d5a8', WebkitOverflowScrolling: 'touch', overscrollBehavior: 'contain' }}>
+                  <div className="grid grid-cols-2 gap-3">
+                    {sortedHints.map((ph, index) => {
+                      const isRevealed = ph.revealed || localRevealedIds.has(ph.hintId);
+                      const hint = isRevealed ? hints.find(h => h.id === ph.hintId) : null;
+                      const hasImage = !!(hint && hint.imageUrl);
+
+                      if (!isRevealed) {
+                        return (
+                          <motion.div
+                            key={`${ph.hintId}-card`}
+                            initial={{ opacity: 0, scale: 0.9 }}
+                            animate={{ opacity: 1, scale: 1 }}
+                            transition={{ delay: index * 0.05 }}
+                            className="relative overflow-hidden cursor-pointer active:scale-[0.97] transition-transform"
                             style={{
-                              background: 'rgba(139,90,43,0.12)',
-                              border: '1px solid rgba(139,90,43,0.25)',
-                              fontSize: '0.5rem',
-                              fontFamily: '"Cinzel", serif',
-                              color: '#6b4226',
+                              aspectRatio: '3/4',
+                              borderRadius: 12,
+                              background: 'linear-gradient(160deg, #e8d5a8 0%, #d4b896 50%, #c4a06a 100%)',
+                              border: '1px solid rgba(139,90,43,0.3)',
+                              boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+                            }}
+                            onClick={() => {
+                              onReveal(ph.hintId);
+                              setLocalRevealedIds(prev => new Set(prev).add(ph.hintId));
+                              setRevealModalHintId(ph.hintId);
+                              const otherUnrevealed = unrevealed.filter(u => u.hintId !== ph.hintId).map(u => u.hintId);
+                              setRevealModalHintIds([ph.hintId, ...otherUnrevealed]);
                             }}
                           >
-                            {myHints.length - index}
-                          </span>
-                          <span style={{ fontSize: '0.5rem', color: '#9a7b5a', fontStyle: 'italic', fontFamily: '"IM Fell English", serif' }}>
-                            {new Date(ph.sentAt).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}
-                          </span>
-                          {index === 0 && (
-                            <span
-                              className="px-1.5 py-0.5 rounded-full ml-auto"
+                            <div className="absolute inset-0 flex flex-col items-center justify-center p-3">
+                              <div className="w-10 h-10 rounded-full flex items-center justify-center mb-2" style={{ background: 'rgba(139,90,43,0.15)', border: '1px solid rgba(139,90,43,0.3)' }}>
+                                <Lightbulb size={18} style={{ color: '#6b4226' }} />
+                              </div>
+                              <span style={{ fontSize: '0.6rem', color: '#6b4226', fontFamily: '"Cinzel", serif', textAlign: 'center' }}>
+                                Toucher pour reveler
+                              </span>
+                            </div>
+                          </motion.div>
+                        );
+                      }
+
+                      if (!hint) return null;
+
+                      return (
+                        <motion.div
+                          key={`${ph.hintId}-card`}
+                          initial={{ opacity: 0, scale: 0.9 }}
+                          animate={{ opacity: 1, scale: 1 }}
+                          transition={{ delay: index * 0.05 }}
+                          className="relative overflow-hidden cursor-pointer active:scale-[0.97] transition-transform"
+                          style={{
+                            aspectRatio: '3/4',
+                            borderRadius: 12,
+                            border: '1px solid rgba(139,90,43,0.3)',
+                            boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+                            background: hasImage ? '#1a1a2e' : 'linear-gradient(160deg, #e8d5a8 0%, #d4b896 40%, #c4a06a 100%)',
+                          }}
+                          onClick={() => setFullscreenHintId(hint.id)}
+                        >
+                          {/* Hypothesis avatar overlay */}
+                          {(() => {
+                            const assocPlayerId = hintAssociations[hint.id];
+                            const assocPlayer = assocPlayerId != null ? (players ?? []).find(p => p.id === assocPlayerId) : null;
+                            if (!assocPlayer) return null;
+                            const avatarUrl = resolveAvatarUrl(assocPlayer.avatarUrl);
+                            return (
+                              <div
+                                className="absolute top-1.5 right-1.5 z-10 w-7 h-7 rounded-full overflow-hidden"
+                                style={{
+                                  border: '2px solid rgba(245,158,11,0.7)',
+                                  boxShadow: '0 2px 8px rgba(0,0,0,0.4)',
+                                  background: '#1a1a2e',
+                                }}
+                              >
+                                {avatarUrl ? (
+                                  <img src={avatarUrl} alt={assocPlayer.name} className="w-full h-full object-cover" draggable={false} />
+                                ) : (
+                                  <div className="w-full h-full flex items-center justify-center" style={{ fontSize: '0.7rem' }}>
+                                    {assocPlayer.avatar}
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })()}
+                          {hasImage ? (
+                            <img
+                              src={hint.imageUrl!}
+                              alt="Indice"
+                              className="absolute inset-0 w-full h-full object-cover"
+                              style={{ borderRadius: 12 }}
+                              draggable={false}
+                            />
+                          ) : (
+                            <div className="absolute inset-0 flex flex-col items-center justify-center p-3">
+                              <div
+                                className="absolute inset-0 pointer-events-none"
+                                style={{
+                                  background: 'radial-gradient(ellipse at 30% 20%, rgba(139,90,43,0.08) 0%, transparent 60%), radial-gradient(ellipse at 70% 80%, rgba(139,90,43,0.06) 0%, transparent 60%)',
+                                }}
+                              />
+                              <ScrollText size={22} style={{ color: '#8b5a2b', opacity: 0.35, marginBottom: 8 }} />
+                              <p
+                                className="text-center relative z-10"
+                                style={{
+                                  color: '#4a3520',
+                                  fontSize: '0.75rem',
+                                  lineHeight: 1.5,
+                                  fontFamily: '"IM Fell English", "Cinzel", serif',
+                                  fontStyle: 'italic',
+                                  display: '-webkit-box',
+                                  WebkitLineClamp: 4,
+                                  WebkitBoxOrient: 'vertical' as const,
+                                  overflow: 'hidden',
+                                }}
+                              >
+                                {hint.text}
+                              </p>
+                            </div>
+                          )}
+
+                          {hint.text && (
+                            <div
+                              className="absolute bottom-0 left-0 right-0 flex items-end p-2.5"
                               style={{
-                                background: 'rgba(139,90,43,0.12)',
-                                border: '1px solid rgba(139,90,43,0.2)',
-                                fontSize: '0.45rem',
-                                color: '#6b4226',
-                                fontFamily: '"Cinzel", serif',
+                                background: hasImage
+                                  ? 'linear-gradient(to top, rgba(0,0,0,0.75) 0%, rgba(0,0,0,0.4) 60%, transparent 100%)'
+                                  : 'linear-gradient(to top, rgba(139,90,43,0.2) 0%, transparent 100%)',
+                                borderRadius: '0 0 12px 12px',
                               }}
                             >
-                              Plus recent
-                            </span>
+                              {hasImage && (
+                              <p
+                                style={{
+                                  color: '#f0e6d2',
+                                  fontSize: '0.65rem',
+                                  lineHeight: 1.35,
+                                  fontFamily: '"IM Fell English", "Cinzel", serif',
+                                  display: '-webkit-box',
+                                  WebkitLineClamp: 2,
+                                  WebkitBoxOrient: 'vertical' as const,
+                                  overflow: 'hidden',
+                                  textShadow: '0 1px 3px rgba(0,0,0,0.6)',
+                                }}
+                              >
+                                {hint.text}
+                              </p>
+                              )}
+                            </div>
                           )}
-                        </div>
-                        {renderHintEntry(ph, true)}
-                      </motion.div>
-                    ))}
+                        </motion.div>
+                      );
+                    })}
                   </div>
                 </div>
 
@@ -1594,55 +1798,428 @@ export function PlayerHintSection({
             <HintRevealModal
               hint={hints.find(h => h.id === revealModalHintId) ?? null}
               t={t}
-              onClose={() => setRevealModalHintId(null)}
-              onImageEnlarge={(url) => setFullscreenImageUrl(url)}
+              onClose={() => { setRevealModalHintId(null); setRevealModalHintIds([]); }}
+              onImageEnlarge={(hintId) => setFullscreenHintId(hintId)}
+              hintIds={revealModalHintIds}
+              currentHintId={revealModalHintId}
+              onNavigate={(hintId) => {
+                // Reveal the hint if not already revealed
+                const ph = myHints.find(h => h.hintId === hintId);
+                if (ph && !ph.revealed && !localRevealedIds.has(hintId)) {
+                  onReveal(hintId);
+                  setLocalRevealedIds(prev => new Set(prev).add(hintId));
+                }
+                setRevealModalHintId(hintId);
+              }}
             />
           )}
         </AnimatePresence>,
         document.body
       )}
 
-      {/* Fullscreen Image Lightbox */}
-      {createPortal(
-        <AnimatePresence>
-          {fullscreenImageUrl !== null && (
-            <motion.div
-              key="fullscreen-hint-image-backdrop"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              transition={{ duration: 0.18 }}
-              className="fixed inset-0 z-[95] flex items-center justify-center p-4"
-              style={{ background: 'rgba(0,0,0,0.9)', backdropFilter: 'blur(8px)' }}
-              onClick={() => setFullscreenImageUrl(null)}
+      {/* Fullscreen Hint Lightbox (delegated to standalone component) */}
+      <HintFullscreenLightbox
+        hints={hints}
+        revealedHintIds={myHints
+          .filter(ph => ph.revealed || localRevealedIds.has(ph.hintId))
+          .map(ph => ph.hintId)
+          .reverse()}
+        fullscreenHintId={fullscreenHintId}
+        setFullscreenHintId={setFullscreenHintId}
+        players={players}
+        hintAssociations={hintAssociations}
+        onSetHintAssociation={handleSetHintAssociation}
+        onSetHypothesis={onSetHypothesis}
+      />
+    </>
+  );
+}
+
+/* ================================================================
+   Standalone Fullscreen Hint Lightbox (reusable)
+   ================================================================ */
+export function HintFullscreenLightbox({
+  hints,
+  revealedHintIds,
+  fullscreenHintId,
+  setFullscreenHintId,
+  players,
+  hintAssociations,
+  onSetHintAssociation,
+  onSetHypothesis,
+}: {
+  hints: Hint[];
+  revealedHintIds: number[];
+  fullscreenHintId: number | null;
+  setFullscreenHintId: (id: number | null) => void;
+  players?: Player[];
+  hintAssociations?: Record<number, number>;
+  onSetHintAssociation?: (hintId: number, targetPlayerId: number | null) => void;
+  onSetHypothesis?: (targetPlayerId: number, roleId: string) => void;
+}) {
+  const [fsSlideDir, setFsSlideDir] = useState<1 | -1>(1);
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  // Close drawer when navigating between hints
+  useEffect(() => { setDrawerOpen(false); }, [fullscreenHintId]);
+
+  return createPortal(
+    <AnimatePresence>
+      {fullscreenHintId !== null && (() => {
+        const fsIdx = revealedHintIds.indexOf(fullscreenHintId);
+        const fsHint = hints.find(h => h.id === fullscreenHintId);
+        const fsPrev = fsIdx > 0;
+        const fsNext = fsIdx < revealedHintIds.length - 1;
+        const fsMultiple = revealedHintIds.length > 1;
+        if (!fsHint) return null;
+        return (
+          <motion.div
+            key="fullscreen-hint-backdrop"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.18 }}
+            className="fixed inset-0 z-[95] flex items-center justify-center p-4"
+            style={{ background: 'rgba(0,0,0,0.92)', backdropFilter: 'blur(10px)' }}
+            onClick={() => setFullscreenHintId(null)}
+          >
+            {/* Close button */}
+            <button
+              onClick={() => setFullscreenHintId(null)}
+              className="absolute top-4 right-4 w-9 h-9 rounded-full flex items-center justify-center active:scale-90 transition-transform z-10"
+              style={{
+                background: 'rgba(255,255,255,0.12)',
+                border: '1px solid rgba(255,255,255,0.2)',
+              }}
             >
+              <X size={18} style={{ color: '#fff' }} />
+            </button>
+            {/* Dot navigation */}
+            {fsMultiple && (() => {
+              const total = revealedHintIds.length;
+              const MAX_DOTS = 5;
+              const useWindow = total > MAX_DOTS;
+              let windowStart = 0;
+              let windowEnd = total;
+              if (useWindow) {
+                const half = Math.floor(MAX_DOTS / 2);
+                windowStart = Math.max(0, Math.min(fsIdx - half, total - MAX_DOTS));
+                windowEnd = windowStart + MAX_DOTS;
+              }
+              const visibleIndices = revealedHintIds.slice(windowStart, windowEnd).map((hId, vi) => ({ hId, i: windowStart + vi }));
+              return (
+                <div className="absolute bottom-6 left-1/2 -translate-x-1/2 z-10 flex items-center gap-2">
+                  {visibleIndices.map(({ hId, i }) => {
+                    const isActive = i === fsIdx;
+                    const distFromEdge = Math.min(i - windowStart, windowEnd - 1 - i);
+                    const isEdge = useWindow && distFromEdge === 0 && !isActive;
+                    const size = isActive ? 10 : isEdge ? 5 : 7;
+                    const opacity = isEdge ? 0.4 : 1;
+                    return (
+                      <button
+                        key={hId}
+                        onClick={(e) => { e.stopPropagation(); setFsSlideDir(i > fsIdx ? 1 : -1); setFullscreenHintId(hId); }}
+                        className="rounded-full transition-all duration-300"
+                        style={{
+                          width: size,
+                          height: size,
+                          opacity,
+                          background: isActive ? '#f59e0b' : 'rgba(245,158,11,0.3)',
+                          border: isActive ? '1px solid rgba(245,158,11,0.8)' : '1px solid rgba(245,158,11,0.15)',
+                          boxShadow: isActive ? '0 0 8px rgba(245,158,11,0.5)' : 'none',
+                        }}
+                        aria-label={`Indice ${i + 1}`}
+                      />
+                    );
+                  })}
+                </div>
+              );
+            })()}
+            {/* Prev arrow */}
+            {fsPrev && (
               <button
-                onClick={() => setFullscreenImageUrl(null)}
-                className="absolute top-4 right-4 w-9 h-9 rounded-full flex items-center justify-center active:scale-90 transition-transform z-10"
+                onClick={(e) => { e.stopPropagation(); setFsSlideDir(-1); setFullscreenHintId(revealedHintIds[fsIdx - 1]); }}
+                className="absolute left-3 top-1/2 -translate-y-1/2 z-10 w-10 h-10 rounded-full flex items-center justify-center active:scale-90 transition-transform"
                 style={{
-                  background: 'rgba(255,255,255,0.12)',
-                  border: '1px solid rgba(255,255,255,0.2)',
+                  background: 'rgba(245,158,11,0.15)',
+                  border: '1px solid rgba(245,158,11,0.3)',
                 }}
               >
-                <X size={18} style={{ color: '#fff' }} />
+                <ChevronLeft size={22} style={{ color: '#f59e0b' }} />
               </button>
-              <motion.img
-                initial={{ scale: 0.85, opacity: 0 }}
-                animate={{ scale: 1, opacity: 1 }}
-                exit={{ scale: 0.85, opacity: 0 }}
-                transition={{ type: 'spring', damping: 28, stiffness: 320 }}
-                src={fullscreenImageUrl}
-                alt=""
-                className="max-w-full max-h-full rounded-xl object-contain"
+            )}
+            {/* Next arrow */}
+            {fsNext && (
+              <button
+                onClick={(e) => { e.stopPropagation(); setFsSlideDir(1); setFullscreenHintId(revealedHintIds[fsIdx + 1]); }}
+                className="absolute right-3 top-1/2 -translate-y-1/2 z-10 w-10 h-10 rounded-full flex items-center justify-center active:scale-90 transition-transform"
+                style={{
+                  background: 'rgba(245,158,11,0.15)',
+                  border: '1px solid rgba(245,158,11,0.3)',
+                }}
+              >
+                <ChevronRight size={22} style={{ color: '#f59e0b' }} />
+              </button>
+            )}
+            {/* Hint content with swipe */}
+            <AnimatePresence mode="wait" custom={fsSlideDir}>
+              <motion.div
+                key={fullscreenHintId}
+                custom={fsSlideDir}
+                variants={{
+                  enter: (dir: number) => ({ x: dir * 300, opacity: 0 }),
+                  center: { x: 0, opacity: 1 },
+                  exit: (dir: number) => ({ x: dir * -300, opacity: 0 }),
+                }}
+                initial="enter"
+                animate="center"
+                exit="exit"
+                transition={{ type: 'spring', damping: 28, stiffness: 300, mass: 0.8 }}
+                drag={fsMultiple ? 'x' : false}
+                dragConstraints={{ left: 0, right: 0 }}
+                dragElastic={0.3}
+                onDragEnd={(_e, info) => {
+                  const threshold = 50;
+                  if (info.offset.x < -threshold && fsNext) {
+                    setFsSlideDir(1);
+                    setFullscreenHintId(revealedHintIds[fsIdx + 1]);
+                  } else if (info.offset.x > threshold && fsPrev) {
+                    setFsSlideDir(-1);
+                    setFullscreenHintId(revealedHintIds[fsIdx - 1]);
+                  }
+                }}
+                className="flex flex-col items-center gap-4 max-w-md w-full"
+                style={{ touchAction: fsMultiple ? 'pan-y' : 'auto', cursor: fsMultiple ? 'grab' : 'default' }}
                 onClick={(e) => e.stopPropagation()}
-                style={{ boxShadow: '0 8px 40px rgba(0,0,0,0.6)' }}
-              />
-            </motion.div>
-          )}
-        </AnimatePresence>,
-        document.body
-      )}
-    </>
+              >
+                {fsHint.imageUrl && (
+                  <motion.img
+                    src={fsHint.imageUrl}
+                    alt=""
+                    className="max-w-full max-h-[60vh] rounded-xl object-contain"
+                    style={{ boxShadow: '0 8px 40px rgba(0,0,0,0.6)' }}
+                    draggable={false}
+                  />
+                )}
+                {fsHint.text && (
+                  <div
+                    className="w-full text-center relative"
+                    style={!fsHint.imageUrl ? {
+                      background: 'linear-gradient(170deg, #2a1f14 0%, #1e160e 25%, #2d2218 50%, #1a1209 75%, #2a1f14 100%)',
+                      border: '2px solid rgba(180,140,60,0.4)',
+                      boxShadow: '0 8px 50px rgba(0,0,0,0.7), inset 0 0 40px rgba(0,0,0,0.5), inset 0 0 80px rgba(180,140,60,0.05)',
+                      borderRadius: '4px',
+                      padding: '2.5rem 2rem',
+                      minHeight: '65vh',
+                      maxWidth: '85vw',
+                      margin: '0 auto',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                    } : undefined}
+                  >
+                    {!fsHint.imageUrl && (
+                      <>
+                        <div style={{
+                          position: 'absolute', top: '6px', left: '6px', right: '6px', bottom: '6px',
+                          border: '1px solid rgba(180,140,60,0.15)',
+                          borderRadius: '2px',
+                          pointerEvents: 'none',
+                        }} />
+                        <div style={{
+                          position: 'absolute', top: '10px', left: '50%', transform: 'translateX(-50%)',
+                          width: '50%', height: '1px',
+                          background: 'linear-gradient(90deg, transparent, rgba(180,140,60,0.35), transparent)',
+                          pointerEvents: 'none',
+                        }} />
+                        <div style={{
+                          position: 'absolute', bottom: '10px', left: '50%', transform: 'translateX(-50%)',
+                          width: '50%', height: '1px',
+                          background: 'linear-gradient(90deg, transparent, rgba(180,140,60,0.35), transparent)',
+                          pointerEvents: 'none',
+                        }} />
+                        <div style={{
+                          position: 'absolute', top: '14px', left: '50%', transform: 'translateX(-50%)',
+                          width: '30%', height: '1px',
+                          background: 'linear-gradient(90deg, transparent, rgba(180,140,60,0.2), transparent)',
+                          pointerEvents: 'none',
+                        }} />
+                        <div style={{
+                          position: 'absolute', bottom: '14px', left: '50%', transform: 'translateX(-50%)',
+                          width: '30%', height: '1px',
+                          background: 'linear-gradient(90deg, transparent, rgba(180,140,60,0.2), transparent)',
+                          pointerEvents: 'none',
+                        }} />
+                      </>
+                    )}
+                    <p style={{ color: !fsHint.imageUrl ? '#d4b896' : '#f5f0e8', fontSize: '14px', lineHeight: 1.3, fontFamily: '"Cinzel", serif', fontWeight: 500, letterSpacing: '0.03em', textShadow: !fsHint.imageUrl ? '0 0 12px rgba(180,140,60,0.3), 0 2px 4px rgba(0,0,0,0.5)' : 'none' }}>
+                      {fsHint.text}
+                    </p>
+                  </div>
+                )}
+              </motion.div>
+            </AnimatePresence>
+
+            {/* Floating hypothesis CTA / avatar */}
+            {players && players.length > 0 && onSetHintAssociation && (() => {
+              const assocPlayerId = hintAssociations?.[fullscreenHintId];
+              const assocPlayer = assocPlayerId != null ? players.find(p => p.id === assocPlayerId) : null;
+              const avatarUrl = assocPlayer ? resolveAvatarUrl(assocPlayer.avatarUrl) : null;
+              return (
+                <button
+                  onClick={(e) => { e.stopPropagation(); setDrawerOpen(true); }}
+                  className="absolute bottom-16 left-1/2 -translate-x-1/2 z-20 flex items-center gap-2 active:scale-95 transition-transform"
+                  style={{
+                    background: assocPlayer
+                      ? 'rgba(245,158,11,0.15)'
+                      : 'linear-gradient(135deg, rgba(245,158,11,0.2), rgba(180,130,50,0.15))',
+                    backdropFilter: 'blur(12px)',
+                    border: `1px solid ${assocPlayer ? 'rgba(245,158,11,0.5)' : 'rgba(245,158,11,0.3)'}`,
+                    borderRadius: assocPlayer ? '9999px' : '16px',
+                    padding: assocPlayer ? '4px 14px 4px 4px' : '10px 20px',
+                    boxShadow: '0 4px 20px rgba(0,0,0,0.4)',
+                  }}
+                >
+                  {assocPlayer ? (
+                    <>
+                      <div className="w-8 h-8 rounded-full overflow-hidden" style={{ border: '2px solid rgba(245,158,11,0.6)' }}>
+                        {avatarUrl ? (
+                          <img src={avatarUrl} alt={assocPlayer.name} className="w-full h-full object-cover" draggable={false} />
+                        ) : (
+                          <div className="w-full h-full flex items-center justify-center bg-black/30" style={{ fontSize: '0.9rem' }}>
+                            {assocPlayer.avatar}
+                          </div>
+                        )}
+                      </div>
+                      <span style={{ color: '#f5deb3', fontSize: '0.75rem', fontFamily: '"Cinzel", serif', fontWeight: 600 }}>
+                        {assocPlayer.name}
+                      </span>
+                    </>
+                  ) : (
+                    <>
+                      <UserPlus size={15} style={{ color: '#f59e0b' }} />
+                      <span style={{ color: '#f5deb3', fontSize: '0.75rem', fontFamily: '"Cinzel", serif', fontWeight: 600 }}>
+                        Ajouter une hypothese
+                      </span>
+                    </>
+                  )}
+                </button>
+              );
+            })()}
+
+            {/* Bottom drawer for player selection */}
+            <AnimatePresence>
+              {drawerOpen && players && players.length > 0 && onSetHintAssociation && (
+                <motion.div
+                  key="hypo-drawer-backdrop"
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  className="absolute inset-0 z-30"
+                  style={{ background: 'rgba(0,0,0,0.5)' }}
+                  onClick={(e) => { e.stopPropagation(); setDrawerOpen(false); }}
+                >
+                  <motion.div
+                    initial={{ y: '100%' }}
+                    animate={{ y: 0 }}
+                    exit={{ y: '100%' }}
+                    transition={{ type: 'spring', damping: 28, stiffness: 300 }}
+                    className="absolute bottom-0 left-0 right-0 max-h-[60vh] flex flex-col"
+                    style={{
+                      background: 'linear-gradient(180deg, #1e1a14 0%, #14100c 100%)',
+                      borderTop: '1px solid rgba(245,158,11,0.3)',
+                      borderRadius: '20px 20px 0 0',
+                      boxShadow: '0 -8px 40px rgba(0,0,0,0.6)',
+                    }}
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    {/* Drawer handle */}
+                    <div className="flex justify-center py-3">
+                      <div className="w-10 h-1 rounded-full" style={{ background: 'rgba(245,158,11,0.3)' }} />
+                    </div>
+                    <h4 className="text-center px-4 pb-3" style={{ fontFamily: '"Cinzel", serif', color: '#f5deb3', fontSize: '0.85rem', fontWeight: 600 }}>
+                      Qui soupconnez-vous ?
+                    </h4>
+                    {/* Player grid */}
+                    <div className="overflow-y-auto px-4 pb-6" style={{ overscrollBehavior: 'contain' }}>
+                      <div className="grid grid-cols-4 gap-3">
+                        {players.filter(p => p.alive).map(p => {
+                          const pAvUrl = resolveAvatarUrl(p.avatarUrl);
+                          const isSelected = hintAssociations?.[fullscreenHintId] === p.id;
+                          return (
+                            <button
+                              key={p.id}
+                              onClick={() => {
+                                // Clear hypothesis on previous player when replacing
+                                const previousPlayerId = hintAssociations?.[fullscreenHintId] ?? null;
+                                if (previousPlayerId !== null && previousPlayerId !== p.id && onSetHypothesis) {
+                                  onSetHypothesis(previousPlayerId, '');
+                                }
+                                onSetHintAssociation!(fullscreenHintId, isSelected ? null : p.id);
+                                // Clear hypothesis when removing association
+                                if (isSelected && onSetHypothesis) {
+                                  onSetHypothesis(p.id, '');
+                                }
+                                // Auto-set hypothesis based on role extracted from hint text
+                                if (!isSelected && onSetHypothesis) {
+                                  const hint = hints.find(h => h.id === fullscreenHintId);
+                                  if (hint?.text) {
+                                    const roleId = extractRoleFromHintText(hint.text);
+                                    if (roleId) {
+                                      onSetHypothesis(p.id, roleId);
+                                    }
+                                  }
+                                }
+                                setDrawerOpen(false);
+                              }}
+                              className="flex flex-col items-center gap-1.5 py-2 rounded-xl transition-all active:scale-95"
+                              style={{
+                                background: isSelected ? 'rgba(245,158,11,0.15)' : 'transparent',
+                                border: `1px solid ${isSelected ? 'rgba(245,158,11,0.4)' : 'transparent'}`,
+                              }}
+                            >
+                              <div
+                                className="w-12 h-12 rounded-full overflow-hidden"
+                                style={{
+                                  border: `2px solid ${isSelected ? '#f59e0b' : 'rgba(255,255,255,0.1)'}`,
+                                  boxShadow: isSelected ? '0 0 12px rgba(245,158,11,0.3)' : 'none',
+                                }}
+                              >
+                                {pAvUrl ? (
+                                  <img src={pAvUrl} alt={p.name} className="w-full h-full object-cover" draggable={false} />
+                                ) : (
+                                  <div className="w-full h-full flex items-center justify-center" style={{ background: 'rgba(255,255,255,0.05)', fontSize: '1.2rem' }}>
+                                    {p.avatar}
+                                  </div>
+                                )}
+                              </div>
+                              <span style={{
+                                color: isSelected ? '#f59e0b' : '#8090b0',
+                                fontSize: '0.6rem',
+                                fontFamily: '"Cinzel", serif',
+                                textAlign: 'center',
+                                lineHeight: 1.2,
+                                maxWidth: '100%',
+                                overflow: 'hidden',
+                                textOverflow: 'ellipsis',
+                                whiteSpace: 'nowrap',
+                              }}>
+                                {p.name}
+                              </span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  </motion.div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+
+          </motion.div>
+        );
+      })()}
+    </AnimatePresence>,
+    document.body
   );
 }
 
@@ -1654,14 +2231,26 @@ function HintRevealModal({
   t,
   onClose,
   onImageEnlarge,
+  hintIds = [],
+  currentHintId,
+  onNavigate,
 }: {
   hint: Hint | null;
   t: GameThemeTokens;
   onClose: () => void;
-  onImageEnlarge?: (url: string) => void;
+  onImageEnlarge?: (hintId: number) => void;
+  hintIds?: number[];
+  currentHintId?: number | null;
+  onNavigate?: (hintId: number) => void;
 }) {
   // Ghost-click protection: ignore backdrop clicks/taps for the first 500ms after mount.
   const mountedAt = useRef(Date.now());
+
+  // Navigation state
+  const currentIndex = currentHintId != null ? hintIds.indexOf(currentHintId) : -1;
+  const hasMultiple = hintIds.length > 1;
+  const hasPrev = hasMultiple && currentIndex > 0;
+  const hasNext = hasMultiple && currentIndex < hintIds.length - 1;
 
   // Auto-close if hint is null (deleted or not yet loaded)
   useEffect(() => {
@@ -1725,43 +2314,122 @@ function HintRevealModal({
           <h3 style={{ fontFamily: '"Cinzel", serif', color: '#f59e0b', fontSize: '1rem', marginTop: '1rem' }}>
             Indice revele !
           </h3>
-          <motion.div
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.25 }}
-            className="mt-4 rounded-xl p-4"
-            style={{
-              background: 'rgba(245,158,11,0.06)',
-              border: '1px solid rgba(245,158,11,0.15)',
-            }}
-          >
-            {hint.text && (
-              <p style={{ color: t.text, fontSize: '0.85rem', lineHeight: 1.6 }}>
-                {hint.text}
-              </p>
+          {/* Hint counter */}
+          {hasMultiple && (
+            <p style={{ color: t.textSecondary, fontSize: '0.7rem', marginTop: '0.35rem', fontFamily: '"MedievalSharp", serif' }}>
+              {currentIndex + 1} / {hintIds.length}
+            </p>
+          )}
+          {/* Hint content with navigation arrows */}
+          <div className="relative mt-4">
+            {/* Prev arrow */}
+            {hasPrev && (
+              <button
+                onClick={() => onNavigate?.(hintIds[currentIndex - 1])}
+                className="absolute left-0 top-1/2 -translate-y-1/2 -translate-x-3 z-10 w-8 h-8 rounded-full flex items-center justify-center transition-colors"
+                style={{
+                  background: 'rgba(245,158,11,0.15)',
+                  border: '1px solid rgba(245,158,11,0.3)',
+                  color: '#f59e0b',
+                }}
+              >
+                <ChevronLeft size={18} />
+              </button>
             )}
-            {hint.imageUrl && (
-              <img
-                src={hint.imageUrl}
-                alt="Indice revele"
-                className="rounded-lg max-h-48 object-contain mx-auto mt-2 cursor-pointer active:opacity-80 transition-opacity"
-                style={{ border: '1px solid rgba(245,158,11,0.15)' }}
-                onClick={() => onImageEnlarge?.(hint.imageUrl!)}
-              />
+            {/* Next arrow */}
+            {hasNext && (
+              <button
+                onClick={() => onNavigate?.(hintIds[currentIndex + 1])}
+                className="absolute right-0 top-1/2 -translate-y-1/2 translate-x-3 z-10 w-8 h-8 rounded-full flex items-center justify-center transition-colors"
+                style={{
+                  background: 'rgba(245,158,11,0.15)',
+                  border: '1px solid rgba(245,158,11,0.3)',
+                  color: '#f59e0b',
+                }}
+              >
+                <ChevronRight size={18} />
+              </button>
             )}
-          </motion.div>
-          <button
-            onClick={onClose}
-            className="mt-5 w-full py-3 rounded-xl"
-            style={{
-              background: `rgba(${t.overlayChannel}, 0.06)`,
-              color: t.textSecondary,
-              fontFamily: '"Cinzel", serif',
-              fontSize: '0.75rem',
-            }}
-          >
-            Fermer
-          </button>
+            <AnimatePresence mode="wait">
+              <motion.div
+                key={hint.id}
+                initial={{ opacity: 0, x: 20 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0, x: -20 }}
+                transition={{ duration: 0.2 }}
+                drag={hasMultiple ? 'x' : false}
+                dragConstraints={{ left: 0, right: 0 }}
+                dragElastic={0.3}
+                onDragEnd={(_e, info) => {
+                  const swipeThreshold = 50;
+                  if (info.offset.x < -swipeThreshold && hasNext) {
+                    onNavigate?.(hintIds[currentIndex + 1]);
+                  } else if (info.offset.x > swipeThreshold && hasPrev) {
+                    onNavigate?.(hintIds[currentIndex - 1]);
+                  }
+                }}
+                className="rounded-xl p-4"
+                style={{
+                  background: 'rgba(245,158,11,0.06)',
+                  border: '1px solid rgba(245,158,11,0.15)',
+                  touchAction: hasMultiple ? 'pan-y' : 'auto',
+                  cursor: hasMultiple ? 'grab' : 'default',
+                }}
+              >
+                {hint.text && (
+                  <p style={{ color: t.text, fontSize: '0.85rem', lineHeight: 1.6 }}>
+                    {hint.text}
+                  </p>
+                )}
+                {hint.imageUrl && (
+                  <img
+                    src={hint.imageUrl}
+                    alt="Indice revele"
+                    className="rounded-lg max-h-48 object-contain mx-auto mt-2 cursor-pointer active:opacity-80 transition-opacity"
+                    style={{ border: '1px solid rgba(245,158,11,0.15)', pointerEvents: hasMultiple ? 'auto' : undefined }}
+                    onClick={() => onImageEnlarge?.(hint.id)}
+                    draggable={false}
+                  />
+                )}
+                {hasMultiple && (
+                  <p className="mt-3 text-center select-none" style={{ color: 'rgba(245,158,11,0.35)', fontSize: '0.6rem', fontFamily: '"MedievalSharp", serif' }}>
+                    ← Glisser pour naviguer →
+                  </p>
+                )}
+              </motion.div>
+            </AnimatePresence>
+          </div>
+          {/* Bottom: close or next hint CTA */}
+          <div className="mt-5 flex gap-2">
+            <button
+              onClick={onClose}
+              className={`${hasNext ? 'flex-1' : 'w-full'} py-3 rounded-xl`}
+              style={{
+                background: `rgba(${t.overlayChannel}, 0.06)`,
+                color: t.textSecondary,
+                fontFamily: '"Cinzel", serif',
+                fontSize: '0.75rem',
+              }}
+            >
+              Fermer
+            </button>
+            {hasNext && (
+              <button
+                onClick={() => onNavigate?.(hintIds[currentIndex + 1])}
+                className="flex-1 py-3 rounded-xl flex items-center justify-center gap-1.5"
+                style={{
+                  background: 'rgba(245,158,11,0.12)',
+                  border: '1px solid rgba(245,158,11,0.3)',
+                  color: '#f59e0b',
+                  fontFamily: '"Cinzel", serif',
+                  fontSize: '0.75rem',
+                }}
+              >
+                Suivant
+                <ChevronRight size={14} />
+              </button>
+            )}
+          </div>
         </div>
       </motion.div>
     </motion.div>

@@ -53,6 +53,10 @@ interface GamePanelProps {
   handleResolveMaireElection?: () => void;
   externalSelectedPlayer?: number | null;
   onClearExternalSelectedPlayer?: () => void;
+  /** When set on mobile, forces a specific view and hides the sub-navigation */
+  forceMobileView?: MobileGameView;
+  /** Mobile: navigate to the external "Joueurs" tab with a player pre-selected */
+  onNavigateToPlayersTab?: (playerId: number) => void;
 }
 
 export function GamePanel(props: GamePanelProps) {
@@ -68,6 +72,8 @@ export function GamePanel(props: GamePanelProps) {
     updateState, onSendHintToPlayer, broadcastTestNotification,
     handleResolveMaireElection,
     externalSelectedPlayer, onClearExternalSelectedPlayer,
+    forceMobileView,
+    onNavigateToPlayersTab,
   } = props;
 
   /* ---- Panel-local UI state ---- */
@@ -135,6 +141,7 @@ export function GamePanel(props: GamePanelProps) {
     nightActionsTab, setNightActionsTab,
     nightActionPickerPlayers, setNightActionPickerPlayers,
     navigateToPlayerPreview, getPlayerStatuses: getPlayerStatusesFn, handleNightActionClick,
+    onNavigateToPlayersTab,
   }), [
     state, alivePlayers, deadPlayers, isNight, isMobile, playerHeartbeats, t,
     hasRole, leverLeSoleil, handleAdvanceTurn, handleStartNight1,
@@ -146,6 +153,7 @@ export function GamePanel(props: GamePanelProps) {
     selectedPlayer, mobileView, revivePendingId,
     nightActionsTab, nightActionPickerPlayers,
     navigateToPlayerPreview, getPlayerStatusesFn, handleNightActionClick,
+    onNavigateToPlayersTab,
   ]);
 
   /* ---- Empty state ---- */
@@ -255,31 +263,35 @@ export function GamePanel(props: GamePanelProps) {
     </>
   );
 
+  // Resolve which mobile view to show (forced or local)
+  const effectiveMobileView = forceMobileView ?? mobileView;
+  const showMobileSubNav = isMobile && !forceMobileView;
+
   /* ---- MOBILE LAYOUT ---- */
   if (isMobile) {
     return (
       <GamePanelProvider value={ctxValue}>
         <div className="h-full flex flex-col">
-          <div className="flex-1 overflow-y-auto" style={{ paddingBottom: '16px' }}>
+          <div className="flex-1 min-h-0 flex flex-col overflow-hidden" style={{ paddingBottom: '16px' }}>
             <AnimatePresence mode="wait">
-              {mobileView === 'controls' && (
-                <motion.div key="mobile-controls" initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 10 }}>
+              {effectiveMobileView === 'controls' && (
+                <motion.div key="mobile-controls" className="flex flex-col flex-1 min-h-0" initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 10 }}>
                   <MobileControlsView phaseOutcomePreview={phaseOutcomePreview} />
                 </motion.div>
               )}
-              {mobileView === 'players' && (
-                <motion.div key="mobile-players" initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 10 }}>
+              {effectiveMobileView === 'players' && (
+                <motion.div key="mobile-players" className="flex-1 min-h-0 overflow-y-auto" initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 10 }}>
                   <GMPlayerList />
                 </motion.div>
               )}
-              {mobileView === 'journal' && (
-                <motion.div key="mobile-journal" initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 10 }}>
+              {effectiveMobileView === 'journal' && (
+                <motion.div key="mobile-journal" className="flex-1 min-h-0 overflow-y-auto" initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 10 }}>
                   {eventLogContent}
                 </motion.div>
               )}
             </AnimatePresence>
           </div>
-          {mobileView === 'controls' && (
+          {effectiveMobileView === 'controls' && (
             <div className="flex-shrink-0 px-3 pt-2 pb-4" style={{ background: t.pageBgSolid, borderTop: `1px solid rgba(${t.overlayChannel}, 0.06)`, boxShadow: '0 -2px 8px rgba(0,0,0,0.1)' }}>
               {state.roleRevealDone === false ? (
                 <motion.button
@@ -316,7 +328,7 @@ export function GamePanel(props: GamePanelProps) {
               )}
             </div>
           )}
-          {mobileSubNav}
+          {showMobileSubNav && mobileSubNav}
           {sharedModals}
         </div>
       </GamePanelProvider>

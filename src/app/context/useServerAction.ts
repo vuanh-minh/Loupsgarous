@@ -24,6 +24,16 @@ function grantDynamicHintRewardClient(
   const role = getRoleById(player.role);
   const playerTeam = role?.team === 'werewolf' ? 'werewolf' : 'village';
 
+  // Pre-compute hint texts already owned by this player (for deduplication)
+  const ownedHintIds = new Set(
+    playerHints.filter((ph) => ph.playerId === rewardPlayerId).map((ph) => ph.hintId)
+  );
+  const ownedHintTexts = new Set(
+    hints
+      .filter((h) => ownedHintIds.has(h.id) && h.text)
+      .map((h) => (h.text as string).trim().toLowerCase())
+  );
+
   // Helper: compute recipientTeam for a target
   const getRecipientTeam = (targetRole: { team: string; id: string }): 'village' | 'wolves' | 'villageois' | null => {
     if (targetRole.team === 'werewolf') return 'village';
@@ -69,6 +79,9 @@ function grantDynamicHintRewardClient(
       if (!targetRole) continue;
       const recipientTeam = getRecipientTeam(targetRole);
       if (recipientTeam === null || !wantedTeams.includes(recipientTeam)) continue;
+      // Deduplication: skip if resolved text matches a hint the player already owns
+      const resolvedCandidate = dh.text.replace(/\{role\}/gi, getRoleById(target.role)?.name ?? target.role);
+      if (ownedHintTexts.has(resolvedCandidate.trim().toLowerCase())) continue;
       candidateIndices.push(i);
     }
     if (candidateIndices.length > 0) break;
@@ -216,9 +229,9 @@ export function useServerActions() {
     return postAction('cancel-vote', { voterId, gameId });
   }, [gameId, localMode]);
 
-  const serverCastWerewolfVote = useCallback((wolfId: number, targetId: number) => {
+  const serverCastWerewolfVote = useCallback((wolfId: number, targetId: number, message?: string) => {
     if (localMode) return Promise.resolve(true);
-    return postAction('werewolf-vote', { wolfId, targetId, gameId });
+    return postAction('werewolf-vote', { wolfId, targetId, gameId, message: message || undefined });
   }, [gameId, localMode]);
 
   const serverSetSeerTarget = useCallback((actorId: number, playerId: number | null) => {
@@ -254,6 +267,11 @@ export function useServerActions() {
   const serverSetHunterPreTarget = useCallback((actorId: number, playerId: number | null) => {
     if (localMode) return Promise.resolve(true);
     return postAction('hunter-pre-target', { actorId, playerId, gameId });
+  }, [gameId, localMode]);
+
+  const serverConfirmHunterShot = useCallback((hunterId: number, targetId: number) => {
+    if (localMode) return Promise.resolve(true);
+    return postAction('hunter-shot', { hunterId, targetId, gameId });
   }, [gameId, localMode]);
 
   // ── Early vote (vote anticipé) ──
@@ -479,7 +497,7 @@ export function useServerActions() {
 
   // ── Corbeau target — direct call in PlayerPage sets targets/messages but
   //    only the server creates hints. In local mode applyLocal handles both. ──
-  const serverSetCorbeauTarget = useCallback((actorId: number, playerId: number, message: string) => {
+  const serverSetCorbeauTarget = useCallback((actorId: number, playerId: number, message: string, imageUrl?: string) => {
     if (localMode) return applyLocal((s) => {
       const targets = { ...s.corbeauTargets, [actorId]: playerId };
       const messages = { ...s.corbeauMessages };
@@ -489,6 +507,7 @@ export function useServerActions() {
       const hints = [...(s.hints || []), {
         id: hintId,
         text: message || "D'une source mystérieuse...",
+        imageUrl,
         createdAt: new Date().toISOString(),
       }];
       const playerHints = [...(s.playerHints || []), {
@@ -499,7 +518,7 @@ export function useServerActions() {
       }];
       return { ...s, corbeauTargets: targets, corbeauMessages: messages, hints, playerHints };
     });
-    return postAction('corbeau-target', { actorId, playerId, message, gameId });
+    return postAction('corbeau-target', { actorId, playerId, message, imageUrl, gameId });
   }, [gameId, localMode, applyLocal]);
 
   // ── Join village (away player becomes present) ──
@@ -530,6 +549,7 @@ export function useServerActions() {
     serverDeclareCandidacy,
     serverWithdrawCandidacy,
     serverSetHunterPreTarget,
+    serverConfirmHunterShot,
     serverSetEarlyVote,
     serverSetLastWillUsed,
     serverSetFoxTarget,

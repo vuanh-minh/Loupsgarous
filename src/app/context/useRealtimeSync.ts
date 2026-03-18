@@ -226,21 +226,28 @@ export function useRealtimeSync(options: UseRealtimeSyncOptions = {}) {
     };
   }, [isGM, gameId, disabled]);
 
-  // GM broadcasts full state to all subscribers
+  // GM broadcasts full state to all subscribers (with single retry on failure)
   const broadcastState = useCallback((gameState: GameState) => {
     const ch = channelRef.current;
     if (!ch || statusRef.current !== 'connected') return;
     const size = estimatePayloadSize(gameState);
-    ch.send({
+    const doSend = () => ch.send({
       type: 'broadcast',
       event: GM_STATE_EVENT,
       payload: { gameState },
-    }).then((status: string) => {
+    });
+    doSend().then((status: string) => {
       if (status !== 'ok') {
-        console.log('Broadcast state status:', status);
+        console.log('Broadcast state failed, retrying in 500ms...');
+        setTimeout(() => {
+          doSend().catch((err: any) => console.log('Broadcast state retry failed:', err));
+        }, 500);
       }
     }).catch((err: any) => {
-      console.log('Broadcast state error:', err);
+      console.log('Broadcast state error, retrying in 500ms...', err);
+      setTimeout(() => {
+        doSend().catch((err2: any) => console.log('Broadcast state retry failed:', err2));
+      }, 500);
     });
     trackBroadcast(false, size, size);
   }, []);

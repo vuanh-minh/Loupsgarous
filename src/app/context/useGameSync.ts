@@ -194,11 +194,22 @@ export function useGameSync({ setState, state, stateRef }: SyncDeps) {
     }
   }, [stateRef]);
 
+  // ── Track server version to skip expensive merges when nothing changed ──
+  const lastMergeVersionRef = useRef<number>(-1);
+
   // ── Merge player-driven actions from server ──
   const mergePlayerActions = useCallback(async (): Promise<boolean> => {
     try {
       const serverState = await loadFromServer();
       if (!serverState) return false;
+
+      // Fast path: if server version hasn't changed since last merge, skip everything
+      const serverVersion = (serverState as any)._kvVersion || 0;
+      if (serverVersion > 0 && serverVersion === lastMergeVersionRef.current) {
+        return false; // No changes on server — skip 20× JSON.stringify comparisons
+      }
+      lastMergeVersionRef.current = serverVersion;
+
       const s = stateRef.current;
 
       const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
@@ -444,11 +455,23 @@ export function useGameSync({ setState, state, stateRef }: SyncDeps) {
         }
       }
 
-      try {
-        const { hypotheses: _h1, ...prevRest } = prev;
-        const { hypotheses: _h2, ...nextRest } = next;
-        if (JSON.stringify(prevRest) === JSON.stringify(nextRest)) return prev;
-      } catch { /* fall through */ }
+      // Fast equality check: use _kvVersion if available (avoids full JSON.stringify on large state)
+      const prevVersion = (prev as any)._kvVersion;
+      const nextVersion = (next as any)._kvVersion;
+      if (prevVersion && nextVersion && prevVersion === nextVersion) {
+        // Same server version + same phase/turn → no meaningful change
+        if (prev.turn === next.turn && prev.phase === next.phase && prev.dayStep === next.dayStep) {
+          return prev;
+        }
+      }
+      // Fallback: structural comparison only if versions are missing
+      if (!nextVersion) {
+        try {
+          const { hypotheses: _h1, ...prevRest } = prev;
+          const { hypotheses: _h2, ...nextRest } = next;
+          if (JSON.stringify(prevRest) === JSON.stringify(nextRest)) return prev;
+        } catch { /* fall through */ }
+      }
       return next;
     });
     // Full state resets the delta version tracker

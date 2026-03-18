@@ -47,4 +47,6 @@ export interface GamePanelProps {
   isFlipped?: boolean;
   onFlipBack?: () => void;
   roleBackContent?: React.ReactNode;
+  onSetHypothesis?: (targetPlayerId: number, roleId: string) => void;
+  gameId?: string;
 }

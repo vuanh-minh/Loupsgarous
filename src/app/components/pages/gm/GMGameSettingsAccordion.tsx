@@ -151,14 +151,14 @@ export const GMGameSettingsAccordion = React.memo(function GMGameSettingsAccordi
             updateState={updateState}
             t={t}
           />
-          <GMWolfInactivitySettings state={state} updateState={updateState} t={t} />
-          <GMVillagerInactivitySettings state={state} updateState={updateState} t={t} />
-          <GMRandomVoteSettings state={state} updateState={updateState} t={t} />
           <GMDayEliminationsStepper
             dayEliminationsCount={state.dayEliminationsCount || 1}
             updateState={updateState}
             t={t}
           />
+          <GMWolfInactivitySettings state={state} updateState={updateState} t={t} />
+          <GMVillagerInactivitySettings state={state} updateState={updateState} t={t} />
+          <GMRandomVoteSettings state={state} updateState={updateState} t={t} />
 
           {/* GM access code for this game */}
           <div

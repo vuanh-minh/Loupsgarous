@@ -3,95 +3,86 @@ import { motion } from 'motion/react';
 import { AlertCircle, ArrowLeft, Eye, Search, Send, Target } from 'lucide-react';
 import { PAvatar } from '../PAvatar';
 import { type RoleActionBaseProps } from './roleActionTypes';
-import { ROLES, getRoleById } from '../../../../data/roles';
+import { ROLES } from '../../../../data/roles';
 
 interface Props extends RoleActionBaseProps {
-  onCorbeauTarget: (targetId: number, message: string) => void;
+  onCorbeauTarget: (targetId: number, message: string, imageUrl?: string) => void;
+}
+
+/**
+ * Replace all role mentions ({role} and {durole}) with "le Loup-Garou" / "du Loup-Garou".
+ * Also replaces any *resolved* role name (e.g. "la Voyante", "le Chasseur") in the text
+ * with "le Loup-Garou" / "du Loup-Garou".
+ */
+function corruptRoleInText(text: string): string {
+  // 1. Replace {role} → le Loup-Garou (auto-cap at start)
+  let result = text.replace(/\{role\}/gi, (_m: string, offset: number) => {
+    return offset === 0 ? 'Le Loup-Garou' : 'le Loup-Garou';
+  });
+  // 2. Replace {durole} → du Loup-Garou (auto-cap at start)
+  result = result.replace(/\{durole\}/gi, (_m: string, offset: number) => {
+    return offset === 0 ? 'Du Loup-Garou' : 'du Loup-Garou';
+  });
+  // 3. Replace any already-resolved role name in the text
+  for (const role of ROLES) {
+    if (role.id === 'loup-garou') continue;
+    // "du <Name>" / "de la <Name>"
+    const duPattern = role.article === 'le'
+      ? new RegExp(`\\b[Dd]u\\s+${escapeRegex(role.name)}\\b`, 'g')
+      : new RegExp(`\\b[Dd]e\\s+la\\s+${escapeRegex(role.name)}\\b`, 'g');
+    result = result.replace(duPattern, (m) => {
+      return m.charAt(0) === m.charAt(0).toUpperCase() ? 'Du Loup-Garou' : 'du Loup-Garou';
+    });
+    // "le/la <Name>"
+    const artPattern = new RegExp(
+      `\\b${escapeRegex(role.article.charAt(0).toUpperCase() + role.article.slice(1))}\\s+${escapeRegex(role.name)}\\b|\\b${escapeRegex(role.article)}\\s+${escapeRegex(role.name)}\\b`,
+      'g',
+    );
+    result = result.replace(artPattern, (m) => {
+      return m.charAt(0) === m.charAt(0).toUpperCase() ? 'Le Loup-Garou' : 'le Loup-Garou';
+    });
+  }
+  return result;
+}
+
+function escapeRegex(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
 /**
  * Generate a corrupted dynamic hint for the Corbeau.
- * Picks one random unrevealed dynamic hint containing {role},
- * resolves {role} with a WRONG role (random among active roles in the game).
- * Returns { originalHintId, corruptedText } or null if nothing available.
+ * Picks one random unrevealed dynamic hint, replaces any role mention
+ * with "le Loup-Garou" / "du Loup-Garou". Preserves imageUrl if present.
  */
 function generateCorruptedHint(
   state: RoleActionBaseProps['state'],
   corbeauPlayerId: number,
-): { corruptedText: string; originalHintId: number } | null {
+): { corruptedText: string; originalHintId: number; imageUrl?: string } | null {
   const dynamicHints = state.dynamicHints ?? [];
-  const players = state.players ?? [];
 
-  // Find hints that contain {role} and are not yet revealed
   const candidates = dynamicHints.filter(
-    (dh) => !dh.revealed && dh.text && /\{role\}/i.test(dh.text),
+    (dh) => !dh.revealed && dh.text,
   );
 
   if (candidates.length === 0) {
-    // Fallback: generate a generic hint if no dynamic hints with {role} exist
-    // Pick a random alive non-corbeau player to make a fake hint about
-    const activeRoleIds = Object.entries(state.roleConfig || {})
-      .filter(([, count]) => count > 0)
-      .map(([id]) => id);
-    if (activeRoleIds.length === 0) return null;
-    const fakeRoleId = activeRoleIds[Math.floor(Math.random() * activeRoleIds.length)];
-    const fakeRole = getRoleById(fakeRoleId);
-    if (!fakeRole) return null;
     const templates = [
-      `{role} cache quelque chose.`,
-      `{role} est suspect.`,
-      `{role} a ete vu cette nuit.`,
-      `Mefie-toi de {role}.`,
+      `Le Loup-Garou cache quelque chose.`,
+      `Le Loup-Garou est suspect.`,
+      `Le Loup-Garou a ete vu cette nuit.`,
+      `Mefie-toi du Loup-Garou.`,
     ];
     const template = templates[Math.floor(Math.random() * templates.length)];
-    const resolved = template.replace(/\{role\}/gi, (_m, offset: number) => {
-      const art = offset === 0
-        ? fakeRole.article.charAt(0).toUpperCase() + fakeRole.article.slice(1)
-        : fakeRole.article;
-      return `${art} ${fakeRole.name}`;
-    });
-    return { corruptedText: resolved, originalHintId: -1 };
+    return { corruptedText: template, originalHintId: -1 };
   }
 
-  // Pick a random candidate
   const picked = candidates[Math.floor(Math.random() * candidates.length)];
+  const corruptedText = corruptRoleInText(picked.text);
 
-  // Find the actual role of the target player
-  const targetPlayer = players.find((p) => p.id === picked.targetPlayerId);
-  const actualRoleId = targetPlayer?.role || 'villageois';
-
-  // Pick a DIFFERENT role from the roles active in the game
-  const activeRoleIds = Object.entries(state.roleConfig || {})
-    .filter(([, count]) => count > 0)
-    .map(([id]) => id)
-    .filter((id) => id !== actualRoleId);
-
-  if (activeRoleIds.length === 0) {
-    // All roles are the same — just use any different role from ROLES
-    const otherRoles = ROLES.filter((r) => r.id !== actualRoleId);
-    if (otherRoles.length === 0) return null;
-    const fakeRole = otherRoles[Math.floor(Math.random() * otherRoles.length)];
-    const resolved = picked.text.replace(/\{role\}/gi, (_m: string, offset: number) => {
-      const art = offset === 0
-        ? fakeRole.article.charAt(0).toUpperCase() + fakeRole.article.slice(1)
-        : fakeRole.article;
-      return `${art} ${fakeRole.name}`;
-    });
-    return { corruptedText: resolved, originalHintId: picked.id };
-  }
-
-  const fakeRoleId = activeRoleIds[Math.floor(Math.random() * activeRoleIds.length)];
-  const fakeRole = getRoleById(fakeRoleId);
-  if (!fakeRole) return null;
-
-  const corruptedText = picked.text.replace(/\{role\}/gi, (_m: string, offset: number) => {
-    const art = offset === 0
-      ? fakeRole.article.charAt(0).toUpperCase() + fakeRole.article.slice(1)
-      : fakeRole.article;
-    return `${art} ${fakeRole.name}`;
-  });
-
-  return { corruptedText, originalHintId: picked.id };
+  return {
+    corruptedText,
+    originalHintId: picked.id,
+    imageUrl: picked.imageUrl,
+  };
 }
 
 export function CorbeauAction({ state, alivePlayers, currentPlayer, allPlayers, onFlipBack, onCorbeauTarget, practiceMode, t }: Props) {
@@ -108,7 +99,7 @@ export function CorbeauAction({ state, alivePlayers, currentPlayer, allPlayers, 
 
   // Generate the corrupted hint once per turn (stable via ref)
   const turnRef = useRef<number>(-1);
-  const hintRef = useRef<{ corruptedText: string; originalHintId: number } | null>(null);
+  const hintRef = useRef<{ corruptedText: string; originalHintId: number; imageUrl?: string } | null>(null);
   if (turnRef.current !== state.turn) {
     turnRef.current = state.turn;
     hintRef.current = generateCorruptedHint(state, currentPlayer.id);
@@ -156,6 +147,9 @@ export function CorbeauAction({ state, alivePlayers, currentPlayer, allPlayers, 
                     }}>
                       "{corruptedHint.corruptedText}"
                     </p>
+                    {corruptedHint.imageUrl && (
+                      <img src={corruptedHint.imageUrl} alt="" className="w-full rounded-lg mt-2" style={{ maxHeight: '160px', objectFit: 'cover' }} />
+                    )}
                   </div>
                   <div className="rounded-lg p-2.5 mb-3" style={{ background: `rgba(${t.overlayChannel}, 0.03)`, border: `1px solid rgba(${t.overlayChannel}, 0.06)` }}>
                     <p style={{ color: t.textDim, fontSize: '0.55rem', lineHeight: 1.6 }}>
@@ -190,9 +184,14 @@ export function CorbeauAction({ state, alivePlayers, currentPlayer, allPlayers, 
               {/* Show the hint being sent */}
               <div className="rounded-lg p-2.5 mb-3 flex items-center gap-2" style={{ background: 'rgba(74,54,96,0.06)', border: '1px solid rgba(74,54,96,0.15)' }}>
                 <Eye size={10} style={{ color: '#4a3660' }} />
-                <p className="flex-1 truncate" style={{ color: '#4a3660', fontSize: '0.6rem', fontStyle: 'italic', fontFamily: '"IM Fell English", serif' }}>
-                  "{corruptedHint.corruptedText}"
-                </p>
+                <div className="flex-1 min-w-0">
+                  <p className="truncate" style={{ color: '#4a3660', fontSize: '0.6rem', fontStyle: 'italic', fontFamily: '"IM Fell English", serif' }}>
+                    "{corruptedHint.corruptedText}"
+                  </p>
+                  {corruptedHint.imageUrl && (
+                    <img src={corruptedHint.imageUrl} alt="" className="w-full rounded mt-1" style={{ maxHeight: '80px', objectFit: 'cover' }} />
+                  )}
+                </div>
               </div>
               {lastTargetPlayer && (
                 <div className="flex items-center gap-1.5 mb-2 px-1">
@@ -242,10 +241,13 @@ export function CorbeauAction({ state, alivePlayers, currentPlayer, allPlayers, 
                 <p style={{ color: '#4a3660', fontSize: '0.6rem', fontStyle: 'italic', fontFamily: '"IM Fell English", serif' }}>
                   "{corruptedHint.corruptedText}"
                 </p>
+                {corruptedHint.imageUrl && (
+                  <img src={corruptedHint.imageUrl} alt="" className="w-full rounded mt-1.5" style={{ maxHeight: '120px', objectFit: 'cover' }} />
+                )}
               </div>
               <div className="flex flex-col gap-2 w-full">
                 <motion.button whileTap={{ scale: 0.95 }}
-                  onClick={() => { onCorbeauTarget(pendingCorbeauTarget!, corruptedHint.corruptedText); setPendingCorbeauTarget(null); }}
+                  onClick={() => { onCorbeauTarget(pendingCorbeauTarget!, corruptedHint.corruptedText, corruptedHint.imageUrl); setPendingCorbeauTarget(null); }}
                   className="w-full flex items-center justify-center gap-1.5 px-4 py-1.5 rounded-lg"
                   style={{ background: '#4a3660', color: '#f0e6ff', fontSize: '0.6rem', fontFamily: '"Cinzel", serif' }}>
                   <Send size={11} /> Envoyer
@@ -288,6 +290,9 @@ export function CorbeauAction({ state, alivePlayers, currentPlayer, allPlayers, 
               <p style={{ color: t.textDim, fontSize: '0.7rem', fontStyle: 'italic', fontFamily: '"IM Fell English", serif' }}>
                 "{corruptedHint.corruptedText}"
               </p>
+              {corruptedHint.imageUrl && (
+                <img src={corruptedHint.imageUrl} alt="" className="w-full rounded-lg mt-2" style={{ maxHeight: '160px', objectFit: 'cover' }} />
+              )}
             </div>
           ) : (
             <p style={{ color: t.textDim, fontSize: '0.6rem', fontStyle: 'italic' }}>Aucun indice disponible.</p>

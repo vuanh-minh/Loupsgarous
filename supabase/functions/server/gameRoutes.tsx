@@ -8,6 +8,8 @@ import {
   GM_PASSWORD, GAMES_LIST_KEY,
   gameStateKey, gameHeartbeatsKey, shortcodeKey,
   generateGameId,
+  capEvents, batchSaveShortCodes,
+  getCachedShortCode, setCachedShortCode,
 } from "./serverHelpers.tsx";
 
 export const gameRoutes = new Hono();
@@ -193,35 +195,108 @@ gameRoutes.post("/make-server-2c00868b/game/state", async (c) => {
           if (!existing_dh) {
             dhMap.set(dh.id, dh);
           } else {
-            // Prefer revealed=true (quest rewards should never be lost)
-            if (dh.revealed && !existing_dh.revealed) {
-              dhMap.set(dh.id, { ...existing_dh, ...dh });
-            }
+            // Merge: prefer revealed=true + union grantedToPlayerIds arrays
+            const merged = { ...existing_dh, ...dh };
+            // Union grantedToPlayerIds from both sides
+            const gmIds: number[] = existing_dh.grantedToPlayerIds || (existing_dh.revealed && existing_dh.grantedToPlayerId != null ? [existing_dh.grantedToPlayerId] : []);
+            const srvIds: number[] = dh.grantedToPlayerIds || (dh.revealed && dh.grantedToPlayerId != null ? [dh.grantedToPlayerId] : []);
+            merged.grantedToPlayerIds = [...new Set([...gmIds, ...srvIds])];
+            if (dh.revealed || existing_dh.revealed) merged.revealed = true;
+            dhMap.set(dh.id, merged);
           }
         }
         gameState.dynamicHints = Array.from(dhMap.values());
       }
-    }
-    await kv.set(key, gameState);
-    // Update shortcode → gameId mappings
-    if (gameId && gameState?.players) {
-      const shortcodes: string[] = [];
-      for (const player of gameState.players) {
-        if (player.shortCode) {
-          await kv.set(shortcodeKey(player.shortCode), gameId);
-          shortcodes.push(player.shortCode);
-        }
-      }
-      // Also map lobby player shortCodes (pre-game join flow)
-      if (gameState.lobbyPlayers) {
-        for (const lp of gameState.lobbyPlayers) {
-          if (lp.shortCode && !shortcodes.includes(lp.shortCode)) {
-            await kv.set(shortcodeKey(lp.shortCode), gameId);
-            shortcodes.push(lp.shortCode);
+
+      // quests: merge by ID — preserve player-driven fields (playerStatuses, playerAnswers,
+      // playerResults, collaborativeVotes, rewardHintIds) from server, use GM for structural fields.
+      const srvQuests: any[] = Array.isArray(existing.quests) ? existing.quests : [];
+      const gmQuests: any[] = Array.isArray(gameState.quests) ? gameState.quests : [];
+      if (srvQuests.length > 0 || gmQuests.length > 0) {
+        const srvQuestMap = new Map<number, any>();
+        for (const q of srvQuests) srvQuestMap.set(q.id, q);
+        gameState.quests = gmQuests.map((gmQ: any) => {
+          const srvQ = srvQuestMap.get(gmQ.id);
+          if (!srvQ) return gmQ;
+          // Merge player-driven fields from server into GM quest
+          const mergedTasks = (gmQ.tasks || []).map((gmTask: any) => {
+            const srvTask = (srvQ.tasks || []).find((t: any) => t.id === gmTask.id);
+            if (!srvTask) return gmTask;
+            // Union playerAnswers and playerResults from both
+            const mergedAnswers = { ...(gmTask.playerAnswers || {}), ...(srvTask.playerAnswers || {}) };
+            const mergedResults = { ...(gmTask.playerResults || {}), ...(srvTask.playerResults || {}) };
+            return { ...gmTask, playerAnswers: mergedAnswers, playerResults: mergedResults };
+          });
+          // Merge playerStatuses: prefer more advanced statuses (success/fail > pending > active)
+          const statusPriority: Record<string, number> = { 'active': 0, 'pending-resolution': 1, 'fail': 2, 'success': 3 };
+          const mergedStatuses = { ...(gmQ.playerStatuses || {}) };
+          for (const [pid, status] of Object.entries(srvQ.playerStatuses || {})) {
+            const gmPriority = statusPriority[mergedStatuses[pid] || 'active'] ?? 0;
+            const srvPriority = statusPriority[status as string] ?? 0;
+            if (srvPriority > gmPriority) mergedStatuses[pid] = status;
+          }
+          return {
+            ...gmQ,
+            tasks: mergedTasks,
+            playerStatuses: mergedStatuses,
+            collaborativeVotes: { ...(gmQ.collaborativeVotes || {}), ...(srvQ.collaborativeVotes || {}) },
+            rewardHintIds: { ...(gmQ.rewardHintIds || {}), ...(srvQ.rewardHintIds || {}) },
+            playerResolvedInPhase: { ...(gmQ.playerResolvedInPhase || {}), ...(srvQ.playerResolvedInPhase || {}) },
+            // Preserve hidden=false from server if server unhid (e.g. auto-assign chain quest)
+            hidden: gmQ.hidden === false || srvQ.hidden === false ? false : gmQ.hidden,
+            // Preserve collaborative groups from server (groups may have been created by auto-assign)
+            collaborativeGroups: (srvQ.collaborativeGroups || []).length >= (gmQ.collaborativeGroups || []).length
+              ? srvQ.collaborativeGroups
+              : gmQ.collaborativeGroups,
+          };
+        });
+        // Add any server-only quests (e.g. auto-unhidden chain quests not in GM state)
+        for (const srvQ of srvQuests) {
+          if (!gmQuests.some((gq: any) => gq.id === srvQ.id)) {
+            gameState.quests.push(srvQ);
           }
         }
       }
-      console.log(`Saved ${shortcodes.length} shortcode mappings for game ${gameId}:`, shortcodes.join(', '));
+
+      // questAssignments: union per player (server may have auto-assigned quests)
+      const srvAssignments: Record<string, number[]> = existing.questAssignments || {};
+      const gmAssignments: Record<string, number[]> = gameState.questAssignments || {};
+      const mergedAssignments: Record<string, number[]> = {};
+      const allPlayerIds = new Set([...Object.keys(srvAssignments), ...Object.keys(gmAssignments)]);
+      for (const pid of allPlayerIds) {
+        const srvIds = srvAssignments[pid] || [];
+        const gmIds = gmAssignments[pid] || [];
+        mergedAssignments[pid] = [...new Set([...gmIds, ...srvIds])];
+      }
+      gameState.questAssignments = mergedAssignments;
+
+      // questCompletionsThisPhase: take max per player (server increments on quest success)
+      const srvCompletions: Record<string, number> = existing.questCompletionsThisPhase || {};
+      const gmCompletions: Record<string, number> = gameState.questCompletionsThisPhase || {};
+      const mergedCompletions: Record<string, number> = { ...gmCompletions };
+      for (const [pid, count] of Object.entries(srvCompletions)) {
+        mergedCompletions[pid] = Math.max(mergedCompletions[pid] || 0, count as number);
+      }
+      gameState.questCompletionsThisPhase = mergedCompletions;
+    }
+    // Increment version to signal a write occurred (used by withGameLock optimistic check)
+    gameState._kvVersion = (gameState._kvVersion || 0) + 1;
+    // Cap events array to prevent unbounded growth
+    capEvents(gameState);
+    // Warn if state is getting large (helps detect unbounded growth early)
+    const stateSize = JSON.stringify(gameState).length;
+    if (stateSize > 500_000) {
+      console.log(`⚠️ Game state for ${gameId} is ${Math.round(stateSize / 1024)}KB — consider pruning voteHistory/phaseDeathHistory`);
+    }
+    await kv.set(key, gameState);
+    // Update shortcode → gameId mappings (batched single write instead of N sequential)
+    if (gameId && gameState?.players) {
+      const shortcodes = await batchSaveShortCodes(
+        gameState.players,
+        gameState.lobbyPlayers,
+        gameId,
+      );
+      console.log(`Saved ${shortcodes.length} shortcode mappings for game ${gameId} (batched):`, shortcodes.join(', '));
     } else {
       console.log(`POST /game/state: gameId=${gameId}, players count=${gameState?.players?.length ?? 0} — skipped shortcode mappings`);
     }
@@ -276,11 +351,15 @@ gameRoutes.get("/make-server-2c00868b/game/state", async (c) => {
         return c.json({ gameState: null, gameId: null });
       }
     } else if (shortCode) {
-      const gid = await kv.get(shortcodeKey(shortCode));
-      console.log(`GET /game/state: shortCode=${shortCode}, KV lookup key=${shortcodeKey(shortCode)}, resolved=${gid}`);
+      // Check in-memory cache first (avoids KV read entirely)
+      const cachedGid = getCachedShortCode(shortCode);
+      const gid = cachedGid || await kv.get(shortcodeKey(shortCode));
+      console.log(`GET /game/state: shortCode=${shortCode}, cached=${!!cachedGid}, resolved=${gid}`);
       if (gid) {
         key = gameStateKey(gid as string);
         resolvedGameId = gid as string;
+        // Populate cache if it was a KV hit
+        if (!cachedGid) setCachedShortCode(shortCode, gid as string);
       } else {
         console.log(`GET /game/state: shortCode=${shortCode} not in KV, scanning all games...`);
         const gamesList = (await kv.get(GAMES_LIST_KEY)) || [];
@@ -293,6 +372,7 @@ gameRoutes.get("/make-server-2c00868b/game/state", async (c) => {
               resolvedGameId = game.id;
               console.log(`GET /game/state: Found shortCode=${shortCode} in game ${game.id} via scan`);
               await kv.set(shortcodeKey(shortCode), game.id);
+              setCachedShortCode(shortCode, game.id);
               break;
             }
           }
@@ -304,6 +384,7 @@ gameRoutes.get("/make-server-2c00868b/game/state", async (c) => {
               resolvedGameId = game.id;
               console.log(`GET /game/state: Found shortCode=${shortCode} in lobbyPlayers of game ${game.id} via scan`);
               await kv.set(shortcodeKey(shortCode), game.id);
+              setCachedShortCode(shortCode, game.id);
               break;
             }
           }

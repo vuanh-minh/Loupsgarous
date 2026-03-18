@@ -245,7 +245,7 @@ export function useDeathAnnouncement(
       ? allDeaths.filter((d) => d.player.id !== playerId)
       : allDeaths;
 
-    const allNewPlayerJoinIds = phases.flatMap((p) => p.newPlayerJoinIds ?? []);
+    const allNewPlayerJoinIds = [...new Set(phases.flatMap((p) => p.newPlayerJoinIds ?? []))];
     // Detect revived players from events containing "ressuscite"
     const allRevivedPlayerIds: number[] = [];
     for (const record of unseen) {
@@ -338,6 +338,8 @@ export function DeathAnnouncementModal({
   voteHistory,
   allPlayers,
   lastWillUsed,
+  maireSuccessionPending,
+  onChooseSuccessor,
 }: {
   data: DeathAnnouncementData;
   onDismiss: () => void;
@@ -350,6 +352,10 @@ export function DeathAnnouncementModal({
   allPlayers?: Player[];
   /** Track which dead players have used their one-time last-will vote */
   lastWillUsed?: Record<number, boolean>;
+  /** Maire succession: if true, dying Maire must pick a successor */
+  maireSuccessionPending?: boolean;
+  /** Callback when the dying Maire picks a successor */
+  onChooseSuccessor?: (successorId: number) => void;
 }) {
   // ── Personal death detection ──
   // Check if the current player is among the announced dead
@@ -379,12 +385,17 @@ export function DeathAnnouncementModal({
   }, [hasPersonalDeath, voteHistory, allPlayers, myDeathPhase, myDeath, currentPlayerId]);
 
   // View mode: personal first, then classic
-  const [viewMode, setViewMode] = useState<'personal' | 'classic'>(hasPersonalDeath ? 'personal' : 'classic');
+  const [viewMode, setViewMode] = useState<'personal' | 'classic' | 'succession'>(hasPersonalDeath ? 'personal' : 'classic');
 
   // Reset viewMode when data changes (new announcement)
   useEffect(() => {
     setViewMode(hasPersonalDeath ? 'personal' : 'classic');
   }, [data, hasPersonalDeath]);
+
+  // Succession state
+  const isMaireAndPending = !!maireSuccessionPending && !!onChooseSuccessor && hasPersonalDeath;
+  const [successionTarget, setSuccessionTarget] = useState<number | null>(null);
+  const aliveCandidates = (allPlayers ?? []).filter((p) => p.alive && p.id !== currentPlayerId);
 
   const contentRef = useRef<HTMLDivElement>(null);
   const soundPlayedRef = useRef(false);
@@ -741,22 +752,23 @@ export function DeathAnnouncementModal({
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
                 whileTap={{ scale: 0.96 }}
-                onClick={() => setViewMode('classic')}
+                onClick={() => isMaireAndPending ? setViewMode('succession') : setViewMode('classic')}
                 className="w-full flex items-center justify-center gap-2 py-3 rounded-xl cursor-pointer"
                 style={{
-                  background: 'linear-gradient(135deg, rgba(196,30,58,0.18), rgba(196,30,58,0.08))',
+                  background: isMaireAndPending
+                    ? 'linear-gradient(135deg, #d4a843, #b8922e)'
+                    : 'linear-gradient(135deg, rgba(196,30,58,0.18), rgba(196,30,58,0.08))',
                   borderWidth: 1,
                   borderStyle: 'solid',
-                  borderColor: personalAccentBorder,
-                  color: '#e8dcc8',
+                  borderColor: isMaireAndPending ? 'rgba(212,168,67,0.6)' : personalAccentBorder,
+                  color: isMaireAndPending ? 'white' : '#e8dcc8',
                   fontFamily: '"Cinzel", serif',
                   fontSize: '0.7rem',
                   fontWeight: 600,
                   letterSpacing: '0.04em',
                 }}
               >
-                Suivant
-                <ArrowRight size={14} />
+                {isMaireAndPending ? (<><span>👑</span> Choisir un successeur</>) : (<>Suivant <ArrowRight size={14} /></>)}
               </motion.button>
             </div>
           </motion.div>
@@ -767,8 +779,126 @@ export function DeathAnnouncementModal({
   }
 
   /* ═══════════════════════════════════════════
-     CLASSIC DEATH ANNOUNCEMENT VIEW
+     MAIRE SUCCESSION PICKER VIEW
      ═══════════════════════════════════════════ */
+  if (viewMode === 'succession' && isMaireAndPending) {
+    return createPortal(
+      <AnimatePresence>
+        <motion.div
+          key="succession-overlay"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          transition={{ duration: 0.4 }}
+          className="fixed inset-0 z-[9999] flex items-center justify-center"
+          style={{ background: 'rgba(0,0,0,0.90)', backdropFilter: 'blur(10px)' }}
+        >
+          <motion.div
+            key="succession-content"
+            initial={{ opacity: 0, scale: 0.9, y: 30 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.9, y: 30 }}
+            transition={{ duration: 0.4 }}
+            onClick={(e) => e.stopPropagation()}
+            className="w-[90%] max-w-sm rounded-2xl p-6 flex flex-col"
+            style={{
+              background: '#0f1629',
+              border: '2px solid rgba(212,168,67,0.4)',
+              maxHeight: 'calc(100dvh - 2rem)',
+            }}
+          >
+            <div className="text-center flex-shrink-0">
+              <span className="text-4xl block mb-2">👑</span>
+              <h2 style={{ fontFamily: '"Cinzel", serif', color: '#d4a843', fontSize: '1rem' }}>
+                Designez votre successeur
+              </h2>
+              <p style={{ color: t.textMuted, fontSize: '0.7rem', marginTop: '0.25rem' }}>
+                Choisissez le prochain Maire du village
+              </p>
+            </div>
+            <div className="flex-1 min-h-0 overflow-y-auto mt-4 -mx-1 px-1">
+              <div className="grid grid-cols-3 gap-3">
+                {aliveCandidates.map((p) => (
+                  <motion.button
+                    key={p.id}
+                    whileTap={{ scale: 0.95 }}
+                    onClick={() => setSuccessionTarget(p.id)}
+                    className="flex flex-col items-center gap-1.5 p-3 rounded-xl cursor-pointer transition-all"
+                    style={{
+                      background: successionTarget === p.id
+                        ? 'rgba(212,168,67,0.15)'
+                        : 'rgba(192,200,216,0.05)',
+                      border: successionTarget === p.id
+                        ? '2px solid rgba(212,168,67,0.5)'
+                        : '1px solid rgba(192,200,216,0.1)',
+                    }}
+                  >
+                    <div className="w-12 h-12 rounded-full overflow-hidden">
+                      <PAvatar player={p} size="text-lg" />
+                    </div>
+                    <span style={{
+                      fontFamily: '"Cinzel", serif',
+                      color: successionTarget === p.id ? '#d4a843' : '#e8dcc8',
+                      fontSize: '0.6rem',
+                      fontWeight: 600,
+                      textAlign: 'center',
+                      lineHeight: 1.2,
+                      wordBreak: 'break-word',
+                    }}>
+                      {p.name}
+                    </span>
+                  </motion.button>
+                ))}
+              </div>
+            </div>
+            <div className="flex flex-col gap-2 mt-4 flex-shrink-0">
+              <motion.button
+                whileTap={{ scale: 0.96 }}
+                disabled={successionTarget === null}
+                onClick={() => {
+                  if (successionTarget !== null && onChooseSuccessor) {
+                    onChooseSuccessor(successionTarget);
+                    onDismiss();
+                  }
+                }}
+                className="w-full py-3 rounded-xl cursor-pointer"
+                style={{
+                  background: successionTarget !== null
+                    ? 'linear-gradient(135deg, #d4a843, #b8922e)'
+                    : 'rgba(192,200,216,0.1)',
+                  color: successionTarget !== null ? 'white' : 'rgba(192,200,216,0.4)',
+                  fontFamily: '"Cinzel", serif',
+                  fontSize: '0.8rem',
+                  fontWeight: 600,
+                  opacity: successionTarget !== null ? 1 : 0.5,
+                }}
+              >
+                Nommer Maire
+              </motion.button>
+              <button
+                onClick={() => setViewMode('classic')}
+                className="w-full py-2 rounded-xl cursor-pointer"
+                style={{
+                  background: 'transparent',
+                  color: 'rgba(192,200,216,0.4)',
+                  fontFamily: '"Cinzel", serif',
+                  fontSize: '0.6rem',
+                  fontWeight: 600,
+                }}
+              >
+                Passer (le GM choisira)
+              </button>
+            </div>
+          </motion.div>
+        </motion.div>
+      </AnimatePresence>,
+      document.body,
+    );
+  }
+
+  /* ═══════════════════════════════════════════
+     CLASSIC DEATH ANNOUNCEMENT VIEW
+     ══════════════════════════════════════════ */
 
   return createPortal(
     <AnimatePresence>

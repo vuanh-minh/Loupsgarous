@@ -42,9 +42,11 @@ export interface DynamicHint {
   text: string;             // May contain {role} placeholder
   imageUrl?: string;        // optional image uploaded by the GM
   priority: 1 | 2 | 3;     // Priority level: 1 = first revealed, 2 = after P1, 3 = after P2
-  revealed: boolean;
+  revealed: boolean;        // true if granted to at least one player (kept for backwards compat)
   revealedAt?: string;
   createdAt: string;
+  /** IDs of players who have been granted this hint (supports multi-player grants) */
+  grantedToPlayerIds?: number[];
 }
 
 /* ── Quest System ── */
@@ -62,6 +64,23 @@ export interface QuestTask {
   referencedPlayerId?: number;              // optional: player this task is about (avatar shown next to question)
   playerAnswers: Record<number, string>;    // playerId -> submitted answer
   playerResults: Record<number, boolean>;   // playerId -> true/false (set on resolution)
+  templateId?: number;                      // reference to TaskTemplate.id in the task library
+}
+
+/** Reusable task template stored in the task library */
+export interface TaskTemplate {
+  id: number;
+  question: string;
+  inputType: QuestTaskInputType;
+  choices?: string[];
+  correctAnswer: string;
+  imageUrl?: string;
+  referencedPlayerId?: number;
+  createdAt: string;
+  /** Source gallery ID (number for per-player, 'pretask' for general pre-tasks) */
+  gallerySourceId?: number | string;
+  /** Original pre-task ID from gallery (for deduplication) */
+  originalPreTaskId?: number;
 }
 
 export interface Quest {
@@ -80,6 +99,10 @@ export interface Quest {
   rewardHintIds?: Record<number, number>;       // playerId -> hintId rewarded on success
   targetTags?: string[];                        // if set, only players with at least one of these tags are eligible (OR logic)
   distributionOrder?: number | 'random' | 'available';        // numeric = priority (lower first), 'random' = random pick (default), 'available' = auto-assigned to all eligible players
+  /** Tracks in which phase each player's quest was resolved: playerId -> "turn-phase" key */
+  playerResolvedInPhase?: Record<number, string>;
+  /** Original gallery pre-quest ID (for deduplication during auto-import) */
+  galleryPreQuestId?: number;
 }
 
 export type GamePhase = 'night' | 'day';
@@ -120,6 +143,7 @@ export interface GameState {
   winner: 'village' | 'werewolf' | 'lovers' | null;
   werewolfTarget: number | null;
   werewolfVotes: Record<number, number>;
+  werewolfVoteMessages: Record<number, string>; // wolfId -> optional message when voting
   werewolfTargets: number[];          // all resolved wolf kill targets (top N by vote)
   wolfKillsPerNight: number;          // max wolf kills per night (GM setting, default 1)
   seerTargets: Record<number, number>;          // seerPlayerId -> targetPlayerId
@@ -164,6 +188,12 @@ export interface GameState {
   maireVotes: Record<number, number>; // voterId -> candidateId during Maire election
   maireCandidates: number[];         // player IDs who declared candidacy for Maire
   maireCampaignMessages: Record<number, string>; // playerId -> campaign message for Maire election
+  /** Mayor succession: pending flag when the current Maire dies */
+  maireSuccessionPending: boolean;
+  /** Player ID of the dying Maire who must choose a successor */
+  maireSuccessionFromId: number | null;
+  /** Phase during which the Maire died (determines when successor's role activates) */
+  maireSuccessionPhase: GamePhase | null;
   /** Alive snapshot at the start of the current phase (used to compute deaths at transition) */
   aliveAtPhaseStart?: Record<number, boolean>;
   /** Most recent phase transition's death data -- consumed by player-side announcements */
@@ -216,4 +246,6 @@ export interface GameState {
   villagePresentIds?: number[];
   /** Dynamic hints: GM-created hints targeting specific players, distributed by team */
   dynamicHints?: DynamicHint[];
+  /** Task library: reusable task templates for quest creation */
+  taskLibrary?: TaskTemplate[];
 }

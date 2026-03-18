@@ -16,7 +16,7 @@ import { getRoleById, type RoleDefinition } from '../../data/roles';
 import { useServerActions } from '../../context/useServerAction';
 import { useRealtimeSync } from '../../context/useRealtimeSync';
 import { gameTheme, gameThemeDead } from '../../context/gameTheme';
-import { QuestsPanel, HunterShotModal, HypothesisPickerModal } from './player/JournalComponents';
+import { QuestsPanel, HunterShotModal, MaireSuccessionModal, HypothesisPickerModal } from './player/JournalComponents';
 import { PhaseTimerDisplay } from '../PhaseTimer';
 import { useNotifications, sendPushNotifications } from '../../context/useNotifications';
 import { API_BASE, publicAnonKey } from '../../context/apiConfig';
@@ -90,7 +90,7 @@ export function PlayerPage() {
     serverCupidLink, serverMarkRoleRevealed, serverSetGuardTarget,
     serverSetCorbeauTarget, serverRevealHint,
     serverDeclareCandidacy, serverWithdrawCandidacy,
-    serverSetHunterPreTarget, serverSetEarlyVote,
+    serverSetHunterPreTarget, serverConfirmHunterShot, serverSetEarlyVote,
     serverSetFoxTarget,
     serverSetConciergeTarget,
     serverSetLastWillUsed,
@@ -240,7 +240,17 @@ export function PlayerPage() {
   const [journalOpen, setJournalOpen] = useState(false);
   const [maireSuccessDismissed, setMaireSuccessDismissed] = useState(false);
   const [openQuestId, setOpenQuestId] = useState<number | null>(null);
-  const [readQuestIds, setReadQuestIds] = useState<Set<number>>(new Set());
+
+  // Persist readQuestIds to localStorage so they survive page refresh / phone sleep
+  const readQuestStorageKey = shortCode ? `lg-readQuests-${shortCode}` : null;
+  const [readQuestIds, setReadQuestIds] = useState<Set<number>>(() => {
+    if (!readQuestStorageKey) return new Set();
+    try {
+      const raw = localStorage.getItem(readQuestStorageKey);
+      if (raw) return new Set(JSON.parse(raw) as number[]);
+    } catch { /* ignore */ }
+    return new Set();
+  });
 
   // Mark quest as read when opening detail
   const handleOpenQuest = useCallback((questId: number) => {
@@ -249,9 +259,12 @@ export function PlayerPage() {
       if (prev.has(questId)) return prev;
       const next = new Set(prev);
       next.add(questId);
+      if (readQuestStorageKey) {
+        try { localStorage.setItem(readQuestStorageKey, JSON.stringify([...next])); } catch { /* ignore */ }
+      }
       return next;
     });
-  }, []);
+  }, [readQuestStorageKey]);
 
   // Compute unread quest count for tab badge
   const myAssignedQuestIds = currentPlayerId !== null
@@ -926,7 +939,7 @@ export function PlayerPage() {
           style={{ width: containerWidth > 0 ? panelCount * containerWidth : `${panelCount * 100}%` }}
         >
           {/* Panel 1 — Game (card flip is inside GamePanel) */}
-          <div style={{ width: containerWidth > 0 ? containerWidth : `${100 / panelCount}%` }} className="h-full overflow-y-auto">
+          <div style={{ width: containerWidth > 0 ? containerWidth : `${100 / panelCount}%`, WebkitOverflowScrolling: 'touch', overscrollBehaviorY: 'contain' }} className="h-full overflow-y-auto">
                   {(currentPlayer?.alive ?? false) && <GamePanel
                     alivePlayers={presentAlivePlayers}
                     phase={isPracticeMode ? 'night' : state.phase}
@@ -988,6 +1001,12 @@ export function PlayerPage() {
                       markActionSent();
                       serverWithdrawCandidacy(playerId).then(handlePostAction);
                     }}
+                    onSetHypothesis={(targetPlayerId, roleId) => {
+                      if (currentPlayerId !== null) {
+                        setHypothesis(currentPlayerId, targetPlayerId, roleId);
+                      }
+                    }}
+                    gameId={state.gameId || undefined}
                     isFlipped={isFlipped}
                     onFlipBack={() => {
                       setIsFlipped(false);
@@ -1007,10 +1026,10 @@ export function PlayerPage() {
                             setHasSeenNight1Recap(true);
                             setIsFlipped(false);
                           }}
-                          onWerewolfVote={(wolfId, targetId) => {
+                          onWerewolfVote={(wolfId, targetId, message) => {
                             markActionSent();
-                            castWerewolfVote(wolfId, targetId);
-                            serverCastWerewolfVote(wolfId, targetId).then(handlePostAction);
+                            castWerewolfVote(wolfId, targetId, message);
+                            serverCastWerewolfVote(wolfId, targetId, message).then(handlePostAction);
                           }}
                           t={t}
                         />
@@ -1057,10 +1076,10 @@ export function PlayerPage() {
                           }}
                           onWerewolfVote={isSimulationMode
                             ? (_wolfId, targetId) => { setPWolfVote(targetId); }
-                            : (wolfId, targetId) => {
+                            : (wolfId, targetId, message) => {
                               markActionSent();
-                              castWerewolfVote(wolfId, targetId);
-                              serverCastWerewolfVote(wolfId, targetId).then(handlePostAction);
+                              castWerewolfVote(wolfId, targetId, message);
+                              serverCastWerewolfVote(wolfId, targetId, message).then(handlePostAction);
                               if (state.turn === 1 && !isDiscoveryRealMode) {
                                 setHasSeenNight1Recap(true);
                               }
@@ -1120,20 +1139,20 @@ export function PlayerPage() {
                             }
                           }
                           onCorbeauTarget={isSimulationMode
-                            ? (_targetId, _msg) => { /* practice — no-op */ }
-                            : (targetId, message) => {
+                            ? (_targetId, _msg, _img) => { /* practice — no-op */ }
+                            : (targetId, message, imageUrl) => {
                               markActionSent();
                               if (!localMode) {
-                                const hintId = Date.now() + Math.floor(Math.random() * 10000);
+                                const hintId = Date.now() + Math.floor(Math.random() * 100000);
                                 updateState((s) => ({
                                   ...s,
                                   corbeauTargets: { ...(s.corbeauTargets ?? {}), [currentPlayer.id]: targetId },
                                   corbeauMessages: { ...(s.corbeauMessages ?? {}), [currentPlayer.id]: message },
-                                  hints: [...(s.hints ?? []), { id: hintId, text: message, createdAt: new Date().toISOString() }],
+                                  hints: [...(s.hints ?? []), { id: hintId, text: message, imageUrl, createdAt: new Date().toISOString() }],
                                   playerHints: [...(s.playerHints ?? []), { hintId, playerId: targetId, sentAt: new Date().toISOString(), revealed: false }],
                                 }));
                               }
-                              serverSetCorbeauTarget(currentPlayer.id, targetId, message).then(handlePostAction);
+                              serverSetCorbeauTarget(currentPlayer.id, targetId, message, imageUrl).then(handlePostAction);
                             }
                           }
                           onHunterPreTarget={isSimulationMode
@@ -1217,7 +1236,7 @@ export function PlayerPage() {
           </div>
 
           {/* Panel 2 — Quêtes */}
-          <div ref={questsScrollRef} style={{ width: containerWidth > 0 ? containerWidth : `${100 / panelCount}%` }} className="h-full overflow-y-auto">
+          <div ref={questsScrollRef} style={{ width: containerWidth > 0 ? containerWidth : `${100 / panelCount}%`, WebkitOverflowScrolling: 'touch', overscrollBehaviorY: 'contain' }} className="h-full overflow-y-auto">
             <PlayerQuestsPanel
               state={state}
               currentPlayerId={currentPlayerId}
@@ -1254,7 +1273,7 @@ export function PlayerPage() {
           </div>
 
           {/* Panel 3 — Village (player list / role reveal) */}
-          <div ref={villagePanelRef} style={{ width: containerWidth > 0 ? containerWidth : `${100 / panelCount}%` }} className="h-full overflow-y-auto">
+          <div ref={villagePanelRef} style={{ width: containerWidth > 0 ? containerWidth : `${100 / panelCount}%`, WebkitOverflowScrolling: 'touch', overscrollBehaviorY: 'contain' }} className="h-full overflow-y-auto">
             {state.roleRevealDone === false ? (
               <RoleRevealVillagePanel
                 players={state.players}
@@ -1346,6 +1365,11 @@ export function PlayerPage() {
                       setOpenQuestId(null);
                       setTimeout(() => navigateToPlayer(playerId), 50);
                     }}
+                    onSetHypothesis={(targetPlayerId, roleId) => {
+                      if (currentPlayerId !== null) {
+                        setHypothesis(currentPlayerId, targetPlayerId, roleId);
+                      }
+                    }}
                     t={t}
                   />
                 ) : (
@@ -1357,6 +1381,11 @@ export function PlayerPage() {
                     onAnswerTask={(questId, taskId, answer) => {
                       markActionSent();
                       serverAnswerQuestTask(questId, taskId, answer, currentPlayerId).then(handlePostAction);
+                    }}
+                    onSetHypothesis={(targetPlayerId, roleId) => {
+                      if (currentPlayerId !== null) {
+                        setHypothesis(currentPlayerId, targetPlayerId, roleId);
+                      }
                     }}
                     t={t}
                   />
@@ -1438,6 +1467,12 @@ export function PlayerPage() {
                     setJournalOpen(false);
                     navigateToPlayer(playerId);
                   }}
+                  onSetHypothesis={(targetPlayerId, roleId) => {
+                    if (currentPlayerId !== null) {
+                      setHypothesis(currentPlayerId, targetPlayerId, roleId);
+                    }
+                  }}
+                  gameId={state.gameId || undefined}
                 />
               </div>
             </motion.div>
@@ -1472,7 +1507,11 @@ export function PlayerPage() {
                   setConciergeRevealing(false);
                   if (isSimulationMode) resetPractice();
                 } else if (tab.id === 'quests' && activePanel === 'quests') {
-                  questsScrollRef.current?.scrollTo({ top: 0, behavior: 'smooth' });
+                  if (openQuestId !== null) {
+                    setOpenQuestId(null);
+                  } else {
+                    questsScrollRef.current?.scrollTo({ top: 0, behavior: 'smooth' });
+                  }
                 } else {
                   setActivePanel(tab.id);
                 }
@@ -1557,7 +1596,45 @@ export function PlayerPage() {
             players={state.players}
             hunterId={state.hunterShooterId}
             preTarget={state.hunterShooterId !== null ? (state.hunterPreTargets || {})[state.hunterShooterId] ?? null : null}
-            onShoot={(targetId) => confirmHunterShot(targetId)}
+            onShoot={(targetId) => {
+              confirmHunterShot(targetId);
+              if (!isSimulationMode && currentPlayerId !== null) {
+                serverConfirmHunterShot(currentPlayerId, targetId).catch((err: any) =>
+                  console.log('Hunter shot server error:', err)
+                );
+              }
+            }}
+            t={t}
+          />
+        )}
+      </AnimatePresence>
+
+      {/* Maire Succession Modal — only shown to the dying Maire */}
+      <AnimatePresence>
+        {state.maireSuccessionPending && currentPlayerId !== null && currentPlayerId === state.maireSuccessionFromId && (
+          <MaireSuccessionModal
+            players={state.players}
+            dyingMaireId={state.maireSuccessionFromId}
+            onChooseSuccessor={(successorId) => {
+              const successor = state.players.find(p => p.id === successorId);
+              updateState(s => ({
+                ...s,
+                maireId: successorId,
+                maireSuccessionPending: false,
+                maireSuccessionFromId: null,
+                maireSuccessionPhase: null,
+                events: [...s.events, {
+                  id: Date.now() + Math.floor(Math.random() * 100000),
+                  turn: s.turn, phase: s.phase,
+                  message: `👑 ${successor?.name || 'Un joueur'} a ete designe(e) nouveau Maire.`,
+                  timestamp: new Date().toISOString(),
+                }],
+              }));
+              if (state.gameId) {
+                const targets = state.players.filter(p => p.alive).map(p => p.shortCode);
+                sendPushNotifications(state.gameId, targets, 'Loup-Garou', `👑 ${successor?.name || 'Un joueur'} est le nouveau Maire !`, 'maire-succession');
+              }
+            }}
             t={t}
           />
         )}
@@ -1616,6 +1693,27 @@ export function PlayerPage() {
           voteHistory={state.voteHistory}
           allPlayers={state.players}
           lastWillUsed={state.lastWillUsed}
+          maireSuccessionPending={state.maireSuccessionPending && currentPlayerId === state.maireSuccessionFromId}
+          onChooseSuccessor={(successorId) => {
+            const successor = state.players.find(p => p.id === successorId);
+            updateState(s => ({
+              ...s,
+              maireId: successorId,
+              maireSuccessionPending: false,
+              maireSuccessionFromId: null,
+              maireSuccessionPhase: null,
+              events: [...s.events, {
+                id: Date.now() + Math.floor(Math.random() * 100000),
+                turn: s.turn, phase: s.phase,
+                message: `👑 ${successor?.name || 'Un joueur'} a ete designe(e) nouveau Maire.`,
+                timestamp: new Date().toISOString(),
+              }],
+            }));
+            if (state.gameId) {
+              const targets = state.players.filter(p => p.alive).map(p => p.shortCode);
+              sendPushNotifications(state.gameId, targets, 'Loup-Garou', `👑 ${successor?.name || 'Un joueur'} est le nouveau Maire !`, 'maire-succession');
+            }
+          }}
         />
       )}
 

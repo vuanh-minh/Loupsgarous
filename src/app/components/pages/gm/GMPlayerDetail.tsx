@@ -5,7 +5,7 @@ import {
   Check, Heart, Star, BookOpen, ExternalLink,
   Clock, RefreshCw, Scroll, Dices,
   Tag, Camera, Bell, ChevronDown, Image,
-  Lightbulb, Send,
+  Lightbulb, Send, Swords, CheckCircle2, UserX, UserCheck,
 } from 'lucide-react';
 import { type Player } from '../../../context/GameContext';
 import { getRoleById, ROLES } from '../../../data/roles';
@@ -281,11 +281,13 @@ export function GMPlayerDetail() {
     }
   }, [selectedPlayerData, state.gameId, grantingHint, addEvent]);
 
-  // Count available dynamic hints for this player
+  // Count available dynamic hints for this player (hints not yet granted to them)
   const availableDynamicHintCount = useMemo(() => {
     const dh: DynamicHint[] = state.dynamicHints ?? [];
-    return dh.filter((h) => !h.revealed).length;
-  }, [state.dynamicHints]);
+    const pid = selectedPlayerData?.id;
+    if (pid == null) return 0;
+    return dh.filter((h) => !(h.grantedToPlayerIds ?? []).includes(pid)).length;
+  }, [state.dynamicHints, selectedPlayerData?.id]);
 
   return (
     <div className="max-w-2xl mx-auto w-full p-6">
@@ -450,6 +452,111 @@ export function GMPlayerDetail() {
           </div>
         </div>
       </motion.div>
+
+      {/* ── Actions status ── */}
+      {selectedPlayerData.alive && (() => {
+        const pid = selectedPlayerData.id;
+        const role = selectedPlayerData.role;
+        const nightActionRoles: Record<string, () => { done: boolean; label: string }> = {
+          'loup-garou': () => ({
+            done: state.werewolfVotes?.[pid] !== undefined,
+            label: state.werewolfVotes?.[pid] !== undefined
+              ? `A voté → ${state.players.find((p: Player) => p.id === state.werewolfVotes[pid])?.name || '?'}`
+              : 'En attente de vote',
+          }),
+          'voyante': () => ({
+            done: state.seerTargets?.[pid] !== undefined,
+            label: state.seerTargets?.[pid] !== undefined
+              ? `A sondé → ${state.players.find((p: Player) => p.id === state.seerTargets[pid])?.name || '?'}`
+              : 'En attente',
+          }),
+          'sorciere': () => {
+            const healed = !!(state.witchHealedThisNight || {})[pid];
+            const killed = state.witchKillTargets?.[pid] !== undefined;
+            return {
+              done: healed || killed,
+              label: healed || killed
+                ? [healed && 'Guérison', killed && `Poison → ${state.players.find((p: Player) => p.id === state.witchKillTargets?.[pid])?.name || '?'}`].filter(Boolean).join(' · ')
+                : 'Aucune potion',
+            };
+          },
+          'garde': () => ({
+            done: state.guardTargets?.[pid] !== undefined,
+            label: state.guardTargets?.[pid] !== undefined
+              ? `Protège → ${state.players.find((p: Player) => p.id === state.guardTargets[pid])?.name || '?'}`
+              : 'En attente',
+          }),
+          'cupidon': () => ({
+            done: (state.cupidLinkedBy || []).length > 0,
+            label: (state.cupidLinkedBy || []).length > 0 ? 'Amoureux liés' : 'En attente du lien',
+          }),
+          'corbeau': () => ({
+            done: state.corbeauTargets?.[pid] !== undefined,
+            label: state.corbeauTargets?.[pid] !== undefined
+              ? `Cible → ${state.players.find((p: Player) => p.id === state.corbeauTargets[pid])?.name || '?'}`
+              : 'En attente',
+          }),
+        };
+        const nightActionFn = nightActionRoles[role];
+        const hasNightRole = !!nightActionFn;
+        const nightAction = nightActionFn ? nightActionFn() : null;
+        const hasDayVoted = state.votes?.[pid] !== undefined;
+        const dayVoteTarget = hasDayVoted ? state.players.find((p: Player) => p.id === state.votes[pid]) : null;
+
+        return (
+          <div
+            className="rounded-xl p-3 mb-4 space-y-2"
+            style={{ background: 'rgba(147,130,220,0.04)', border: '1px solid rgba(147,130,220,0.15)' }}
+          >
+            <div className="flex items-center gap-2 mb-1">
+              <Swords size={14} style={{ color: '#a78bfa' }} />
+              <span style={{ fontFamily: '"Cinzel", serif', color: '#a78bfa', fontSize: '0.75rem', fontWeight: 600 }}>Actions</span>
+            </div>
+            {/* Night action */}
+            {hasNightRole && nightAction && (
+              <div
+                className="flex items-center gap-2 px-3 py-2 rounded-lg"
+                style={{
+                  background: nightAction.done ? 'rgba(107,142,90,0.06)' : 'rgba(234,179,8,0.05)',
+                  border: `1px solid ${nightAction.done ? 'rgba(107,142,90,0.2)' : 'rgba(234,179,8,0.2)'}`,
+                }}
+              >
+                <Moon size={12} style={{ color: nightAction.done ? '#6b8e5a' : '#eab308' }} />
+                <span style={{ fontSize: '0.7rem', color: t.textSecondary, fontFamily: '"Cinzel", serif' }}>Nuit</span>
+                <span className="ml-auto flex items-center gap-1.5" style={{ fontSize: '0.65rem', color: nightAction.done ? '#6b8e5a' : '#eab308' }}>
+                  {nightAction.done ? <CheckCircle2 size={12} /> : <Clock size={12} />}
+                  {nightAction.label}
+                </span>
+              </div>
+            )}
+            {!hasNightRole && (
+              <div
+                className="flex items-center gap-2 px-3 py-2 rounded-lg"
+                style={{ background: 'rgba(100,116,139,0.04)', border: '1px solid rgba(100,116,139,0.1)' }}
+              >
+                <Moon size={12} style={{ color: '#64748b' }} />
+                <span style={{ fontSize: '0.7rem', color: t.textSecondary, fontFamily: '"Cinzel", serif' }}>Nuit</span>
+                <span className="ml-auto" style={{ fontSize: '0.65rem', color: '#64748b' }}>Aucune action</span>
+              </div>
+            )}
+            {/* Day vote */}
+            <div
+              className="flex items-center gap-2 px-3 py-2 rounded-lg"
+              style={{
+                background: hasDayVoted ? 'rgba(107,142,90,0.06)' : 'rgba(234,179,8,0.05)',
+                border: `1px solid ${hasDayVoted ? 'rgba(107,142,90,0.2)' : 'rgba(234,179,8,0.2)'}`,
+              }}
+            >
+              <Vote size={12} style={{ color: hasDayVoted ? '#6b8e5a' : '#eab308' }} />
+              <span style={{ fontSize: '0.7rem', color: t.textSecondary, fontFamily: '"Cinzel", serif' }}>Vote du jour</span>
+              <span className="ml-auto flex items-center gap-1.5" style={{ fontSize: '0.65rem', color: hasDayVoted ? '#6b8e5a' : '#eab308' }}>
+                {hasDayVoted ? <CheckCircle2 size={12} /> : <Clock size={12} />}
+                {hasDayVoted ? `A voté → ${dayVoteTarget?.name || '?'}` : 'Pas encore voté'}
+              </span>
+            </div>
+          </div>
+        );
+      })()}
 
       {/* ── Distribute Quest Bar ── */}
       <div
@@ -722,6 +829,53 @@ export function GMPlayerDetail() {
           </p>
         )}
       </div>
+
+      {/* ── Away toggle ── */}
+      {selectedPlayerData.alive && (() => {
+        const presentIds = state.villagePresentIds || state.players.filter((p: Player) => p.alive).map((p: Player) => p.id);
+        const isAway = !presentIds.includes(selectedPlayerData.id);
+        return (
+          <div className="rounded-xl p-4 mb-5" style={{ background: isAway ? 'rgba(245,158,11,0.05)' : 'rgba(255,255,255,0.02)', border: `1px solid ${isAway ? 'rgba(245,158,11,0.2)' : 'rgba(255,255,255,0.06)'}` }}>
+            <button
+              onClick={() => {
+                updateState((s) => {
+                  const current = s.villagePresentIds || s.players.filter((p: Player) => p.alive).map((p: Player) => p.id);
+                  const away = !current.includes(selectedPlayerData.id);
+                  return {
+                    ...s,
+                    villagePresentIds: away
+                      ? [...current, selectedPlayerData.id]
+                      : current.filter((id: number) => id !== selectedPlayerData.id),
+                  };
+                });
+              }}
+              className="w-full flex items-center justify-between gap-3 group cursor-pointer"
+            >
+              <div className="flex items-center gap-2">
+                {isAway ? <UserX size={14} style={{ color: '#f59e0b' }} /> : <UserCheck size={14} style={{ color: '#6b8e5a' }} />}
+                <span style={{ fontFamily: '"Cinzel", serif', color: isAway ? '#f59e0b' : t.text, fontSize: '0.75rem', fontWeight: 600 }}>
+                  {isAway ? 'Absent' : 'Présent'}
+                </span>
+              </div>
+              <div
+                className="w-10 h-5 rounded-full relative transition-colors"
+                style={{ background: isAway ? 'rgba(245,158,11,0.3)' : 'rgba(107,142,90,0.3)' }}
+              >
+                <div
+                  className="w-4 h-4 rounded-full absolute top-0.5 transition-all"
+                  style={{
+                    background: isAway ? '#f59e0b' : '#6b8e5a',
+                    left: isAway ? '2px' : '22px',
+                  }}
+                />
+              </div>
+            </button>
+            <p style={{ color: t.textMuted, fontSize: '0.6rem', marginTop: '0.5rem' }}>
+              {isAway ? 'Ce joueur est marqué comme absent du village.' : 'Ce joueur est présent au village.'}
+            </p>
+          </div>
+        );
+      })()}
 
       {/* Avatar Gallery Modal */}
       <AvatarGalleryModal

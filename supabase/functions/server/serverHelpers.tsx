@@ -13,9 +13,76 @@ export const supabase = createClient(
 );
 
 // ── Constants ──
-export const GM_PASSWORD = "loupgarou";
+export const GM_PASSWORD = Deno.env.get('GM_PASSWORD') || "loupgarou";
 export const GAMES_LIST_KEY = "games:list";
 export const AVATAR_BUCKET = 'make-2c00868b-avatars';
+
+// ── Event cap: prevent unbounded growth ──
+export const MAX_EVENTS = 200;
+export function capEvents(state: any): void {
+  if (Array.isArray(state.events) && state.events.length > MAX_EVENTS) {
+    state.events = state.events.slice(-MAX_EVENTS);
+  }
+  // Also cap voteHistory (grows every turn — keep last 30 turns)
+  if (Array.isArray(state.voteHistory) && state.voteHistory.length > 30) {
+    state.voteHistory = state.voteHistory.slice(-30);
+  }
+  // Cap phaseDeathHistory (keep last 20 phases)
+  if (Array.isArray(state.phaseDeathHistory) && state.phaseDeathHistory.length > 20) {
+    state.phaseDeathHistory = state.phaseDeathHistory.slice(-20);
+  }
+}
+
+// ── In-memory shortCode → gameId cache (prevents N+1 KV scans) ──
+const shortCodeCache = new Map<string, { gameId: string; ts: number }>();
+const SHORTCODE_CACHE_TTL = 300_000; // 5 minutes
+
+export function getCachedShortCode(code: string): string | null {
+  const entry = shortCodeCache.get(code);
+  if (!entry) return null;
+  if (Date.now() - entry.ts > SHORTCODE_CACHE_TTL) {
+    shortCodeCache.delete(code);
+    return null;
+  }
+  return entry.gameId;
+}
+
+export function setCachedShortCode(code: string, gameId: string): void {
+  shortCodeCache.set(code, { gameId, ts: Date.now() });
+}
+
+// ── Batch shortCode → gameId mapping (single mset instead of N sequential writes) ──
+export async function batchSaveShortCodes(
+  players: Array<{ shortCode?: string }>,
+  lobbyPlayers: Array<{ shortCode?: string }> | undefined,
+  gameId: string,
+): Promise<string[]> {
+  const seen = new Set<string>();
+  const keys: string[] = [];
+  const values: any[] = [];
+  for (const p of players) {
+    if (p.shortCode && !seen.has(p.shortCode)) {
+      seen.add(p.shortCode);
+      keys.push(shortcodeKey(p.shortCode));
+      values.push(gameId);
+      setCachedShortCode(p.shortCode, gameId);
+    }
+  }
+  if (lobbyPlayers) {
+    for (const lp of lobbyPlayers) {
+      if (lp.shortCode && !seen.has(lp.shortCode)) {
+        seen.add(lp.shortCode);
+        keys.push(shortcodeKey(lp.shortCode));
+        values.push(gameId);
+        setCachedShortCode(lp.shortCode, gameId);
+      }
+    }
+  }
+  if (keys.length > 0) {
+    await kv.mset(keys, values);
+  }
+  return Array.from(seen);
+}
 
 // ── Idempotent bucket creation on startup ──
 (async () => {
@@ -37,6 +104,12 @@ export function gameHeartbeatsKey(gameId: string) { return `game:${gameId}:heart
 export function shortcodeKey(code: string) { return `shortcode:${code}`; }
 export function gameHypothesesKey(gameId: string, shortCode: string) { return `game:${gameId}:hypotheses:${shortCode}`; }
 export function gameTimerLockKey(gameId: string) { return `game:${gameId}:timer-lock`; }
+export const GALLERY_HINTS_KEY = 'global:gallery-hints';
+export const GALLERY_TASKS_KEY = 'global:gallery-tasks';
+export const GALLERY_ROLES_KEY = 'global:gallery-roles';
+export const GALLERY_QUESTS_KEY = 'global:gallery-quests';
+export const GALLERY_PRETASKS_KEY = 'global:gallery-pretasks';
+export const GALLERY_DELETED_KEY = 'global:gallery-deleted';
 
 // ── Random game ID ──
 const ID_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';

@@ -6,6 +6,7 @@ import {
 import { computeEndAt } from '../../PhaseTimer';
 import { sendPushNotifications } from '../../../context/useNotifications';
 import { distributeQuestRound } from './gmPureHelpers';
+import { nextEventId } from '../../../context/gameContextConstants';
 
 /* ================================================================
    useGMPhaseTransitions — hook that builds the four main GM
@@ -58,6 +59,35 @@ export function useGMPhaseTransitions(deps: GMPhaseTransitionDeps) {
       aliveAtPhaseStart: Object.fromEntries(s.players.map((p) => [p.id, p.alive])),
     }));
   }, [updateState]);
+
+  /** Helper: auto-assign mayor successor if still pending at phase transition */
+  const autoAssignMaireSuccessor = useCallback(() => {
+    let chosenName: string | null = null;
+    updateState((s) => {
+      if (!s.maireSuccessionPending) return s;
+      const vpSet = s.villagePresentIds ? new Set(s.villagePresentIds) : null;
+      const eligible = s.players.filter((p) => p.alive && p.id !== s.maireSuccessionFromId && (!vpSet || vpSet.has(p.id)));
+      if (eligible.length === 0) return { ...s, maireSuccessionPending: false, maireSuccessionFromId: null, maireSuccessionPhase: null };
+      const chosen = eligible[Math.floor(Math.random() * eligible.length)];
+      chosenName = chosen.name;
+      return {
+        ...s,
+        maireId: chosen.id,
+        maireSuccessionPending: false,
+        maireSuccessionFromId: null,
+        maireSuccessionPhase: null,
+        events: [...s.events, {
+          id: nextEventId(), turn: s.turn, phase: s.phase,
+          message: `👑 ${chosen.name} a ete designe(e) Maire par le destin.`,
+          timestamp: new Date().toISOString(),
+        }],
+      };
+    });
+    if (chosenName && state.gameId) {
+      const targets = state.players.filter((p) => p.alive).map((p) => p.shortCode);
+      sendPushNotifications(state.gameId, targets, 'Loup-Garou', `👑 ${chosenName} est le nouveau Maire !`, 'maire-succession');
+    }
+  }, [updateState, state.gameId, state.players]);
 
   // ── handleStartNight1 ──
   const handleStartNight1 = useCallback(() => {
@@ -138,6 +168,7 @@ export function useGMPhaseTransitions(deps: GMPhaseTransitionDeps) {
         nightStep: 'active' as NightStep,
         dayStep: 'discussion' as DayStep,
         werewolfVotes: {},
+        werewolfVoteMessages: {},
         werewolfTarget: null,
         witchHealedThisNight: {},
         witchKillTargets: {},
@@ -169,6 +200,11 @@ export function useGMPhaseTransitions(deps: GMPhaseTransitionDeps) {
 
   // ── leverLeSoleil ──
   const leverLeSoleil = useCallback(() => {
+    // Capture whether maire succession was already pending BEFORE this function processes deaths.
+    // Only auto-assign if it was pending from a previous phase — new successions triggered here
+    // must show the modal first before being auto-resolved.
+    const wasSuccessionPendingBefore = state.maireSuccessionPending;
+
     // 1. Resolve night actions (werewolf consensus)
     confirmWerewolfKill();
 
@@ -208,7 +244,7 @@ export function useGMPhaseTransitions(deps: GMPhaseTransitionDeps) {
       if (guardProtectedIds.has(resolvedWolfTarget)) {
         if (!guardBlocked) {
           guardBlocked = true;
-          addEvent('\uD83D\uDEE1\uFE0F Quelque chose a interfere pendant la nuit.');
+          addEvent('Quelque chose a interfere pendant la nuit.');
         }
       } else {
         eliminatePlayer(resolvedWolfTarget);
@@ -229,7 +265,7 @@ export function useGMPhaseTransitions(deps: GMPhaseTransitionDeps) {
     for (const witchKillTargetId of witchKillTargetIds) {
       if (guardProtectedIds.has(witchKillTargetId)) {
         if (!guardBlocked) {
-          addEvent('\uD83D\uDEE1\uFE0F Quelque chose a interfere pendant la nuit.');
+          addEvent('Quelque chose a interfere pendant la nuit.');
           guardBlocked = true;
         }
       } else {
@@ -360,16 +396,24 @@ export function useGMPhaseTransitions(deps: GMPhaseTransitionDeps) {
       };
     });
 
+    // Auto-resolve maire succession ONLY if it was already pending before this phase transition
+    if (wasSuccessionPendingBefore) {
+      autoAssignMaireSuccessor();
+    }
+
     // Auto-distribute quests at phase start (dawn → day)
     updateState((s) => distributeQuestRound(s).state);
   }, [
     state, confirmWerewolfKill, addEvent, eliminatePlayer,
     setNightStep, setPhase, setDayStep, setWerewolfTarget,
-    updateState, notifyAlive,
+    updateState, notifyAlive, autoAssignMaireSuccessor,
   ]);
 
   // ── handleAdvanceTurn ──
   const handleAdvanceTurn = useCallback(() => {
+    // Capture whether maire succession was already pending BEFORE this transition
+    const wasSuccessionPendingBefore = state.maireSuccessionPending;
+
     const newTurn = state.turn + 1;
     nextTurn();
     setPhase('night');
@@ -418,12 +462,18 @@ export function useGMPhaseTransitions(deps: GMPhaseTransitionDeps) {
       };
     });
 
+    // Auto-resolve maire succession ONLY if it was already pending before this phase transition
+    if (wasSuccessionPendingBefore) {
+      autoAssignMaireSuccessor();
+    }
+
     // Auto-distribute quests at phase start (dusk → night)
     updateState((s) => distributeQuestRound(s).state);
   }, [
     state.turn, state.phaseTimerDuration, state.phaseTimerNightDuration,
+    state.maireSuccessionPending,
     nextTurn, setPhase, setNightStep, setDayStep, addEvent,
-    updateState, notifyAlive,
+    updateState, notifyAlive, autoAssignMaireSuccessor,
   ]);
 
   return {

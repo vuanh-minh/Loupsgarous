@@ -9,6 +9,7 @@ import {
 import type { GameState, Quest, QuestStatus } from '../../../context/gameTypes';
 import type { GameThemeTokens } from '../../../context/gameTheme';
 import { PAvatar } from './PAvatar';
+import { HintFullscreenLightbox, getHintAssociations, setHintAssociation as setHintAssoc } from '../../HintComponents';
 
 interface PlayerCollabQuestPageProps {
   quest: Quest;
@@ -18,6 +19,7 @@ interface PlayerCollabQuestPageProps {
   onCollabVote: (questId: number, vote: boolean) => void;
   onCancelCollabVote: (questId: number) => void;
   onNavigateToPlayer?: (playerId: number) => void;
+  onSetHypothesis?: (targetPlayerId: number, roleId: string) => void;
   t: GameThemeTokens;
 }
 
@@ -161,7 +163,7 @@ GroupMemberChip.displayName = 'GroupMemberChip';
 
 // ── Page ──
 export const PlayerCollabQuestPage = React.memo(function PlayerCollabQuestPage({
-  quest, state, currentPlayerId, onBack, onCollabVote, onCancelCollabVote, onNavigateToPlayer, t,
+  quest, state, currentPlayerId, onBack, onCollabVote, onCancelCollabVote, onNavigateToPlayer, onSetHypothesis, t,
 }: PlayerCollabQuestPageProps) {
   const pid = currentPlayerId;
   const cp = getCardPalette(state.phase);
@@ -171,6 +173,26 @@ export const PlayerCollabQuestPage = React.memo(function PlayerCollabQuestPage({
   const hasVoted = quest.collaborativeVotes?.[pid] !== undefined;
 
   const [confirmFailOpen, setConfirmFailOpen] = useState(false);
+  const [fullscreenHintId, setFullscreenHintId] = useState<number | null>(null);
+  // Hint-player associations for hypothesis mechanism
+  const [hintAssociations, setHintAssociations] = useState<Record<number, number>>(() =>
+    state.gameId ? getHintAssociations(state.gameId, pid) : {}
+  );
+  const handleSetHintAssociation = React.useCallback((hintId: number, targetPlayerId: number | null) => {
+    if (!state.gameId) return;
+    setHintAssoc(state.gameId, pid, hintId, targetPlayerId);
+    setHintAssociations(getHintAssociations(state.gameId, pid));
+  }, [state.gameId, pid]);
+
+  // Revealed hint IDs for lightbox navigation
+  const revealedHintIds = useMemo(() => {
+    const playerHints = state.playerHints || [];
+    const hintIdSet = new Set((state.hints || []).map(h => h.id));
+    return playerHints
+      .filter(ph => ph.playerId === pid && ph.revealed && hintIdSet.has(ph.hintId))
+      .sort((a, b) => new Date(b.sentAt).getTime() - new Date(a.sentAt).getTime())
+      .map(ph => ph.hintId);
+  }, [state.playerHints, state.hints, pid]);
 
   // Group info
   const myGroup = useMemo(() =>
@@ -359,11 +381,12 @@ export const PlayerCollabQuestPage = React.memo(function PlayerCollabQuestPage({
               initial={{ opacity: 0, y: 8 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.3, delay: 0.15 }}
-              className="rounded-xl p-3.5 flex items-start gap-2.5"
+              className="rounded-xl p-3.5 flex items-start gap-2.5 cursor-pointer active:opacity-80 transition-opacity"
               style={{
                 background: 'rgba(212,168,67,0.08)',
                 border: '1px solid rgba(212,168,67,0.2)',
               }}
+              onClick={() => setFullscreenHintId(rewardHint.id)}
             >
               <Lightbulb size={18} className="shrink-0 mt-0.5" style={{ color: '#d4a843' }} />
               <div className="flex-1 min-w-0">
@@ -834,6 +857,18 @@ export const PlayerCollabQuestPage = React.memo(function PlayerCollabQuestPage({
         </AnimatePresence>,
         document.body
       )}
+
+      {/* ── Fullscreen Hint Lightbox with navigation ── */}
+      <HintFullscreenLightbox
+        hints={state.hints || []}
+        revealedHintIds={revealedHintIds}
+        fullscreenHintId={fullscreenHintId}
+        setFullscreenHintId={setFullscreenHintId}
+        players={state.players}
+        hintAssociations={hintAssociations}
+        onSetHintAssociation={handleSetHintAssociation}
+        onSetHypothesis={onSetHypothesis}
+      />
     </div>
   );
 });

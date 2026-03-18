@@ -129,30 +129,30 @@ const NIGHT_PALETTE: CardPalette = {
 };
 
 const DEAD_PALETTE: CardPalette = {
-  bg: "linear-gradient(165deg, #2a2a2e 0%, #232327 30%, #1e1e22 70%, #18181c 100%)",
+  bg: "linear-gradient(165deg, #28222e 0%, #221e28 30%, #1d1922 70%, #17141c 100%)",
   bgOverlay:
-    "linear-gradient(180deg, rgba(160,160,170,0.04) 0%, rgba(130,130,140,0.01) 100%)",
-  headerBg: "rgba(20,20,24,0.65)",
-  border: "#4a4a52",
-  borderLight: "#5a5a62",
-  borderDark: "#18181c",
-  title: "#a0a0a8",
-  text: "#858590",
-  textDim: "#606068",
-  divider: "rgba(140,140,150,0.12)",
-  insetBg: "rgba(10,10,14,0.35)",
-  insetBorder: "rgba(140,140,150,0.08)",
-  accent: "#7a7a85",
-  accentBg: "rgba(130,130,140,0.12)",
-  accentBorder: "rgba(130,130,140,0.25)",
-  accentDark: "#111114",
+    "linear-gradient(180deg, rgba(150,130,180,0.04) 0%, rgba(120,100,160,0.01) 100%)",
+  headerBg: "rgba(22,18,28,0.65)",
+  border: "#4a4258",
+  borderLight: "#5a5068",
+  borderDark: "#17141c",
+  title: "#a898b5",
+  text: "#887a95",
+  textDim: "#655a70",
+  divider: "rgba(140,120,170,0.12)",
+  insetBg: "rgba(12,8,18,0.35)",
+  insetBorder: "rgba(140,120,170,0.08)",
+  accent: "#9b8bb8",
+  accentBg: "rgba(155,139,184,0.12)",
+  accentBorder: "rgba(155,139,184,0.25)",
+  accentDark: "#13101a",
   decorLine:
-    "linear-gradient(90deg, transparent, rgba(140,140,150,0.2), transparent)",
+    "linear-gradient(90deg, transparent, rgba(150,130,180,0.2), transparent)",
   cardShadow:
-    "inset 0 1px 0 rgba(140,140,150,0.06), 0 4px 14px rgba(0,0,0,0.45), 0 1px 3px rgba(0,0,0,0.3)",
-  collabBg: "rgba(120,120,130,0.15)",
-  collabBorder: "rgba(120,120,130,0.3)",
-  collabText: "#8a8a95",
+    "inset 0 1px 0 rgba(150,130,180,0.06), 0 4px 14px rgba(0,0,0,0.45), 0 1px 3px rgba(0,0,0,0.3)",
+  collabBg: "rgba(130,110,160,0.15)",
+  collabBorder: "rgba(130,110,160,0.3)",
+  collabText: "#9585a8",
 };
 
 /** Get phase-aware card palette */
@@ -173,12 +173,12 @@ function playerQuestStatus(
 const QuestStatusIcon = React.memo(
   ({ status, phase, isCollaborative, isDead }: { status: string; phase?: string; isCollaborative?: boolean; isDead?: boolean }) => {
     if (isDead) {
-      // Grey tones for dead players
-      if (status === "success") return <CheckCircle size={18} style={{ color: "#6a6a70" }} />;
-      if (status === "fail") return <XCircle size={18} style={{ color: "#6a6a70" }} />;
+      // Ghostly violet tones for dead players
+      if (status === "success") return <CheckCircle size={18} style={{ color: "#8a7ba0" }} />;
+      if (status === "fail") return <XCircle size={18} style={{ color: "#8a7080" }} />;
       return isCollaborative
-        ? <Handshake size={18} style={{ color: "#5a5a62" }} />
-        : <Swords size={18} style={{ color: "#5a5a62" }} />;
+        ? <Handshake size={18} style={{ color: "#6a5a78" }} />
+        : <Swords size={18} style={{ color: "#6a5a78" }} />;
     }
     if (status === "success")
       return (
@@ -324,19 +324,31 @@ export function PlayerQuestsPanel({
   // Sort newest first (highest id = newest)
   const sortedQuests = [...quests].sort((a, b) => b.id - a.id);
 
+  // Current phase key for "just resolved" detection
+  const currentPhaseKey = `${state.turn}-${state.phase}`;
+
+  /** Whether this quest was resolved for the current player during the current phase */
+  const isResolvedThisPhase = (q: Quest) =>
+    q.playerResolvedInPhase?.[pid] === currentPhaseKey;
+
   const activeCount = quests.filter((q) => {
     const s = playerQuestStatus(q, pid);
-    return s === "active" || s === "pending-resolution";
+    return s === "active" || s === "pending-resolution" || ((s === "success" || s === "fail") && isResolvedThisPhase(q));
   }).length;
 
   // Split quests into ongoing vs finished
+  // Quests resolved during the current phase stay in "ongoing" until the next phase starts
   const ongoingQuests = sortedQuests.filter((q) => {
     const s = playerQuestStatus(q, pid);
-    return s === "active" || s === "pending-resolution";
+    if (s === "active" || s === "pending-resolution") return true;
+    if ((s === "success" || s === "fail") && isResolvedThisPhase(q)) return true;
+    return false;
   });
   const finishedQuests = sortedQuests.filter((q) => {
     const s = playerQuestStatus(q, pid);
-    return s === "success" || s === "fail";
+    if (s !== "success" && s !== "fail") return false;
+    // Only move to finished once the phase changes
+    return !isResolvedThisPhase(q);
   });
 
   const displayedQuests = activeTab === 'ongoing' ? ongoingQuests : finishedQuests;
@@ -417,7 +429,7 @@ export function PlayerQuestsPanel({
 
     // Border color per status
     const borderColor = isDead
-      ? "#3a3a40"
+      ? "#3e3548"
       : myStatus === "success"
         ? isNight
           ? "#5a8a46"
@@ -432,7 +444,7 @@ export function PlayerQuestsPanel({
               : "#a0aac8"
             : cp.border;
     const borderTopColor = isDead
-      ? "#48484f"
+      ? "#4a4058"
       : myStatus === "success"
         ? isNight
           ? "#6ea854"
@@ -1152,6 +1164,10 @@ export function PlayerQuestsPanel({
             const isPlayerDead = currentPlayer ? !currentPlayer.alive : false;
 
             if (isPlayerDead) {
+              // Dead players can still complete individual quests but not collaborative ones
+              const individualQuests = displayedQuests.filter(q => (q.questType || 'individual') === 'individual');
+              const collabQuests = displayedQuests.filter(q => (q.questType || 'individual') === 'collaborative');
+
               return (
                 <>
                   {/* Dead player banner */}
@@ -1188,7 +1204,7 @@ export function PlayerQuestsPanel({
                         fontStyle: 'italic',
                         lineHeight: 1.3,
                       }}>
-                        Vos quetes restent visibles mais ne peuvent plus etre completees.
+                        Vos quetes individuelles restent actives. Les quetes collaboratives sont gelees.
                       </p>
                     </div>
                   </div>
@@ -1220,10 +1236,15 @@ export function PlayerQuestsPanel({
                       </p>
                     </div>
                   ) : (
-                    <div style={{ pointerEvents: 'none' }}>
-                      <div className="flex flex-col gap-3">
-                        {displayedQuests.map((quest) => renderQuest(quest, undefined, undefined, true))}
-                      </div>
+                    <div className="flex flex-col gap-3">
+                      {/* Individual quests: interactive, grey palette */}
+                      {individualQuests.map((quest) => renderQuest(quest, undefined, undefined, true))}
+                      {/* Collaborative quests: read-only */}
+                      {collabQuests.length > 0 && (
+                        <div style={{ pointerEvents: 'none', opacity: 0.5 }}>
+                          {collabQuests.map((quest) => renderQuest(quest, undefined, undefined, true))}
+                        </div>
+                      )}
                     </div>
                   )}
                 </>

@@ -1,15 +1,16 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Skull, Users, Target, X, Search, CircleCheck, ChevronDown } from 'lucide-react';
+import { Skull, Users, Target, X, Search, CircleCheck, ChevronDown, MessageCircle } from 'lucide-react';
 import { PAvatar } from '../PAvatar';
 import { type RoleActionBaseProps } from './roleActionTypes';
 
 interface Props extends RoleActionBaseProps {
-  onWerewolfVote: (wolfId: number, targetId: number) => void;
+  onWerewolfVote: (wolfId: number, targetId: number, message?: string) => void;
 }
 
 export function WerewolfAction({ state, alivePlayers, currentPlayer, allPlayers, onFlipBack, onWerewolfVote, t }: Props) {
   const [pendingWolfTarget, setPendingWolfTarget] = useState<number | null>(null);
+  const [pendingMessage, setPendingMessage] = useState('');
   const [showMeute, setShowMeute] = useState(false);
   const [wolfTargetSearch, setWolfTargetSearch] = useState('');
 
@@ -33,6 +34,27 @@ export function WerewolfAction({ state, alivePlayers, currentPlayer, allPlayers,
   const pendingTarget = pendingWolfTarget !== null
     ? allPlayers.find((p) => p.id === pendingWolfTarget) ?? null
     : null;
+
+  // Collect other wolves' votes with their messages
+  const wolfVoteMessages: { wolfId: number; wolfName: string; wolfAvatar: string; targetId: number; targetName: string; targetPlayer: any; message: string }[] = [];
+  const voteMessages = (state as any).werewolfVoteMessages || {};
+  for (const [wIdStr, tId] of Object.entries(state.werewolfVotes)) {
+    const wId = Number(wIdStr);
+    if (wId === currentPlayer.id) continue;
+    const wolf = allPlayers.find((p) => p.id === wId);
+    const target = allPlayers.find((p) => p.id === (tId as number));
+    if (wolf && target) {
+      wolfVoteMessages.push({
+        wolfId: wId,
+        wolfName: wolf.name,
+        wolfAvatar: wolf.avatar,
+        targetId: tId as number,
+        targetName: target.name,
+        targetPlayer: target,
+        message: voteMessages[wId] || '',
+      });
+    }
+  }
 
   return (
     <div
@@ -125,6 +147,69 @@ export function WerewolfAction({ state, alivePlayers, currentPlayer, allPlayers,
         </div>
       )}
 
+      {/* Other wolves' votes with messages */}
+      {wolfVoteMessages.length > 0 && (
+        <div className="mb-3 space-y-1.5">
+          <div className="flex items-center gap-1.5 mb-1">
+            <MessageCircle size={10} style={{ color: '#c41e3a', opacity: 0.7 }} />
+            <span style={{ fontFamily: '"Cinzel", serif', color: t.textMuted, fontSize: '0.55rem' }}>
+              Votes de la meute
+            </span>
+          </div>
+          {wolfVoteMessages.map((wv) => {
+            const inKillZone = killZoneIds.has(wv.targetId);
+            return (
+              <div
+                key={wv.wolfId}
+                className="flex items-center gap-2 px-2.5 py-2 rounded-lg"
+                style={{
+                  background: inKillZone ? 'rgba(196,30,58,0.08)' : `rgba(${t.overlayChannel}, 0.03)`,
+                  border: `1px solid ${inKillZone ? 'rgba(196,30,58,0.2)' : `rgba(${t.overlayChannel}, 0.06)`}`,
+                }}
+              >
+                {/* Wolf avatar */}
+                <div className="w-6 h-6 rounded-full overflow-hidden flex-shrink-0 opacity-70">
+                  <PAvatar player={{ avatar: wv.wolfAvatar, avatarUrl: undefined } as any} size="text-sm" />
+                </div>
+                {/* Arrow */}
+                <span style={{ color: '#c41e3a', fontSize: '0.6rem', opacity: 0.5 }}>→</span>
+                {/* Target avatar */}
+                <div className="w-6 h-6 rounded-full overflow-hidden flex-shrink-0">
+                  <PAvatar player={wv.targetPlayer} size="text-sm" />
+                </div>
+                {/* Target name + message */}
+                <div className="flex-1 min-w-0">
+                  <span
+                    className="block truncate"
+                    style={{
+                      color: inKillZone ? '#e8c8c8' : t.textSecondary,
+                      fontSize: '0.6rem',
+                      fontWeight: inKillZone ? 600 : 400,
+                    }}
+                  >
+                    {wv.targetName}
+                  </span>
+                  {wv.message && (
+                    <span
+                      className="block truncate"
+                      style={{
+                        color: t.textMuted,
+                        fontSize: '0.5rem',
+                        fontStyle: 'italic',
+                        marginTop: '1px',
+                      }}
+                    >
+                      « {wv.message} »
+                    </span>
+                  )}
+                </div>
+                {inKillZone && <Skull size={10} style={{ color: '#c41e3a', opacity: 0.6 }} />}
+              </div>
+            );
+          })}
+        </div>
+      )}
+
       {/* Confirmation overlay */}
       {pendingTarget ? (
         <motion.div
@@ -145,12 +230,35 @@ export function WerewolfAction({ state, alivePlayers, currentPlayer, allPlayers,
               {pendingTarget.name}
             </span>
           </div>
+
+          {/* Optional message input */}
+          <div className="mb-3">
+            <textarea
+              placeholder="Message pour la meute (optionnel)..."
+              value={pendingMessage}
+              onChange={(e) => setPendingMessage(e.target.value.slice(0, 140))}
+              rows={2}
+              className="w-full px-3 py-2 rounded-lg text-sm outline-none resize-none"
+              style={{
+                background: `rgba(${t.overlayChannel}, 0.06)`,
+                border: `1px solid ${pendingMessage ? 'rgba(196,30,58,0.3)' : `rgba(${t.overlayChannel}, 0.1)`}`,
+                color: t.text,
+                fontSize: '0.65rem',
+                fontStyle: pendingMessage ? 'normal' : 'italic',
+              }}
+            />
+            <p style={{ color: t.textDim, fontSize: '0.45rem', textAlign: 'right', marginTop: '2px' }}>
+              {pendingMessage.length}/140
+            </p>
+          </div>
+
           <div className="flex flex-col items-stretch gap-2">
             <motion.button
               whileTap={{ scale: 0.95 }}
               onClick={() => {
-                onWerewolfVote(currentPlayer.id, pendingWolfTarget!);
+                onWerewolfVote(currentPlayer.id, pendingWolfTarget!, pendingMessage.trim() || undefined);
                 setPendingWolfTarget(null);
+                setPendingMessage('');
                 if (onFlipBack) onFlipBack();
               }}
               className="flex items-center justify-center gap-1.5 px-4 py-2 rounded-lg"
@@ -167,7 +275,7 @@ export function WerewolfAction({ state, alivePlayers, currentPlayer, allPlayers,
             </motion.button>
             <motion.button
               whileTap={{ scale: 0.95 }}
-              onClick={() => setPendingWolfTarget(null)}
+              onClick={() => { setPendingWolfTarget(null); setPendingMessage(''); }}
               className="flex items-center justify-center gap-1.5 px-4 py-2 rounded-lg"
               style={{
                 background: `rgba(${t.overlayChannel}, 0.04)`,

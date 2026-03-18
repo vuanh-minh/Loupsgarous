@@ -3,10 +3,10 @@
  * Shared fullscreen spectator game view, used by both SpectatorPage and GM "Spectateur" tab.
  * Renders backgrounds, phase badge, timer, victim overlays, player marquee, winner overlay, and phase transitions.
  */
-import React, { useState, useEffect, type CSSProperties } from 'react';
+import React, { useState, useEffect, useCallback, type CSSProperties } from 'react';
 import { useNavigate } from 'react-router';
 import { motion, AnimatePresence } from 'motion/react';
-import { ArrowLeft, Moon } from 'lucide-react';
+import { ArrowLeft, Moon, Maximize, Minimize } from 'lucide-react';
 import type { Player, GameEvent } from '../../../context/GameContext';
 import { getRoleById } from '../../../data/roles';
 import { computeRemaining, formatTime } from '../../PhaseTimer';
@@ -79,6 +79,21 @@ export const SpectatorGameView = React.memo(function SpectatorGameView({
   const [winnerDismissed, setWinnerDismissed] = useState(false);
   const [isTransitioning, setIsTransitioning] = useState(false);
   const isMobile = useIsMobile();
+
+  // Fullscreen toggle
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  useEffect(() => {
+    const handler = () => setIsFullscreen(!!document.fullscreenElement);
+    document.addEventListener('fullscreenchange', handler);
+    return () => document.removeEventListener('fullscreenchange', handler);
+  }, []);
+  const toggleFullscreen = useCallback(() => {
+    if (!document.fullscreenElement) {
+      document.documentElement.requestFullscreen().catch(() => {});
+    } else {
+      document.exitFullscreen().catch(() => {});
+    }
+  }, []);
 
   // Reset dismiss when winner changes
   React.useEffect(() => {
@@ -616,6 +631,87 @@ export const SpectatorGameView = React.memo(function SpectatorGameView({
           );
         })()}
 
+        {/* New Maire successor card (shown when succession completed) */}
+        {!isTransitioning && state.maireId != null && state.maireElectionDone && (() => {
+          // Detect if there's a recent succession event (distinct from initial election)
+          const successionEvent = (state.events || []).find((e: any) =>
+            e.turn === state.turn && (e.message.includes('designe(e) nouveau Maire') || e.message.includes('designe(e) Maire par le destin'))
+          );
+          if (!successionEvent) return null;
+          const newMaire = state.players.find((p: Player) => p.id === state.maireId);
+          if (!newMaire) return null;
+          return (
+            <motion.div
+              key="maire-successor-overlay"
+              initial={{ x: -80, opacity: 0 }}
+              animate={{ x: 0, opacity: 1 }}
+              exit={{ x: -80, opacity: 0 }}
+              transition={{ duration: 0.7, delay: 0.5, ease: [0.4, 0, 0.2, 1] }}
+              className={`absolute ${isMobile ? 'left-2 right-2' : 'left-10'} z-15`}
+              style={{
+                top: nightVictims.length > 0
+                  ? (isMobile ? `${52 + nightVictims.length * 56 + 60}px` : `${140 + nightVictims.length * 110 + 100}px`)
+                  : (isMobile ? '52px' : '140px'),
+                maxWidth: isMobile ? undefined : '480px',
+              }}
+            >
+              <div
+                className={`${isMobile ? 'rounded-xl p-3' : 'rounded-2xl p-6'} flex items-center ${isMobile ? 'gap-3' : 'gap-6'}`}
+                style={{
+                  background: 'rgba(0,0,0,0.55)',
+                  backdropFilter: 'blur(12px)',
+                  border: `${isMobile ? '1px' : '2px'} solid rgba(212,168,67,0.25)`,
+                }}
+              >
+                <div
+                  className="rounded-full flex items-center justify-center shrink-0"
+                  style={{
+                    width: isMobile ? '44px' : '88px',
+                    height: isMobile ? '44px' : '88px',
+                    background: 'rgba(212,168,67,0.12)',
+                    border: `${isMobile ? '2px' : '4px'} solid rgba(212,168,67,0.35)`,
+                    boxShadow: '0 0 24px rgba(212,168,67,0.15)',
+                  }}
+                >
+                  <SAvatar player={newMaire} size={isMobile ? 'text-xl' : 'text-5xl'} />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className={`flex items-center ${isMobile ? 'gap-1.5 mb-0.5' : 'gap-3 mb-2'}`}>
+                    <span style={{ fontSize: isMobile ? '0.85rem' : '1.8rem' }}>👑</span>
+                    <span style={{
+                      fontFamily: '"Cinzel", serif',
+                      color: '#d4a843',
+                      fontSize: isMobile ? '0.6rem' : '1.3rem',
+                      textTransform: 'uppercase' as const,
+                      letterSpacing: '0.12em',
+                      fontWeight: 600,
+                    }}>
+                      Nouveau Maire
+                    </span>
+                  </div>
+                  <p className="truncate" style={{
+                    color: '#fff',
+                    fontSize: isMobile ? '0.9rem' : '1.8rem',
+                    fontWeight: 700,
+                    fontFamily: '"Cinzel", serif',
+                    textShadow: '0 2px 10px rgba(0,0,0,0.5)',
+                  }}>
+                    {newMaire.name}
+                  </p>
+                  <p style={{
+                    color: 'rgba(212,168,67,0.7)',
+                    fontSize: isMobile ? '0.55rem' : '1.1rem',
+                    marginTop: isMobile ? '0.2rem' : '0.4rem',
+                    fontFamily: '"Cinzel", serif',
+                  }}>
+                    Designe(e) par le Maire defunt
+                  </p>
+                </div>
+              </div>
+            </motion.div>
+          );
+        })()}
+
         {/* Night: last eliminated card */}
         {!isTransitioning && isNight && lastVoteEliminated && (
           <motion.div
@@ -746,6 +842,26 @@ export const SpectatorGameView = React.memo(function SpectatorGameView({
 
       {/* Phase transition cinematic overlay (day/night) */}
       <PhaseTransitionOverlay phase={state.phase} turn={state.turn} onTransitionChange={setIsTransitioning} />
+
+      {/* ═══ FULLSCREEN TOGGLE BUTTON ═══ */}
+      <button
+        onClick={toggleFullscreen}
+        className="absolute z-25 rounded-lg transition-all active:scale-90 hover:opacity-100 opacity-40"
+        style={{
+          bottom: isMobile ? '4.5rem' : '8rem',
+          right: isMobile ? '0.5rem' : '1.5rem',
+          padding: isMobile ? '6px' : '10px',
+          background: 'rgba(0,0,0,0.5)',
+          backdropFilter: 'blur(8px)',
+          border: `1px solid rgba(255,255,255,0.1)`,
+        }}
+        title={isFullscreen ? 'Quitter le plein ecran' : 'Plein ecran'}
+      >
+        {isFullscreen
+          ? <Minimize size={isMobile ? 14 : 20} style={{ color: isNight ? '#8090b0' : 'rgba(255,255,255,0.8)' }} />
+          : <Maximize size={isMobile ? 14 : 20} style={{ color: isNight ? '#8090b0' : 'rgba(255,255,255,0.8)' }} />
+        }
+      </button>
     </div>
   );
 });

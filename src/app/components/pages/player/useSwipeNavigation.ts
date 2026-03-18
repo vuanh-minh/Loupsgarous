@@ -83,7 +83,8 @@ export function useSwipeNavigation({
       return;
     }
     if (swipeDirection.current !== 'horizontal') return;
-    e.preventDefault();
+    // No e.preventDefault() needed — touch-action: pan-y on the container
+    // already prevents native horizontal panning while allowing vertical scroll.
     touchDeltaX.current = dx;
     const p = panelsRef.current;
     const idx = p.indexOf(activePanelRef.current);
@@ -158,7 +159,7 @@ export function useSwipeNavigation({
     const el = containerRef.current;
     if (!el) return;
     el.addEventListener('touchstart', handleTouchStart, { passive: true });
-    el.addEventListener('touchmove', handleTouchMove, { passive: false });
+    el.addEventListener('touchmove', handleTouchMove, { passive: true });
     el.addEventListener('touchend', handleTouchEnd, { passive: true });
     el.addEventListener('touchcancel', handleTouchEnd, { passive: true });
     el.addEventListener('mousedown', handleMouseDown);

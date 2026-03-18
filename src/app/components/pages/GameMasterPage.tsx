@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'motion/react';
 import { useNavigate } from 'react-router';
 import {
@@ -11,29 +12,36 @@ import {
   Plus, LayoutGrid,
   Lightbulb,
   Map,
+  Menu,
+  ScrollText,
+  Settings,
 } from 'lucide-react';
 import { useGame, type Player, type NightStep, type DayStep, type GamePhase, localLoadGamesList, localSaveGamesList, localDeleteState } from '../../context/GameContext';
 import { useIsMobile } from '../ui/use-mobile';
 import { useRealtimeSync, type HeartbeatMap, getBroadcastMetrics } from '../../context/useRealtimeSync';
-import { computeDelta, nextBroadcastVersion, estimatePayloadSize } from '../../context/deltaSync';
+import { computeDelta, nextBroadcastVersion, estimatePayloadSize, fitBroadcastPayload } from '../../context/deltaSync';
 import { gameTheme } from '../../context/gameTheme';
-import { API_BASE, publicAnonKey } from '../../context/apiConfig';
+import { API_BASE, publicAnonKey, jsonAuthHeaders } from '../../context/apiConfig';
 import { SetupPanel, PLAYER_AVATARS, type PlayerEntry } from './SetupPanel';
 import { SpectatorGameView } from './spectator/SpectatorGameView';
 import { GMQuestsPanel } from './gm/GMQuestsPanel';
+import type { Quest, TaskTemplate } from '../../context/gameTypes';
 import { GMDynamicHintsPanel, countAvailableDynamicHints } from './gm/GMDynamicHintsPanel';
 import { computeEndAt, computeRemaining } from '../PhaseTimer';
 import { sendPushNotifications } from '../../context/useNotifications';
 import { type GameListEntry } from './gm/GMShared';
 import { AVATAR_DEFAULT_TAGS, DEFAULT_AVAILABLE_TAGS } from '../../data/avatarDefaultTags';
+import { getGalleryId } from '../../data/avatarResolver';
 import { GMHunterShotModal as HunterShotModal, EndGameOverlay } from './gm/GMModals';
 import { GamePanel } from './gm/GMGamePanel';
 import { GMLobbyView } from './gm/GMLobbyView';
 import { GameLobbyPanel } from './gm/GameLobbyPanel';
 import { useGMPhaseTransitions } from './gm/useGMGameLogic';
 import { GMPerformanceMonitor } from './gm/GMPerformanceMonitor';
+import { GMPlayerGalleryPanel } from './gm/GMPlayerGalleryPanel';
+import { GMEventLog } from './gm/GMEventLog';
 
-type GMTab = 'setup' | 'game' | 'hints' | 'quests' | 'spectator';
+type GMTab = 'setup' | 'game' | 'players' | 'journal' | 'hints' | 'quests' | 'gallery' | 'spectator';
 
 export function GameMasterPage() {
   const navigate = useNavigate();
@@ -102,6 +110,7 @@ export function GameMasterPage() {
   const [resultDismissed, setResultDismissed] = useState(false);
   const [hintTargetPlayerId, setHintTargetPlayerId] = useState<number | null>(null);
   const [questTargetPlayerId, setQuestTargetPlayerId] = useState<number | null>(null);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   // ── Lobby: fetch games list ──
   const localIdCounter = useRef(0);
@@ -247,8 +256,12 @@ export function GameMasterPage() {
           winner: null,
           werewolfTarget: null,
           werewolfVotes: {},
+          werewolfVoteMessages: {},
           werewolfTargets: [],
           wolfKillsPerNight: 1,
+          wolfInactivityThreshold: 0,
+          villagerInactivityThreshold: 0,
+          randomVoteIfInactive: false,
           seerTargets: {},
           seerResults: {},
           witchHealUsedBy: [],
@@ -275,6 +288,9 @@ export function GameMasterPage() {
           corbeauLastTargets: {},
           hints: [],
           playerHints: [],
+          maireSuccessionPending: false,
+          maireSuccessionFromId: null,
+          maireSuccessionPhase: null,
           phaseTimerDuration: 900,
           phaseTimerEndAt: null,
           phaseTimerDayDuration: 900,
@@ -369,6 +385,7 @@ export function GameMasterPage() {
               winner: null,
               werewolfTarget: null,
               werewolfVotes: {},
+              werewolfVoteMessages: {},
               werewolfTargets: [],
               wolfKillsPerNight: 1,
               seerTargets: {},
@@ -397,6 +414,9 @@ export function GameMasterPage() {
               corbeauLastTargets: {},
               hints: [],
               playerHints: [],
+              maireSuccessionPending: false,
+              maireSuccessionFromId: null,
+              maireSuccessionPhase: null,
               phaseTimerDuration: 900,
               phaseTimerEndAt: null,
               phaseTimerDayDuration: 900,
@@ -560,23 +580,30 @@ export function GameMasterPage() {
 
   // Refs for deferred access (declared early so handleResyncRequest can reference them)
   const lastResyncBroadcastRef = useRef(0);
+  const resyncCoalescedRef = useRef(0);
+  const resyncTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const stateRef = useRef(state);
   stateRef.current = state;
   const broadcastStateRef = useRef<((gs: any) => void) | null>(null);
   const handleResyncRequest = useCallback(() => {
     const now = Date.now();
-    if (now - lastResyncBroadcastRef.current < 3000) {
-      console.log('[GM] Resync request throttled (< 3s since last)');
+    if (now - lastResyncBroadcastRef.current < 5000) {
+      resyncCoalescedRef.current++;
+      console.log(`[GM] Resync request coalesced (${resyncCoalescedRef.current} pending, < 5s since last broadcast)`);
       return;
     }
-    lastResyncBroadcastRef.current = now;
-    console.log('[GM] Resync request received — will broadcast full state');
-    // Defer to ensure broadcastStateRef is populated
-    setTimeout(() => {
+    // Debounce: wait 500ms to coalesce multiple simultaneous requests
+    if (resyncTimerRef.current) return;
+    resyncTimerRef.current = setTimeout(() => {
+      resyncTimerRef.current = null;
+      lastResyncBroadcastRef.current = Date.now();
+      const coalesced = resyncCoalescedRef.current;
+      resyncCoalescedRef.current = 0;
+      console.log(`[GM] Resync request fulfilled (coalesced ${coalesced} others) — broadcasting full state`);
       if (broadcastStateRef.current) {
-        broadcastStateRef.current(stateRef.current);
+        broadcastStateRef.current(fitBroadcastPayload(stateRef.current));
       }
-    }, 50);
+    }, 500);
   }, []);
 
   const { status: realtimeStatus, isConnected: realtimeConnected, broadcastState, broadcastDelta, broadcastTestNotification, broadcastLobbyResponse } = useRealtimeSync({
@@ -634,7 +661,8 @@ export function GameMasterPage() {
 
       if (shouldSendFull) {
         // Full state broadcast (initial sync / periodic recovery)
-        broadcastState(state);
+        // Apply size guard to prevent exceeding Supabase Realtime's ~256KB limit
+        broadcastState(fitBroadcastPayload(state));
         deltaCounterRef.current = 0;
       } else {
         // Compute delta and send only changed fields
@@ -659,7 +687,7 @@ export function GameMasterPage() {
     if (state.players.length === 0) return;
     // When realtime is connected, poll infrequently as fallback (10s)
     // When disconnected, poll more aggressively (2s)
-    const pollInterval = realtimeConnected ? 10000 : 2000;
+    const pollInterval = realtimeConnected ? 15000 : 2000;
     const interval = setInterval(async () => {
       const changed = await mergePlayerActions();
       if (changed) {
@@ -734,6 +762,210 @@ export function GameMasterPage() {
     }
   }, [state.screen]);
 
+  // ── Auto-import gallery hints & tasks when playerEntries change (pre-game) ──
+  const importedGalleryIdsRef = useRef<Set<number>>(new Set());
+  useEffect(() => {
+    // Only run pre-game (before players are set up in state)
+    if (state.players.length > 0) return;
+    if (playerEntries.length === 0) return;
+
+    // Find gallery players that haven't been imported yet
+    const galleryPlayers: { playerId: number; galleryId: number }[] = [];
+    playerEntries.forEach((e) => {
+      const gid = getGalleryId(e.avatarUrl);
+      if (gid !== null && !importedGalleryIdsRef.current.has(gid)) {
+        galleryPlayers.push({ playerId: e.id, galleryId: gid });
+      }
+    });
+
+    // Clean up hints/tasks for removed gallery players
+    const currentGalleryIds = new Set<number>();
+    playerEntries.forEach((e) => {
+      const gid = getGalleryId(e.avatarUrl);
+      if (gid !== null) currentGalleryIds.add(gid);
+    });
+    const removedGalleryIds: number[] = [];
+    importedGalleryIdsRef.current.forEach((gid) => {
+      if (!currentGalleryIds.has(gid)) removedGalleryIds.push(gid);
+    });
+    if (removedGalleryIds.length > 0) {
+      removedGalleryIds.forEach((gid) => {
+        importedGalleryIdsRef.current.delete(gid);
+      });
+      const validPlayerIds = new Set(playerEntries.map((e) => e.id));
+      updateState((s) => ({
+        ...s,
+        dynamicHints: (s.dynamicHints ?? []).filter((h: any) => validPlayerIds.has(h.targetPlayerId) || !h.gallerySourceId),
+        taskLibrary: (s.taskLibrary ?? []).filter((t: any) => t.referencedPlayerId == null || validPlayerIds.has(t.referencedPlayerId) || !t.gallerySourceId),
+      }));
+    }
+
+    if (galleryPlayers.length === 0) return;
+
+    // Fetch gallery data (per-player hints/tasks + general pre-tasks + pre-quests)
+    (async () => {
+      try {
+        const [hintsRes, tasksRes, preTasksRes, preQuestsRes] = await Promise.all([
+          fetch(`${API_BASE}/gallery/hints`, { headers: jsonAuthHeaders() }),
+          fetch(`${API_BASE}/gallery/tasks`, { headers: jsonAuthHeaders() }),
+          fetch(`${API_BASE}/gallery/pretasks`, { headers: jsonAuthHeaders() }),
+          fetch(`${API_BASE}/gallery/quests`, { headers: jsonAuthHeaders() }),
+        ]);
+        const hintsJson = await hintsRes.json();
+        const tasksJson = await tasksRes.json();
+        const preTasksJson = await preTasksRes.json();
+        const preQuestsJson = await preQuestsRes.json();
+        const galleryHintsData: Record<number, { id: number; text: string; priority: 1 | 2 | 3; imageUrl?: string }[]> = hintsJson.hints || {};
+        const galleryTasksData: Record<number, { id: number; question: string; inputType: string; correctAnswer: string; choices?: string[]; imageUrl?: string }[]> = tasksJson.tasks || {};
+        const galleryPreTasks: { id: number; question: string; inputType: string; correctAnswer: string; choices?: string[]; imageUrl?: string }[] =
+          Array.isArray(preTasksJson.pretasks) ? preTasksJson.pretasks : (preTasksJson.pretasks?.list ?? []);
+        const galleryPreQuests: { id: number; title: string; description: string; questType: string; collaborativeGroupSize?: number; tasks: { id: number; question: string; inputType: string; correctAnswer: string; choices?: string[]; imageUrl?: string }[]; targetTags?: string[]; distributionOrder?: number | 'random' | 'available'; createdAt: string }[] =
+          Array.isArray(preQuestsJson.quests) ? preQuestsJson.quests : (preQuestsJson.quests?.list ?? []);
+
+        const importedHints: any[] = [];
+        const importedTasks: TaskTemplate[] = [];
+
+        updateState((s) => {
+          let nextHintId = (s.dynamicHints ?? []).length > 0 ? Math.max(...(s.dynamicHints ?? []).map((h) => h.id)) + 1 : 1;
+          let nextTaskId = (s.taskLibrary ?? []).length > 0 ? Math.max(...(s.taskLibrary ?? []).map((t) => t.id)) + 1 : 1;
+
+          // Import general pre-tasks (only once — skip if already present)
+          const existingPreTaskSourceIds = new Set(
+            (s.taskLibrary ?? []).filter((t) => t.gallerySourceId === 'pretask').map((t) => (t as any).originalPreTaskId)
+          );
+          for (const pt of galleryPreTasks) {
+            if (!existingPreTaskSourceIds.has(pt.id)) {
+              importedTasks.push({
+                id: nextTaskId++,
+                question: pt.question,
+                inputType: pt.inputType as any,
+                correctAnswer: pt.correctAnswer,
+                choices: pt.choices,
+                imageUrl: pt.imageUrl,
+                createdAt: new Date().toISOString(),
+                gallerySourceId: 'pretask',
+                originalPreTaskId: pt.id,
+              });
+            }
+          }
+
+          // Import per-player gallery tasks & hints
+          for (const { playerId, galleryId } of galleryPlayers) {
+            const hintTpls = galleryHintsData[galleryId] ?? [];
+            for (const tpl of hintTpls) {
+              importedHints.push({
+                id: nextHintId++,
+                targetPlayerId: playerId,
+                text: tpl.text,
+                imageUrl: tpl.imageUrl,
+                priority: tpl.priority,
+                revealed: false,
+                createdAt: new Date().toISOString(),
+                gallerySourceId: galleryId,
+              });
+            }
+            const taskTpls = galleryTasksData[galleryId] ?? [];
+            for (const tpl of taskTpls) {
+              importedTasks.push({
+                id: nextTaskId++,
+                question: tpl.question,
+                inputType: tpl.inputType as any,
+                correctAnswer: tpl.correctAnswer,
+                choices: tpl.choices,
+                imageUrl: tpl.imageUrl,
+                referencedPlayerId: playerId,
+                createdAt: new Date().toISOString(),
+                gallerySourceId: galleryId,
+              });
+            }
+            importedGalleryIdsRef.current.add(galleryId);
+          }
+
+          // Import gallery pre-quests as actual quests (only once — skip duplicates by title)
+          const existingQuestTitles = new Set((s.quests || []).map((q) => q.title));
+          const existingPreQuestSourceIds = new Set(
+            (s.quests || []).filter((q: any) => q.galleryPreQuestId != null).map((q: any) => q.galleryPreQuestId)
+          );
+          const newQuests: Quest[] = [];
+          for (const pq of galleryPreQuests) {
+            if (existingPreQuestSourceIds.has(pq.id)) continue;
+            const now = Date.now();
+            const questId = now + Math.floor(Math.random() * 100000);
+            // Deduplicate title
+            let title = pq.title;
+            if (existingQuestTitles.has(title)) {
+              let counter = 1;
+              while (existingQuestTitles.has(`${pq.title} ${counter}`)) counter++;
+              title = `${pq.title} ${counter}`;
+            }
+            existingQuestTitles.add(title);
+
+            const isCollab = pq.questType === 'collaborative';
+            let questTasks: Quest['tasks'] = [];
+
+            if (!isCollab && pq.tasks.length > 0) {
+              const newTaskLibEntries: TaskTemplate[] = pq.tasks.map((t) => ({
+                id: nextTaskId++,
+                question: t.question,
+                inputType: t.inputType as any,
+                correctAnswer: t.correctAnswer,
+                choices: t.choices ? [...t.choices] : undefined,
+                imageUrl: t.imageUrl,
+                createdAt: new Date().toISOString(),
+                gallerySourceId: 'prequest' as any,
+              }));
+              importedTasks.push(...newTaskLibEntries);
+
+              questTasks = newTaskLibEntries.map((tpl, idx) => ({
+                id: questId * 100 + idx,
+                question: tpl.question,
+                inputType: tpl.inputType,
+                correctAnswer: tpl.correctAnswer,
+                choices: tpl.choices ? [...tpl.choices] : undefined,
+                imageUrl: tpl.imageUrl,
+                referencedPlayerId: tpl.referencedPlayerId,
+                playerAnswers: {} as Record<number, string>,
+                playerResults: {} as Record<number, boolean>,
+                templateId: tpl.id,
+              }));
+            }
+
+            newQuests.push({
+              id: questId,
+              title,
+              description: pq.description,
+              questType: isCollab ? 'collaborative' : undefined,
+              collaborativeGroupSize: isCollab ? (pq.collaborativeGroupSize || 3) : undefined,
+              playerStatuses: {},
+              tasks: questTasks,
+              createdAt: new Date().toISOString(),
+              hidden: true,
+              targetTags: pq.targetTags,
+              distributionOrder: pq.distributionOrder,
+              galleryPreQuestId: pq.id,
+            });
+          }
+
+          return {
+            ...s,
+            dynamicHints: [...(s.dynamicHints ?? []), ...importedHints],
+            taskLibrary: [...(s.taskLibrary ?? []), ...importedTasks],
+            quests: [...(s.quests || []), ...newQuests],
+          };
+        });
+      } catch (err) {
+        console.error('Failed to fetch gallery hints/tasks/quests for pre-game preview:', err);
+      }
+    })();
+  }, [playerEntries, state.players.length, updateState]);
+
+  // Reset gallery import tracking when game is reset
+  useEffect(() => {
+    if (state.screen === 'home' && state.players.length === 0) {
+      importedGalleryIdsRef.current = new Set();
+    }
+  }, [state.screen, state.players.length]);
+
   const totalRoles = getTotalRoles();
   const isValid = totalRoles === playerCount;
   const werewolfCount = state.roleConfig['loup-garou'] || 0;
@@ -793,7 +1025,7 @@ export function GameMasterPage() {
     }
   }, [state.players, checkWinCondition, endGame, resultDismissed]);
 
-  const handleStartGame = () => {
+  const handleStartGame = async () => {
     if (!isValid || !hasEnoughWerewolves) return;
     setResultDismissed(false);
     setupPlayers(
@@ -823,7 +1055,9 @@ export function GameMasterPage() {
     // Merge default available tags with any tags actually used
     const autoAvailableTags = [...DEFAULT_AVAILABLE_TAGS];
     usedTags.forEach((t) => { if (!autoAvailableTags.includes(t)) autoAvailableTags.push(t); });
-    // Clear lobby players — they are now real players, and set auto-tags
+
+    // Gallery hints, tasks & pre-quests are already pre-imported into state.dynamicHints / state.taskLibrary / state.quests
+    // during the setup phase (auto-import useEffect). Just clear lobby players and set tags.
     updateState((s) => ({
       ...s,
       lobbyPlayers: [],
@@ -1193,88 +1427,146 @@ export function GameMasterPage() {
               </div>
             </div>
           </div>
-          {state.players.length > 0 && (
-            <div className="flex items-center gap-2 sm:gap-3">
-              <div className="flex items-center gap-1 sm:gap-1.5">
-                {isNight ? (
-                  <Moon size={isMobile ? 12 : 14} style={{ color: '#7c8db5' }} />
-                ) : (
-                  <Sun size={isMobile ? 12 : 14} style={{ color: '#f0c55b' }} />
+          <div className="flex items-center gap-2 sm:gap-3">
+            {state.players.length > 0 && (
+              <>
+                <div className="flex items-center gap-1 sm:gap-1.5">
+                  {isNight ? (
+                    <Moon size={isMobile ? 12 : 14} style={{ color: '#7c8db5' }} />
+                  ) : (
+                    <Sun size={isMobile ? 12 : 14} style={{ color: '#f0c55b' }} />
+                  )}
+                  <span
+                    style={{
+                      fontFamily: '"Cinzel", serif',
+                      color: isNight ? '#7c8db5' : '#f0c55b',
+                      fontSize: isMobile ? '0.65rem' : '0.8rem',
+                    }}
+                  >
+                    {isMobile
+                      ? (isNight ? `N${state.turn}` : `J${state.turn}`)
+                      : (isNight ? `Nuit ${state.turn}` : `Jour ${state.turn}`)}
+                  </span>
+                </div>
+                {!isMobile && (
+                  <>
+                    <div className="h-4 w-px" style={{ background: 'rgba(255,255,255,0.1)' }} />
+                    <div className="flex items-center gap-2">
+                      <span style={{ color: '#6b8e5a', fontSize: '0.75rem' }}>
+                        {alivePlayers.length} vivants
+                      </span>
+                      <span style={{ color: '#c41e3a', fontSize: '0.75rem' }}>
+                        {deadPlayers.length} morts
+                      </span>
+                    </div>
+                  </>
                 )}
-                <span
-                  style={{
-                    fontFamily: '"Cinzel", serif',
-                    color: isNight ? '#7c8db5' : '#f0c55b',
-                    fontSize: isMobile ? '0.65rem' : '0.8rem',
-                  }}
-                >
-                  {isMobile
-                    ? (isNight ? `N${state.turn}` : `J${state.turn}`)
-                    : (isNight ? `Nuit ${state.turn}` : `Jour ${state.turn}`)}
-                </span>
-              </div>
-              {!isMobile && (
-                <>
-                  <div className="h-4 w-px" style={{ background: 'rgba(255,255,255,0.1)' }} />
-                  <div className="flex items-center gap-2">
-                    <span style={{ color: '#6b8e5a', fontSize: '0.75rem' }}>
-                      {alivePlayers.length} vivants
-                    </span>
-                    <span style={{ color: '#c41e3a', fontSize: '0.75rem' }}>
-                      {deadPlayers.length} morts
-                    </span>
-                  </div>
-                </>
-              )}
-            </div>
-          )}
-        </div>
-
-        {/* Tab row */}
-        <div className={`flex items-center ${isMobile ? 'mt-2' : 'mt-1 justify-end gap-1'}`}>
-          {isMobile ? (
-            <div
-              className="flex w-full rounded-lg overflow-hidden"
-              style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)' }}
-            >
-              {[
-                { id: 'game' as GMTab, label: 'Partie', icon: <Swords size={13} /> },
-                { id: 'hints' as GMTab, label: 'Indices', icon: <Lightbulb size={13} /> },
-                { id: 'quests' as GMTab, label: 'Quêtes', icon: <Map size={13} /> },
-                { id: 'setup' as GMTab, label: 'Prépa', icon: <Shield size={13} /> },
-                { id: 'spectator' as GMTab, label: 'Spec', icon: <Eye size={13} /> },
-              ].map((tab) => (
+              </>
+            )}
+            {/* Mobile burger menu button (header) */}
+          {isMobile && (() => {
+            const burgerTabs = [
+              { id: 'journal' as GMTab, label: 'Journal', icon: <ScrollText size={16} /> },
+              { id: 'setup' as GMTab, label: 'Configuration', icon: <Settings size={16} /> },
+              { id: 'gallery' as GMTab, label: 'Galerie', icon: <LayoutGrid size={16} /> },
+              { id: 'spectator' as GMTab, label: 'Spectateur', icon: <Eye size={16} /> },
+            ];
+            const isOnBurgerTab = burgerTabs.some(bt => bt.id === activeTab);
+            return (
+              <>
                 <button
-                  key={tab.id}
-                  onClick={() => setActiveTab(tab.id)}
-                  className="flex-1 flex items-center justify-center gap-1.5 py-2 transition-colors relative"
+                  onClick={() => setMobileMenuOpen((v) => !v)}
+                  className="relative w-8 h-8 rounded-lg flex items-center justify-center transition-colors"
                   style={{
-                    background: activeTab === tab.id ? t.goldBg : 'transparent',
-                    borderBottom: activeTab === tab.id ? `2px solid ${t.gold}` : '2px solid transparent',
-                    color: activeTab === tab.id ? t.gold : t.textMuted,
-                    fontFamily: '"Cinzel", serif',
-                    fontSize: '0.65rem',
+                    background: mobileMenuOpen || isOnBurgerTab ? t.goldBg : 'rgba(255,255,255,0.04)',
+                    border: `1px solid ${mobileMenuOpen || isOnBurgerTab ? t.goldBorder : 'rgba(255,255,255,0.08)'}`,
                   }}
                 >
-                  {tab.icon}
-                  {tab.label}
-                  {tab.id === 'hints' && hintBadgeCount > 0 && (
-                    <span
-                      className="absolute -top-0.5 -right-0.5 min-w-[16px] h-4 flex items-center justify-center rounded-full text-white"
-                      style={{ background: '#8b5cf6', fontSize: '0.5rem', fontWeight: 700, fontFamily: '"Cinzel", serif', padding: '0 3px' }}
-                    >
-                      {hintBadgeCount}
-                    </span>
+                  {mobileMenuOpen ? (
+                    <X size={14} style={{ color: t.gold }} />
+                  ) : (
+                    <Menu size={14} style={{ color: isOnBurgerTab ? t.gold : t.textMuted }} />
                   )}
                 </button>
-              ))}
-            </div>
-          ) : (
+                {/* Burger dropdown (portaled to body) */}
+                {createPortal(
+                  <AnimatePresence>
+                    {mobileMenuOpen && (
+                      <>
+                        <motion.div
+                          key="gm-menu-backdrop"
+                          initial={{ opacity: 0 }}
+                          animate={{ opacity: 1 }}
+                          exit={{ opacity: 0 }}
+                          transition={{ duration: 0.2 }}
+                          className="fixed inset-0"
+                          style={{ zIndex: 9998, background: 'rgba(0,0,0,0.4)' }}
+                          onClick={() => setMobileMenuOpen(false)}
+                        />
+                        <motion.div
+                          key="gm-menu-panel"
+                          initial={{ opacity: 0, y: -10, scale: 0.95 }}
+                          animate={{ opacity: 1, y: 0, scale: 1 }}
+                          exit={{ opacity: 0, y: -10, scale: 0.95 }}
+                          transition={{ duration: 0.2, ease: 'easeOut' }}
+                          className="fixed right-3 flex flex-col rounded-xl overflow-hidden"
+                          style={{
+                            zIndex: 9999,
+                            top: 'calc(env(safe-area-inset-top, 0px) + 52px)',
+                            minWidth: '180px',
+                            background: t.modalBg,
+                            backdropFilter: 'blur(24px)',
+                            boxShadow: '0 8px 32px rgba(0,0,0,0.5)',
+                            border: `1px solid ${t.headerBorder}`,
+                          }}
+                        >
+                          {burgerTabs.map((tab, idx) => (
+                            <button
+                              key={tab.id}
+                              onClick={() => {
+                                setActiveTab(tab.id);
+                                setMobileMenuOpen(false);
+                              }}
+                              className="w-full flex items-center gap-3 px-4 py-3 transition-colors"
+                              style={{
+                                background: activeTab === tab.id ? t.goldBg : 'transparent',
+                                color: activeTab === tab.id ? t.gold : t.textMuted,
+                                fontFamily: '"Cinzel", serif',
+                                fontSize: '0.75rem',
+                                borderBottom: idx < burgerTabs.length - 1 ? `1px solid rgba(255,255,255,0.04)` : 'none',
+                              }}
+                            >
+                              {tab.icon}
+                              {tab.label}
+                              {activeTab === tab.id && (
+                                <span className="ml-auto" style={{ color: t.gold }}>
+                                  <Check size={14} />
+                                </span>
+                              )}
+                            </button>
+                          ))}
+                        </motion.div>
+                      </>
+                    )}
+                  </AnimatePresence>,
+                  document.body
+                )}
+              </>
+            );
+          })()}
+          </div>
+        </div>
+
+        {/* Tab row (desktop only — mobile uses bottom nav) */}
+        {!isMobile && (
+        <div className="flex items-center mt-1 justify-end gap-1">
+          {(
             [
               { id: 'game' as GMTab, label: 'Partie', icon: <Target size={14} /> },
               { id: 'hints' as GMTab, label: 'Indices', icon: <Lightbulb size={14} /> },
               { id: 'quests' as GMTab, label: 'Quêtes', icon: <Map size={14} /> },
               { id: 'setup' as GMTab, label: 'Paramétrages', icon: <Shield size={14} /> },
+              { id: 'gallery' as GMTab, label: 'Galerie', icon: <LayoutGrid size={14} /> },
               { id: 'spectator' as GMTab, label: 'Spectateur', icon: <Eye size={14} /> },
             ].map((tab) => (
               <button
@@ -1303,6 +1595,7 @@ export function GameMasterPage() {
             ))
           )}
         </div>
+        )}
       </header>
       )}
 
@@ -1403,7 +1696,69 @@ export function GameMasterPage() {
                 handleResolveMaireElection={handleResolveMaireElection}
                 externalSelectedPlayer={questTargetPlayerId}
                 onClearExternalSelectedPlayer={() => setQuestTargetPlayerId(null)}
+                forceMobileView={isMobile ? 'controls' : undefined}
+                onNavigateToPlayersTab={isMobile ? (playerId: number) => {
+                  setQuestTargetPlayerId(playerId);
+                  setActiveTab('players');
+                } : undefined}
               />
+            </motion.div>
+          )}
+          {activeTab === 'players' && (
+            <motion.div
+              key="players"
+              initial={{ opacity: 0, x: -20 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: 20 }}
+              className="h-full"
+            >
+              <GamePanel
+                state={state}
+                alivePlayers={alivePlayers}
+                deadPlayers={deadPlayers}
+                isNight={isNight}
+                hasRole={hasRole}
+                leverLeSoleil={leverLeSoleil}
+                handleAdvanceTurn={handleAdvanceTurn}
+                handleStartNight1={handleStartNight1}
+                eliminatePlayer={eliminatePlayer}
+                revivePlayer={revivePlayer}
+                addEvent={addEvent}
+                showEventLog={showEventLog}
+                setShowEventLog={setShowEventLog}
+                navigate={navigate}
+                setNightStep={setNightStep}
+                confirmHunterShot={confirmHunterShot}
+                setDayStep={setDayStep}
+                resolveVote={resolveVote}
+                setGuardTarget={setGuardTarget}
+                isMobile={isMobile}
+                playerHeartbeats={playerHeartbeats}
+                t={t}
+                resultDismissed={resultDismissed}
+                onShowResult={() => setResultDismissed(false)}
+                updateState={updateState}
+                onSendHintToPlayer={(playerId: number) => {
+                  setHintTargetPlayerId(playerId);
+                  setActiveTab('hints');
+                }}
+                broadcastTestNotification={broadcastTestNotification}
+                handleResolveMaireElection={handleResolveMaireElection}
+                externalSelectedPlayer={questTargetPlayerId}
+                onClearExternalSelectedPlayer={() => setQuestTargetPlayerId(null)}
+                forceMobileView="players"
+              />
+            </motion.div>
+          )}
+          {activeTab === 'journal' && (
+            <motion.div
+              key="journal"
+              initial={{ opacity: 0, x: -20 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: 20 }}
+              className="h-full overflow-y-auto"
+            >
+              <GMEventLog state={state} isMobile={isMobile} t={t} />
             </motion.div>
           )}
           {activeTab === 'hints' && (
@@ -1443,8 +1798,29 @@ export function GameMasterPage() {
                   isMobile={isMobile}
                   onNavigateToPlayer={(playerId: number) => {
                     setQuestTargetPlayerId(playerId);
-                    setActiveTab('game');
+                    setActiveTab(isMobile ? 'players' : 'game');
                   }}
+                  playerEntries={playerEntries}
+                />
+              </div>
+            </motion.div>
+          )}
+          {activeTab === 'gallery' && (
+            <motion.div
+              key="gallery"
+              initial={{ opacity: 0, x: -20 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: 20 }}
+              className="h-full overflow-y-auto"
+            >
+              <div className={`${isMobile ? 'px-3 py-3' : 'px-6 py-5 w-full'}`}>
+                <GMPlayerGalleryPanel
+                  state={state}
+                  onUpdateState={updateState}
+                  t={t}
+                  isMobile={isMobile}
+                  playerEntries={playerEntries}
+                  setPlayerEntries={setPlayerEntries}
                 />
               </div>
             </motion.div>
@@ -1473,6 +1849,71 @@ export function GameMasterPage() {
           <EndGameOverlay state={state} navigate={navigate} t={t} onDismiss={() => setResultDismissed(true)} onRelaunch={relaunchGame} />
         )}
       </AnimatePresence>
+
+      {/* Hunter Shot Modal — GM can confirm the shot when a Chasseur dies */}
+      <AnimatePresence>
+        {state.hunterPending && state.hunterShooterId !== null && (
+          <HunterShotModal
+            players={state.players}
+            hunterId={state.hunterShooterId}
+            preTarget={(state.hunterPreTargets || {})[state.hunterShooterId] ?? null}
+            villagePresentIds={state.villagePresentIds}
+            onShoot={(targetId) => {
+              confirmHunterShot(targetId);
+              syncToServer();
+            }}
+          />
+        )}
+      </AnimatePresence>
+
+      {/* Maire Succession — handled in the dying Maire's player view only.
+         Auto-fallback via autoAssignMaireSuccessor at next phase transition. */}
+
+      {/* Mobile bottom nav bar (4 tabs, no burger — burger is in header) */}
+      {isMobile && activeTab !== 'spectator' && (
+        <nav
+          className="flex-shrink-0 flex items-stretch"
+          style={{
+            background: t.headerBg,
+            borderTop: `1px solid ${t.headerBorder}`,
+            backdropFilter: 'blur(10px)',
+            paddingBottom: 'env(safe-area-inset-bottom, 0px)',
+          }}
+        >
+          {([
+            { id: 'game' as GMTab, label: 'Contrôles', icon: <Swords size={18} /> },
+            { id: 'players' as GMTab, label: 'Joueurs', icon: <Users size={18} /> },
+            { id: 'quests' as GMTab, label: 'Quêtes', icon: <Map size={18} /> },
+            { id: 'hints' as GMTab, label: 'Indices', icon: <Lightbulb size={18} /> },
+          ]).map((tab) => {
+            const isActive = activeTab === tab.id;
+            return (
+              <button
+                key={tab.id}
+                onClick={() => { setActiveTab(tab.id); setMobileMenuOpen(false); }}
+                className="flex-1 flex flex-col items-center justify-center gap-0.5 py-2 transition-colors relative"
+                style={{
+                  color: isActive ? t.gold : t.textMuted,
+                  background: isActive ? t.goldBg : 'transparent',
+                }}
+              >
+                {tab.icon}
+                <span style={{ fontFamily: '"Cinzel", serif', fontSize: '0.55rem', fontWeight: isActive ? 700 : 400 }}>
+                  {tab.label}
+                </span>
+                {tab.id === 'hints' && hintBadgeCount > 0 && (
+                  <span
+                    className="absolute top-1 right-1/4 min-w-[14px] h-[14px] flex items-center justify-center rounded-full text-white"
+                    style={{ background: '#8b5cf6', fontSize: '0.45rem', fontWeight: 700, padding: '0 2px' }}
+                  >
+                    {hintBadgeCount}
+                  </span>
+                )}
+              </button>
+            );
+          })}
+        </nav>
+      )}
 
       {/* Performance monitor */}
       <GMPerformanceMonitor

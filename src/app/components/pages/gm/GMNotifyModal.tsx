@@ -1,4 +1,5 @@
 import React, { useState, useMemo } from 'react';
+import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'motion/react';
 import { X, Vote, Moon, Scroll, MessageSquare, Send } from 'lucide-react';
 import { type Player, type GameState } from '../../../context/gameTypes';
@@ -109,18 +110,31 @@ export const GMNotifyModal = React.memo(function GMNotifyModal({
       message: `\uD83C\uDF19 C'est a vous d'agir cette nuit\u00A0!`,
     });
 
-    // 3. Quest available
+    // 3. Quest available — only enabled if the player has at least one ongoing (active/pending) quest
     const assignedQuestIds = (state.questAssignments || {})[player.id] || [];
     const hasQuests = assignedQuestIds.length > 0;
+    const quests = state.quests || [];
+    const ongoingQuestCount = assignedQuestIds.filter((qid: number) => {
+      const q = quests.find((quest: any) => quest.id === qid);
+      if (!q) return false;
+      const status = q.playerStatuses?.[player.id];
+      return !status || status === 'active' || status === 'pending-resolution';
+    }).length;
+    const questDisabled = !hasQuests || ongoingQuestCount === 0;
+    const questDisabledReason = !hasQuests
+      ? 'Aucune quete assignee'
+      : ongoingQuestCount === 0
+        ? 'Toutes les quetes sont terminees'
+        : undefined;
     items.push({
       id: 'quest',
       icon: <Scroll size={18} />,
       label: 'Quete disponible',
-      description: hasQuests
-        ? `${assignedQuestIds.length} quete${assignedQuestIds.length > 1 ? 's' : ''} assignee${assignedQuestIds.length > 1 ? 's' : ''}`
-        : 'Aucune quete assignee',
-      disabled: !hasQuests,
-      disabledReason: !hasQuests ? 'Aucune quete assignee' : undefined,
+      description: questDisabled
+        ? (questDisabledReason || '')
+        : `${ongoingQuestCount} quete${ongoingQuestCount > 1 ? 's' : ''} en cours`,
+      disabled: questDisabled,
+      disabledReason: questDisabledReason,
       message: '\u2694\uFE0F Vous avez une quete a accomplir\u00A0!',
     });
 
@@ -147,10 +161,10 @@ export const GMNotifyModal = React.memo(function GMNotifyModal({
   const disabledBg = isNight ? 'rgba(255,255,255,0.02)' : 'rgba(0,0,0,0.02)';
   const disabledText = isNight ? 'rgba(226,220,200,0.25)' : 'rgba(26,26,46,0.25)';
 
-  return (
+  return createPortal(
     <AnimatePresence>
       <motion.div
-        className="fixed inset-0 z-[9999] flex items-end sm:items-center sm:justify-center sm:p-4"
+        className="fixed inset-0 z-[9999] flex items-center justify-center p-4"
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         exit={{ opacity: 0 }}
@@ -159,25 +173,20 @@ export const GMNotifyModal = React.memo(function GMNotifyModal({
         {/* Backdrop */}
         <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
 
-        {/* Modal — bottom sheet on mobile, centered card on desktop */}
+        {/* Modal — centered fullscreen card */}
         <motion.div
-          className="relative w-full rounded-t-2xl sm:rounded-xl sm:max-w-sm overflow-hidden flex flex-col max-h-[90dvh] sm:max-h-full"
+          className="relative w-full rounded-2xl sm:max-w-sm overflow-hidden flex flex-col max-h-[85dvh]"
           style={{
             background: bgCard,
             border: `1px solid ${borderColor}`,
             boxShadow: `0 25px 50px rgba(0,0,0,0.4), 0 0 30px ${isNight ? 'rgba(212,168,67,0.08)' : 'rgba(184,134,11,0.06)'}`,
           }}
-          initial={{ y: '100%', opacity: 0 }}
-          animate={{ y: 0, opacity: 1 }}
-          exit={{ y: '100%', opacity: 0 }}
-          transition={{ duration: 0.25, ease: 'easeOut' }}
+          initial={{ scale: 0.92, opacity: 0 }}
+          animate={{ scale: 1, opacity: 1 }}
+          exit={{ scale: 0.92, opacity: 0 }}
+          transition={{ duration: 0.2, ease: 'easeOut' }}
           onClick={(e) => e.stopPropagation()}
         >
-          {/* Swipe handle — mobile only */}
-          <div className="sm:hidden flex justify-center pt-3 pb-1">
-            <div className="w-10 h-1 rounded-full" style={{ background: textMuted }} />
-          </div>
-
           {/* Header */}
           <div
             className="flex items-center justify-between px-4 py-3 sm:py-3"
@@ -301,6 +310,7 @@ export const GMNotifyModal = React.memo(function GMNotifyModal({
           </div>
         </motion.div>
       </motion.div>
-    </AnimatePresence>
+    </AnimatePresence>,
+    document.body
   );
 });

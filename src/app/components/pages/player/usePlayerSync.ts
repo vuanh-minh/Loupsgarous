@@ -48,6 +48,7 @@ export function usePlayerSync({
   // ---- Adaptive polling state (declared early so markActionSent can reset backoff) ----
   const noChangePollCountRef = useRef(0);
   const lastPollHashRef = useRef('');
+  const lastDeltaReceivedRef = useRef(0); // Track when last delta was received
 
   /** Call this right before sending any server action to protect optimistic state */
   const markActionSent = useCallback(() => {
@@ -149,8 +150,9 @@ export function usePlayerSync({
         console.log('[usePlayerSync] Delta version gap detected — requesting resync + fetching full state');
         clearDeltaRecovery();
         noChangePollCountRef.current = 0; // Reset backoff for aggressive polling
-        // Ask GM to re-broadcast full state via Realtime (fast path)
-        broadcastResyncRequest();
+        // Jitter resync request (0-2s) to avoid 40 clients requesting simultaneously
+        const jitter = Math.random() * 2000;
+        setTimeout(() => broadcastResyncRequest(), jitter);
         // Also fetch from REST as fallback (in case GM missed the request)
         try {
           let serverState = await loadFromServer(shortCode ? { shortCode } : undefined);
@@ -164,7 +166,7 @@ export function usePlayerSync({
           console.log('[usePlayerSync] Delta recovery fetch error:', err);
         }
       }
-    }, 2000); // Check every 2s
+    }, 5000); // Check every 5s (was 2s — reduces overhead)
     return () => clearInterval(checkInterval);
   }, [realtimeConnected, isDeltaRecoveryNeeded, clearDeltaRecovery, broadcastResyncRequest, loadFromServer, setFullState, shortCode, fallbackGameId]);
 
@@ -186,7 +188,7 @@ export function usePlayerSync({
       }).catch(() => {});
     };
     sendHeartbeat();
-    const interval = setInterval(sendHeartbeat, 10000);
+    const interval = setInterval(sendHeartbeat, 30000);
     return () => clearInterval(interval);
   }, [shortCode, broadcastHeartbeat]);
 

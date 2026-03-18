@@ -4,7 +4,8 @@ import {
   Users, Crown, Shield, Skull, ExternalLink,
   Search, X, Star, Heart, Bell, Scroll,
   Tag, Plus, Send, ChevronDown, CheckCircle2, XCircle, Clock, Handshake,
-  Check, UserX, Dices, Lightbulb, Eye,
+  Check, UserX, UserCheck, Dices, Lightbulb, Eye,
+  Swords, Vote, Moon,
 } from 'lucide-react';
 import { type Player } from '../../../context/GameContext';
 import { type Quest, type Hint, type PlayerHint, type DynamicHint } from '../../../context/gameTypes';
@@ -207,8 +208,10 @@ export function GMPlayerList() {
 
   const availableDynamicHintCount = useMemo(() => {
     const dh: DynamicHint[] = state.dynamicHints ?? [];
-    return dh.filter((h) => !h.revealed).length;
-  }, [state.dynamicHints]);
+    const pid = selectedPlayerData?.id;
+    if (pid == null) return 0;
+    return dh.filter((h) => !(h.grantedToPlayerIds ?? []).includes(pid)).length;
+  }, [state.dynamicHints, selectedPlayerData?.id]);
 
   const availableTags = state.availableTags || [];
   const playerTags: Record<number, string[]> = state.playerTags || {};
@@ -788,7 +791,10 @@ export function GMPlayerList() {
               </div>
               <div className="flex gap-1.5">
                 <button
-                  onClick={() => navigate(`/player/${selectedPlayerData.shortCode}`)}
+                  onClick={() => {
+                    sessionStorage.setItem('__gm_preview', '1');
+                    navigate(`/player/${selectedPlayerData.shortCode}`);
+                  }}
                   className="w-8 h-8 rounded-lg flex items-center justify-center"
                   style={{ border: `1px solid ${isNight ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.1)'}` }}
                 >
@@ -839,6 +845,118 @@ export function GMPlayerList() {
             <p style={{ color: isNight ? '#8090b0' : '#4a3a25', fontSize: '0.7rem', lineHeight: 1.4 }}>
               {selectedRole.description}
             </p>
+            {/* ── Actions status ── */}
+            {selectedPlayerData.alive && (() => {
+              const pid = selectedPlayerData.id;
+              const role = selectedPlayerData.role;
+              // Night action detection per role
+              const nightActionRoles: Record<string, () => { done: boolean; label: string }> = {
+                'loup-garou': () => ({
+                  done: state.werewolfVotes?.[pid] !== undefined,
+                  label: state.werewolfVotes?.[pid] !== undefined
+                    ? `A voté → ${state.players.find((p: Player) => p.id === state.werewolfVotes[pid])?.name || '?'}`
+                    : 'En attente de vote',
+                }),
+                'voyante': () => ({
+                  done: state.seerTargets?.[pid] !== undefined,
+                  label: state.seerTargets?.[pid] !== undefined
+                    ? `A sondé → ${state.players.find((p: Player) => p.id === state.seerTargets[pid])?.name || '?'}`
+                    : 'En attente',
+                }),
+                'sorciere': () => {
+                  const healed = !!(state.witchHealedThisNight || {})[pid];
+                  const killed = state.witchKillTargets?.[pid] !== undefined;
+                  return {
+                    done: healed || killed,
+                    label: healed || killed
+                      ? [healed && 'Guérison', killed && `Poison → ${state.players.find((p: Player) => p.id === state.witchKillTargets?.[pid])?.name || '?'}`].filter(Boolean).join(' · ')
+                      : 'Aucune potion',
+                  };
+                },
+                'garde': () => ({
+                  done: state.guardTargets?.[pid] !== undefined,
+                  label: state.guardTargets?.[pid] !== undefined
+                    ? `Protège → ${state.players.find((p: Player) => p.id === state.guardTargets[pid])?.name || '?'}`
+                    : 'En attente',
+                }),
+                'cupidon': () => ({
+                  done: (state.cupidLinkedBy || []).length > 0,
+                  label: (state.cupidLinkedBy || []).length > 0 ? 'Amoureux liés' : 'En attente du lien',
+                }),
+                'corbeau': () => ({
+                  done: state.corbeauTargets?.[pid] !== undefined,
+                  label: state.corbeauTargets?.[pid] !== undefined
+                    ? `Cible → ${state.players.find((p: Player) => p.id === state.corbeauTargets[pid])?.name || '?'}`
+                    : 'En attente',
+                }),
+              };
+              const nightActionFn = nightActionRoles[role];
+              const hasNightRole = !!nightActionFn;
+              const nightAction = nightActionFn ? nightActionFn() : null;
+              // Day vote detection
+              const hasDayVoted = state.votes?.[pid] !== undefined;
+              const dayVoteTarget = hasDayVoted ? state.players.find((p: Player) => p.id === state.votes[pid]) : null;
+
+              return (
+                <div className="mt-3 pt-3" style={{ borderTop: `1px solid ${isNight ? 'rgba(147,130,220,0.15)' : 'rgba(180,155,85,0.25)'}` }}>
+                  <div className="flex items-center gap-1.5 mb-2">
+                    <Swords size={11} style={{ color: isNight ? '#a78bfa' : '#7c3aed' }} />
+                    <span style={{ fontFamily: '"Cinzel", serif', color: isNight ? '#a78bfa' : '#7c3aed', fontSize: '0.65rem', fontWeight: 700 }}>Actions</span>
+                  </div>
+                  <div className="space-y-1.5">
+                    {/* Night action */}
+                    {hasNightRole && nightAction && (
+                      <div
+                        className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg"
+                        style={{
+                          background: nightAction.done
+                            ? (isNight ? 'rgba(107,142,90,0.08)' : 'rgba(107,142,90,0.06)')
+                            : (isNight ? 'rgba(234,179,8,0.06)' : 'rgba(234,179,8,0.05)'),
+                          border: `1px solid ${nightAction.done ? 'rgba(107,142,90,0.2)' : 'rgba(234,179,8,0.2)'}`,
+                        }}
+                      >
+                        <Moon size={10} style={{ color: nightAction.done ? '#6b8e5a' : '#eab308' }} />
+                        <span style={{ fontSize: '0.6rem', color: isNight ? '#c8d0e0' : '#4a3a25', fontFamily: '"Cinzel", serif' }}>Nuit</span>
+                        <span className="ml-auto flex items-center gap-1" style={{ fontSize: '0.55rem', color: nightAction.done ? '#6b8e5a' : '#eab308' }}>
+                          {nightAction.done ? <CheckCircle2 size={10} /> : <Clock size={10} />}
+                          {nightAction.label}
+                        </span>
+                      </div>
+                    )}
+                    {!hasNightRole && (
+                      <div
+                        className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg"
+                        style={{
+                          background: isNight ? 'rgba(100,116,139,0.06)' : 'rgba(100,116,139,0.04)',
+                          border: `1px solid ${isNight ? 'rgba(100,116,139,0.15)' : 'rgba(100,116,139,0.1)'}`,
+                        }}
+                      >
+                        <Moon size={10} style={{ color: '#64748b' }} />
+                        <span style={{ fontSize: '0.6rem', color: isNight ? '#8090b0' : '#6b7280', fontFamily: '"Cinzel", serif' }}>Nuit</span>
+                        <span className="ml-auto" style={{ fontSize: '0.55rem', color: '#64748b' }}>Aucune action</span>
+                      </div>
+                    )}
+                    {/* Day vote */}
+                    <div
+                      className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg"
+                      style={{
+                        background: hasDayVoted
+                          ? (isNight ? 'rgba(107,142,90,0.08)' : 'rgba(107,142,90,0.06)')
+                          : (isNight ? 'rgba(234,179,8,0.06)' : 'rgba(234,179,8,0.05)'),
+                        border: `1px solid ${hasDayVoted ? 'rgba(107,142,90,0.2)' : 'rgba(234,179,8,0.2)'}`,
+                      }}
+                    >
+                      <Vote size={10} style={{ color: hasDayVoted ? '#6b8e5a' : '#eab308' }} />
+                      <span style={{ fontSize: '0.6rem', color: isNight ? '#c8d0e0' : '#4a3a25', fontFamily: '"Cinzel", serif' }}>Vote du jour</span>
+                      <span className="ml-auto flex items-center gap-1" style={{ fontSize: '0.55rem', color: hasDayVoted ? '#6b8e5a' : '#eab308' }}>
+                        {hasDayVoted ? <CheckCircle2 size={10} /> : <Clock size={10} />}
+                        {hasDayVoted ? `A voté → ${dayVoteTarget?.name || '?'}` : 'Pas encore voté'}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              );
+            })()}
             {/* Guard target picker — mobile inline */}
             {selectedPlayerData.role === 'garde' && isNight && state.nightStep === 'active' && selectedPlayerData.alive && (
               <div className="mt-3 pt-3" style={{ borderTop: '1px solid rgba(59,130,246,0.15)' }}>
@@ -1303,6 +1421,61 @@ export function GMPlayerList() {
                 </p>
               )}
             </div>
+
+            {/* ── Away toggle ── */}
+            {selectedPlayerData.alive && (() => {
+              const presentIds = state.villagePresentIds || state.players.filter((p: Player) => p.alive).map((p: Player) => p.id);
+              const isPlayerAway = !presentIds.includes(selectedPlayerData.id);
+              return (
+                <div
+                  className="mt-3 pt-3"
+                  style={{ borderTop: `1px solid ${isNight ? 'rgba(245,158,11,0.15)' : 'rgba(245,158,11,0.25)'}` }}
+                >
+                  <button
+                    onClick={() => {
+                      updateState((s: any) => {
+                        const current = s.villagePresentIds || s.players.filter((p: Player) => p.alive).map((p: Player) => p.id);
+                        const away = !current.includes(selectedPlayerData.id);
+                        return {
+                          ...s,
+                          villagePresentIds: away
+                            ? [...current, selectedPlayerData.id]
+                            : current.filter((id: number) => id !== selectedPlayerData.id),
+                        };
+                      });
+                    }}
+                    className="w-full flex items-center justify-between gap-2 px-2.5 py-2 rounded-lg transition-all"
+                    style={{
+                      background: isPlayerAway
+                        ? (isNight ? 'rgba(245,158,11,0.08)' : 'rgba(245,158,11,0.06)')
+                        : (isNight ? 'rgba(107,142,90,0.06)' : 'rgba(107,142,90,0.05)'),
+                      border: `1px solid ${isPlayerAway ? 'rgba(245,158,11,0.2)' : 'rgba(107,142,90,0.15)'}`,
+                    }}
+                  >
+                    <div className="flex items-center gap-2">
+                      {isPlayerAway
+                        ? <UserX size={11} style={{ color: '#f59e0b' }} />
+                        : <UserCheck size={11} style={{ color: '#6b8e5a' }} />}
+                      <span style={{ fontFamily: '"Cinzel", serif', color: isPlayerAway ? '#f59e0b' : (isNight ? '#c8d0e0' : '#4a3a25'), fontSize: '0.6rem', fontWeight: 700 }}>
+                        {isPlayerAway ? 'Absent' : 'Présent'}
+                      </span>
+                    </div>
+                    <div
+                      className="w-8 h-4 rounded-full relative transition-colors"
+                      style={{ background: isPlayerAway ? 'rgba(245,158,11,0.3)' : 'rgba(107,142,90,0.3)' }}
+                    >
+                      <div
+                        className="w-3 h-3 rounded-full absolute top-0.5 transition-all"
+                        style={{
+                          background: isPlayerAway ? '#f59e0b' : '#6b8e5a',
+                          left: isPlayerAway ? '2px' : '18px',
+                        }}
+                      />
+                    </div>
+                  </button>
+                </div>
+              );
+            })()}
           </motion.div>
         </>
       )}

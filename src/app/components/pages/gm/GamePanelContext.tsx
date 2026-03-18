@@ -66,6 +66,9 @@ export interface GamePanelContextValue {
   navigateToPlayerPreview: (player: Player) => void;
   getPlayerStatuses: (actionId: string, actionPlayers: Player[]) => Record<number, { done: boolean; detail: string }>;
   handleNightActionClick: (players: Player[], label: string, emoji: string, color: string, actionId: string) => void;
+
+  /* ---- External navigation (mobile) ---- */
+  onNavigateToPlayersTab?: (playerId: number) => void;
 }
 
 const GamePanelContext = createContext<GamePanelContextValue | null>(null);
