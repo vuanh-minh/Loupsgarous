@@ -1,0 +1,70 @@
+/**
+ * Predefined avatar gallery for the GM to assign to players.
+ * Each entry maps a display name to its avatar image in public/assets/avatars/.
+ */
+
+export interface GalleryAvatar {
+  id: number;
+  name: string;
+  url: string;
+}
+
+export const AVATAR_GALLERY: GalleryAvatar[] = [
+  { id: 0, name: 'Adrien Borde', url: '/assets/avatars/avatar-01.png' },
+  { id: 1, name: 'Adrien Lamy', url: '/assets/avatars/avatar-02.png' },
+  { id: 2, name: 'Adrien Simon', url: '/assets/avatars/avatar-03.png' },
+  { id: 3, name: 'Alicia', url: '/assets/avatars/avatar-04.png' },
+  { id: 4, name: 'Arnaud Philippe', url: '/assets/avatars/avatar-05.png' },
+  { id: 5, name: 'Camille C', url: '/assets/avatars/avatar-06.png' },
+  { id: 6, name: 'Camille J', url: '/assets/avatars/avatar-07.png' },
+  { id: 7, name: 'Camille M', url: '/assets/avatars/avatar-08.png' },
+  { id: 8, name: 'Celine N', url: '/assets/avatars/avatar-09.png' },
+  { id: 9, name: 'Celine W', url: '/assets/avatars/avatar-10.png' },
+  { id: 10, name: 'Chloé', url: '/assets/avatars/avatar-11.png' },
+  { id: 11, name: 'Christopher', url: '/assets/avatars/avatar-12.png' },
+  { id: 12, name: 'Cindy', url: '/assets/avatars/avatar-13.png' },
+  { id: 13, name: 'Claire', url: '/assets/avatars/avatar-14.png' },
+  { id: 14, name: 'Deisy', url: '/assets/avatars/avatar-15.png' },
+  { id: 15, name: 'Diego', url: '/assets/avatars/avatar-16.png' },
+  { id: 16, name: 'Elen', url: '/assets/avatars/avatar-17.png' },
+  { id: 17, name: 'Elisa', url: '/assets/avatars/avatar-18.png' },
+  { id: 18, name: 'Elodie', url: '/assets/avatars/avatar-19.png' },
+  { id: 19, name: 'Etienne', url: '/assets/avatars/avatar-20.png' },
+  { id: 20, name: 'Florent-Etienne', url: '/assets/avatars/avatar-21.png' },
+  { id: 21, name: 'Gonzague', url: '/assets/avatars/avatar-22.png' },
+  { id: 22, name: 'Jean-Baptiste', url: '/assets/avatars/avatar-23.png' },
+  { id: 23, name: 'Jeremy', url: '/assets/avatars/avatar-24.png' },
+  { id: 24, name: 'Jordan', url: '/assets/avatars/avatar-25.png' },
+  { id: 25, name: 'Julie', url: '/assets/avatars/avatar-26.png' },
+  { id: 26, name: 'Julien', url: '/assets/avatars/avatar-27.png' },
+  { id: 27, name: 'Kelian', url: '/assets/avatars/avatar-28.png' },
+  { id: 28, name: 'Kevin P', url: '/assets/avatars/avatar-29.png' },
+  { id: 29, name: 'Kevin', url: '/assets/avatars/avatar-30.png' },
+  { id: 30, name: 'Leandro', url: '/assets/avatars/avatar-31.png' },
+  { id: 31, name: 'Louis B', url: '/assets/avatars/avatar-32.png' },
+  { id: 32, name: 'Louis T', url: '/assets/avatars/avatar-33.png' },
+  { id: 33, name: 'Ludovic', url: '/assets/avatars/avatar-34.png' },
+  { id: 34, name: 'Maelle', url: '/assets/avatars/avatar-35.png' },
+  { id: 35, name: 'Manon', url: '/assets/avatars/avatar-36.png' },
+  { id: 36, name: 'Marie', url: '/assets/avatars/avatar-37.png' },
+  { id: 37, name: 'Marion', url: '/assets/avatars/avatar-38.png' },
+  { id: 38, name: 'Mathilde', url: '/assets/avatars/avatar-39.png' },
+  { id: 39, name: 'Max', url: '/assets/avatars/avatar-40.png' },
+  { id: 40, name: 'Méline', url: '/assets/avatars/avatar-41.png' },
+  { id: 41, name: 'Myriam', url: '/assets/avatars/avatar-42.png' },
+  { id: 42, name: 'Nancy', url: '/assets/avatars/avatar-43.png' },
+  { id: 43, name: 'Nicolas D', url: '/assets/avatars/avatar-44.png' },
+  { id: 44, name: 'Olivia', url: '/assets/avatars/avatar-45.png' },
+  { id: 45, name: 'Perrine', url: '/assets/avatars/avatar-46.png' },
+  { id: 46, name: 'Pierre', url: '/assets/avatars/avatar-47.png' },
+  { id: 47, name: 'Rosalie', url: '/assets/avatars/avatar-48.png' },
+  { id: 48, name: 'Sao Mai', url: '/assets/avatars/avatar-49.png' },
+  { id: 49, name: 'Shana', url: '/assets/avatars/avatar-50.png' },
+  { id: 50, name: 'Sophie', url: '/assets/avatars/avatar-51.png' },
+  { id: 51, name: 'Steeven', url: '/assets/avatars/avatar-52.png' },
+  { id: 52, name: 'Tam', url: '/assets/avatars/avatar-53.png' },
+  { id: 53, name: 'Thuong', url: '/assets/avatars/avatar-54.png' },
+  { id: 54, name: 'Tommy', url: '/assets/avatars/avatar-55.png' },
+  { id: 55, name: 'Vincent Gabu', url: '/assets/avatars/avatar-56.png' },
+  { id: 56, name: 'Yangui', url: '/assets/avatars/avatar-57.png' },
+];
