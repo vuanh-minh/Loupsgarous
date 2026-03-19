@@ -844,12 +844,12 @@ export function PlayerPage() {
   }
 
   const pageBgColor = activePanel === 'game' && !isCurrentPlayerDead
-    ? (isNight || isPracticeMode ? '#050810' : '#1a1a1a')
+    ? (isNight || isPracticeMode ? '#050810' : '#F5F0E4')
     : isCurrentPlayerDead
       ? t.pageBg
       : (isNight || isPracticeMode)
         ? 'linear-gradient(180deg, #050810 0%, #0a1025 50%, #15102a 100%)'
-        : t.pageBg;
+        : '#F5F0E4';
 
   return (
     <>
@@ -874,7 +874,7 @@ export function PlayerPage() {
             style={{
               backgroundImage: isNight || isPracticeMode
                 ? 'linear-gradient(180deg, rgba(12,13,21,0.45) 0%, rgba(12,13,21,0.75) 50%, rgb(12,13,21) 100%)'
-                : 'linear-gradient(180deg, rgba(0,0,0,0.3) 0%, rgba(0,0,0,0.45) 40%, rgba(0,0,0,0.6) 100%)',
+                : 'linear-gradient(180deg, transparent 0%, rgba(245,240,228,0.6) 60%, #F5F0E4 100%)',
             }}
           />
         </div>
@@ -888,7 +888,7 @@ export function PlayerPage() {
           background: `linear-gradient(180deg, ${
             isCurrentPlayerDead
               ? t.pageBg
-              : (isNight || isPracticeMode) ? '#050810' : '#1a1a1a'
+              : (isNight || isPracticeMode) ? '#050810' : '#F5F0E4'
           } 0%, transparent 100%)`,
         }}
       />
@@ -914,7 +914,7 @@ export function PlayerPage() {
             style={{
               backgroundImage: isNight || isPracticeMode
                 ? 'linear-gradient(180deg, rgba(12,13,21,0.45) 0%, rgba(12,13,21,0.75) 50%, rgb(12,13,21) 100%)'
-                : 'linear-gradient(180deg, rgba(0,0,0,0.3) 0%, rgba(0,0,0,0.45) 40%, rgba(0,0,0,0.6) 100%)',
+                : 'linear-gradient(180deg, transparent 0%, rgba(245,240,228,0.6) 60%, #F5F0E4 100%)',
             }}
           />
         </div>
