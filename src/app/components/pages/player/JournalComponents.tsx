@@ -799,6 +799,27 @@ export function HypothesisPickerModal({
                 {targetPlayer.name}
               </h3>
               <p style={{ color: t.textMuted, fontSize: '0.6rem' }}>Selon toi, quel rôle cache cette personne ?</p>
+              {showVoteButton && targetVoteCount === 0 && (
+                <motion.button
+                  initial={{ opacity: 0, y: 4 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  whileTap={{ scale: 0.95 }}
+                  onClick={() => onVoteAgainst!(targetPlayer.id)}
+                  className="mt-2 flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-xl transition-colors"
+                  style={{
+                    background: '#3d3424',
+                    border: '1px solid rgba(212,168,67,0.3)',
+                    boxShadow: '0 2px 8px rgba(0,0,0,0.25)',
+                    color: '#d4a843',
+                    fontSize: '0.7rem',
+                    fontFamily: '"Cinzel", serif',
+                    fontWeight: 600,
+                  }}
+                >
+                  <Vote size={13} />
+                  Nominer
+                </motion.button>
+              )}
             </div>
           </div>
           <button
@@ -880,27 +901,7 @@ export function HypothesisPickerModal({
             <Vote size={15} />
             Voter contre {targetPlayer.name}
           </motion.button>
-          ) : (
-          <motion.button
-            initial={{ opacity: 0, y: 4 }}
-            animate={{ opacity: 1, y: 0 }}
-            whileTap={{ scale: 0.95 }}
-            onClick={() => onVoteAgainst!(targetPlayer.id)}
-            className="mt-3 w-full flex items-center justify-center gap-2 py-3.5 rounded-[14px] transition-colors"
-            style={{
-              background: '#3d3424',
-              border: '1px solid rgba(212,168,67,0.3)',
-              boxShadow: '0 4px 16px rgba(0,0,0,0.3)',
-              color: '#d4a843',
-              fontSize: '0.8rem',
-              fontFamily: '"Cinzel", serif',
-              fontWeight: 600,
-            }}
-          >
-            <Vote size={16} />
-            Nominer
-          </motion.button>
-          )
+          ) : null
         )}
 
         {/* Night phase: set early vote for next day */}
