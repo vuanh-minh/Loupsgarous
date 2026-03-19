@@ -1574,6 +1574,21 @@ export function PlayerPage() {
         )}
       </AnimatePresence>
 
+      {/* Gradient fade above tab bar — blends content into the bottom nav */}
+      <div className="flex-shrink-0 relative pointer-events-none" style={{ height: 0, zIndex: 1 }}>
+        <div
+          className="absolute left-0 right-0 bottom-0"
+          style={{
+            height: 64,
+            background: `linear-gradient(0deg, ${
+              isCurrentPlayerDead
+                ? t.pageBg
+                : (isNight || isPracticeMode) ? '#050810' : '#F5F0E4'
+            } 0%, transparent 100%)`,
+          }}
+        />
+      </div>
+
       {/* Tab Bar */}
       <div
         className="flex-shrink-0 flex items-stretch relative z-[2]"
