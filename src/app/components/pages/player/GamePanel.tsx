@@ -266,7 +266,7 @@ export function GamePanel({
 
         {/* Hint section — Night phase (bottom of panel, hidden when card is flipped) */}
         {isNight && !isFlipped && currentPlayerId !== null && !isPracticeMode && (
-          <div className="mt-auto relative" style={{ zIndex: 20, paddingTop: 'clamp(4px, 1vh, 12px)' }}>
+          <div className="mt-auto relative" style={{ zIndex: 20, paddingTop: '16px' }}>
             <PlayerHintSection
               hints={hints}
               playerHints={playerHints}
@@ -283,7 +283,7 @@ export function GamePanel({
 
         {/* Hint section — Day phase (both vote & non-vote), pushed to bottom */}
         {!isNight && currentPlayerId !== null && !isPracticeMode && (
-          <div className="mt-auto relative" style={{ zIndex: 20, paddingTop: 'clamp(4px, 1vh, 12px)' }}>
+          <div className="mt-auto relative" style={{ zIndex: 20, paddingTop: '16px' }}>
             <PlayerHintSection
               hints={hints}
               playerHints={playerHints}
