@@ -476,7 +476,7 @@ export function HomePage() {
                 <p
                   style={{ color: '#d4a843', fontSize: '0.9rem', fontFamily: '"Cinzel", serif', fontWeight: 600 }}
                 >
-                  Rejoindre une partie
+                  Rejoindre la partie
                 </p>
               </div>
               <p
