@@ -1603,12 +1603,40 @@ export function PlayerPage() {
                   gameId={state.gameId || undefined}
                 />
               </div>
+
+              {/* Floating close button */}
+              <div
+                className="flex-shrink-0 px-4"
+                style={{ paddingBottom: 'calc(env(safe-area-inset-bottom, 12px) + 12px)', paddingTop: '10px' }}
+              >
+                <button
+                  onClick={() => setJournalOpen(false)}
+                  className="w-full py-3 rounded-2xl flex items-center justify-center gap-2 transition-colors active:opacity-80"
+                  style={{
+                    background: isCurrentPlayerDead ? t.headerBg : (isNight || isPracticeMode) ? 'rgba(255,255,255,0.06)' : t.headerBg,
+                    border: `1px solid ${isCurrentPlayerDead ? t.headerBorder : (isNight || isPracticeMode) ? 'rgba(255,255,255,0.1)' : t.headerBorder}`,
+                    color: t.textMuted,
+                    fontFamily: '"Cinzel", serif',
+                    fontSize: '0.8rem',
+                    fontWeight: 600,
+                    backdropFilter: 'blur(12px)',
+                  }}
+                >
+                  <XIcon size={14} />
+                  Fermer le journal
+                </button>
+              </div>
             </motion.div>
           </motion.div>
         )}
       </AnimatePresence>
 
       {/* Tab Bar — Floating Bottom Navigation */}
+      {(() => {
+        const isNightGlass = (isNight || isPracticeMode) && !isCurrentPlayerDead;
+        const isDayGame = !isNight && !isPracticeMode && !isCurrentPlayerDead && activePanel === 'game';
+        const isDayOther = !isNight && !isPracticeMode && !isCurrentPlayerDead && activePanel !== 'game';
+        return (
       <div
         className="flex-shrink-0 flex items-stretch relative z-[2] fixed bottom-0 left-0 right-0 pointer-events-none"
         style={{
@@ -1619,17 +1647,58 @@ export function PlayerPage() {
         }}
       >
         <div
-          className="flex items-stretch w-full rounded-2xl overflow-hidden"
+          className="flex items-stretch w-full rounded-2xl overflow-hidden relative"
           style={{
-            background: activePanel === 'game' && !isCurrentPlayerDead
-              ? (isNight || isPracticeMode ? 'rgba(5,8,16,0.92)' : 'rgba(20,18,15,0.92)')
-              : isCurrentPlayerDead ? t.headerBg : (isNight || isPracticeMode) ? 'rgba(5,8,16,0.95)' : t.headerBg,
-            border: `1px solid ${isCurrentPlayerDead ? t.headerBorder : (isNight || isPracticeMode) ? 'rgba(255,255,255,0.12)' : 'rgba(255,255,255,0.15)'}`,
-            backdropFilter: 'blur(16px)',
-            boxShadow: '0 8px 32px rgba(0,0,0,0.4)',
+            background: isNightGlass
+              ? 'linear-gradient(160deg, rgba(15,22,41,0.60) 0%, rgba(7,11,26,0.84) 40%, rgba(5,8,18,0.92) 100%)'
+              : isDayGame
+                ? 'linear-gradient(160deg, rgba(38,28,16,0.62) 0%, rgba(20,15,8,0.86) 40%, rgba(13,10,5,0.94) 100%)'
+                : isCurrentPlayerDead
+                  ? t.headerBg
+                  : 'linear-gradient(160deg, rgba(245,240,228,0.55) 0%, rgba(235,228,210,0.78) 40%, rgba(227,218,198,0.88) 100%)',
+            border: `1px solid ${
+              isNightGlass
+                ? 'rgba(124,141,181,0.14)'
+                : isDayGame
+                  ? 'rgba(120,90,50,0.22)'
+                  : isCurrentPlayerDead
+                    ? t.headerBorder
+                    : 'rgba(180,165,130,0.28)'
+            }`,
+            backdropFilter: 'blur(28px) saturate(120%)',
+            WebkitBackdropFilter: 'blur(28px) saturate(120%)',
+            boxShadow: isNightGlass
+              ? '0 8px 40px rgba(0,0,0,0.55), 0 2px 8px rgba(0,0,0,0.3), inset 0 1.5px 0 rgba(124,141,181,0.20), inset 0 -1px 0 rgba(0,0,0,0.25)'
+              : isDayGame
+                ? '0 8px 40px rgba(0,0,0,0.50), 0 2px 8px rgba(0,0,0,0.25), inset 0 1.5px 0 rgba(160,120,60,0.18), inset 0 -1px 0 rgba(0,0,0,0.25)'
+                : isCurrentPlayerDead
+                  ? '0 8px 32px rgba(0,0,0,0.3), inset 0 1px 0 rgba(255,255,255,0.12)'
+                  : '0 8px 40px rgba(0,0,0,0.18), 0 2px 8px rgba(0,0,0,0.08), inset 0 1.5px 0 rgba(255,255,255,0.55), inset 0 -1px 0 rgba(0,0,0,0.06)',
             padding: '0',
           }}
         >
+          {/* Specular highlight — light refracting through the glass top edge */}
+          <div
+            className="absolute inset-x-0 top-0 h-px pointer-events-none z-10"
+            style={{
+              background: isNightGlass
+                ? 'linear-gradient(90deg, transparent 4%, rgba(124,141,181,0.40) 30%, rgba(160,175,210,0.55) 50%, rgba(124,141,181,0.40) 70%, transparent 96%)'
+                : isDayGame
+                  ? 'linear-gradient(90deg, transparent 4%, rgba(180,140,80,0.35) 30%, rgba(210,170,100,0.45) 50%, rgba(180,140,80,0.35) 70%, transparent 96%)'
+                  : 'linear-gradient(90deg, transparent 4%, rgba(255,255,255,0.60) 30%, rgba(255,255,255,0.80) 50%, rgba(255,255,255,0.60) 70%, transparent 96%)',
+            }}
+          />
+          {/* Glass sheen — upper half light film */}
+          <div
+            className="absolute inset-0 pointer-events-none rounded-2xl z-0"
+            style={{
+              background: isNightGlass
+                ? 'linear-gradient(180deg, rgba(124,141,181,0.07) 0%, transparent 52%)'
+                : isDayGame
+                  ? 'linear-gradient(180deg, rgba(160,120,60,0.06) 0%, transparent 52%)'
+                  : 'linear-gradient(180deg, rgba(255,255,255,0.14) 0%, transparent 52%)',
+            }}
+          />
         {visibleTabs.map((tab, tabIdx) => {
           const isActive = activePanel === tab.id;
           const isGameTab = tabIdx === 0;
@@ -1727,6 +1796,8 @@ export function PlayerPage() {
         })}
         </div>
       </div>
+        );
+      })()}
 
       {/* Hunter Shot Modal — only shown to the Chasseur */}
       <AnimatePresence>
