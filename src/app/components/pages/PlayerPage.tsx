@@ -514,10 +514,10 @@ export function PlayerPage() {
       resetPractice();
     }
   }, [state.roleRevealDone, resetPractice]);
-  const visibleTabs: { id: PanelId; icon: React.ReactNode; label: string }[] = [
-    { id: 'game', icon: <Swords size={18} />, label: 'Jeu' },
-    { id: 'quests', icon: <Map size={18} />, label: 'Quêtes' },
-    { id: 'village', icon: <Users size={18} />, label: 'Village' },
+  const visibleTabs: { id: PanelId; icon: React.ReactNode; iconActive: React.ReactNode; label: string }[] = [
+    { id: 'game',   icon: <Swords size={18} />, iconActive: <Swords size={18} fill="currentColor" strokeWidth={1} />, label: 'Jeu' },
+    { id: 'quests', icon: <Map    size={18} />, iconActive: <Map    size={18} />, label: 'Quêtes' },
+    { id: 'village',icon: <Users  size={18} />, iconActive: <Users  size={18} fill="currentColor" strokeWidth={1} />, label: 'Village' },
   ];
   const panelCount = panels.length;
   const panelIndex = panels.indexOf(activePanel) === -1 ? 0 : panels.indexOf(activePanel);
@@ -1650,12 +1650,12 @@ export function PlayerPage() {
           className="flex items-stretch w-full rounded-2xl overflow-hidden relative"
           style={{
             background: isNightGlass
-              ? 'linear-gradient(160deg, rgba(15,22,41,0.60) 0%, rgba(7,11,26,0.84) 40%, rgba(5,8,18,0.92) 100%)'
+              ? 'linear-gradient(160deg, rgba(15,22,41,0.30) 0%, rgba(7,11,26,0.52) 40%, rgba(5,8,18,0.62) 100%)'
               : isDayGame
-                ? 'linear-gradient(160deg, rgba(38,28,16,0.62) 0%, rgba(20,15,8,0.86) 40%, rgba(13,10,5,0.94) 100%)'
+                ? 'linear-gradient(160deg, rgba(38,28,16,0.30) 0%, rgba(20,15,8,0.52) 40%, rgba(13,10,5,0.62) 100%)'
                 : isCurrentPlayerDead
                   ? t.headerBg
-                  : 'linear-gradient(160deg, rgba(245,240,228,0.55) 0%, rgba(235,228,210,0.78) 40%, rgba(227,218,198,0.88) 100%)',
+                  : 'linear-gradient(160deg, rgba(245,240,228,0.30) 0%, rgba(235,228,210,0.50) 40%, rgba(227,218,198,0.62) 100%)',
             border: `1px solid ${
               isNightGlass
                 ? 'rgba(124,141,181,0.14)'
@@ -1742,8 +1742,8 @@ export function PlayerPage() {
                   className="flex flex-col items-center gap-1"
                 >
                   <span className="relative" style={{ color: tabColor }}>
-                    {tab.icon}
-                    {tab.id === 'game' && unrevealedHintCount > 0 && !isActive && (
+                    {isActive ? tab.iconActive : tab.icon}
+                    {tab.id === 'game' && unrevealedHintCount > 0 && (
                       <span
                         className="absolute -top-1.5 -right-2.5 flex items-center justify-center rounded-full"
                         style={{
@@ -1761,7 +1761,7 @@ export function PlayerPage() {
                         {unrevealedHintCount}
                       </span>
                     )}
-                    {tab.id === 'quests' && unreadQuestCount > 0 && !isActive && (
+                    {tab.id === 'quests' && unreadQuestCount > 0 && (
                       <span
                         className="absolute -top-1.5 -right-2.5 flex items-center justify-center rounded-full"
                         style={{
