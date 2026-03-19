@@ -2060,7 +2060,26 @@ export function HintFullscreenLightbox({
               </motion.div>
             </AnimatePresence>
 
-            {/* Floating hypothesis CTA / avatar */}
+            {/* Fermer button – bottom center */}
+            <button
+              onClick={(e) => { e.stopPropagation(); setFullscreenHintId(null); }}
+              className="absolute bottom-16 left-1/2 -translate-x-1/2 z-20 flex items-center gap-2 active:scale-95 transition-transform"
+              style={{
+                background: 'rgba(255,255,255,0.1)',
+                backdropFilter: 'blur(12px)',
+                border: '1px solid rgba(255,255,255,0.2)',
+                borderRadius: '16px',
+                padding: '10px 20px',
+                boxShadow: '0 4px 20px rgba(0,0,0,0.4)',
+              }}
+            >
+              <X size={15} style={{ color: '#fff' }} />
+              <span style={{ color: '#f5f0e8', fontSize: '0.75rem', fontFamily: '"Cinzel", serif', fontWeight: 600 }}>
+                Fermer
+              </span>
+            </button>
+
+            {/* Floating hypothesis CTA / avatar – bottom right of card */}
             {players && players.length > 0 && onSetHintAssociation && (() => {
               const assocPlayerId = hintAssociations?.[fullscreenHintId];
               const assocPlayer = assocPlayerId != null ? players.find(p => p.id === assocPlayerId) : null;
@@ -2068,15 +2087,15 @@ export function HintFullscreenLightbox({
               return (
                 <button
                   onClick={(e) => { e.stopPropagation(); setDrawerOpen(true); }}
-                  className="absolute bottom-16 left-1/2 -translate-x-1/2 z-20 flex items-center gap-2 active:scale-95 transition-transform"
+                  className="absolute bottom-28 right-6 z-20 flex items-center gap-2 active:scale-95 transition-transform"
                   style={{
                     background: assocPlayer
                       ? 'rgba(245,158,11,0.15)'
                       : 'linear-gradient(135deg, rgba(245,158,11,0.2), rgba(180,130,50,0.15))',
                     backdropFilter: 'blur(12px)',
                     border: `1px solid ${assocPlayer ? 'rgba(245,158,11,0.5)' : 'rgba(245,158,11,0.3)'}`,
-                    borderRadius: assocPlayer ? '9999px' : '16px',
-                    padding: assocPlayer ? '4px 14px 4px 4px' : '10px 20px',
+                    borderRadius: '9999px',
+                    padding: assocPlayer ? '4px 14px 4px 4px' : '8px 14px',
                     boxShadow: '0 4px 20px rgba(0,0,0,0.4)',
                   }}
                 >
@@ -2098,8 +2117,8 @@ export function HintFullscreenLightbox({
                   ) : (
                     <>
                       <UserPlus size={15} style={{ color: '#f59e0b' }} />
-                      <span style={{ color: '#f5deb3', fontSize: '0.75rem', fontFamily: '"Cinzel", serif', fontWeight: 600 }}>
-                        Ajouter une hypothese
+                      <span style={{ color: '#f5deb3', fontSize: '0.7rem', fontFamily: '"Cinzel", serif', fontWeight: 600 }}>
+                        Hypothese
                       </span>
                     </>
                   )}
