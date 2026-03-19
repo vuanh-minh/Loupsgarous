@@ -820,6 +820,27 @@ export function HypothesisPickerModal({
                   Nominer
                 </motion.button>
               )}
+              {showEarlyVoteButton && (
+                <motion.button
+                  initial={{ opacity: 0, y: 4 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  whileTap={{ scale: 0.97 }}
+                  onClick={() => onEarlyVote!(targetPlayer.id)}
+                  className="mt-2 flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-xl"
+                  style={{
+                    background: 'linear-gradient(135deg, rgba(212,168,67,0.12), rgba(212,168,67,0.06))',
+                    border: '1.5px solid rgba(212,168,67,0.3)',
+                    color: '#d4a843',
+                    fontFamily: '"Cinzel", serif',
+                    fontSize: '0.7rem',
+                    fontWeight: 600,
+                    letterSpacing: '0.03em',
+                  }}
+                >
+                  <Vote size={13} />
+                  Voter au prochain tour
+                </motion.button>
+              )}
             </div>
           </div>
           <button
@@ -904,28 +925,7 @@ export function HypothesisPickerModal({
           ) : null
         )}
 
-        {/* Night phase: set early vote for next day */}
-        {showEarlyVoteButton && (
-          <motion.button
-            initial={{ opacity: 0, y: 4 }}
-            animate={{ opacity: 1, y: 0 }}
-            whileTap={{ scale: 0.97 }}
-            onClick={() => onEarlyVote!(targetPlayer.id)}
-            className="mt-3 w-full py-3 rounded-xl flex items-center justify-center gap-2.5"
-            style={{
-              background: 'linear-gradient(135deg, rgba(212,168,67,0.12), rgba(212,168,67,0.06))',
-              border: '1.5px solid rgba(212,168,67,0.3)',
-              color: '#d4a843',
-              fontFamily: '"Cinzel", serif',
-              fontSize: '0.75rem',
-              fontWeight: 600,
-              letterSpacing: '0.03em',
-            }}
-          >
-            <Vote size={15} />
-            Voter au prochain tour
-          </motion.button>
-        )}
+        {/* Night phase early-vote button moved to header text column */}
       </motion.div>
     </motion.div>
   );
