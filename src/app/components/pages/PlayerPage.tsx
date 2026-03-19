@@ -588,6 +588,7 @@ export function PlayerPage() {
 
   // Dynamically tint the browser chrome (address bar + toolbar) based on phase & tab
   // NOTE: must be placed after isNight, isPracticeMode, and activePanel are declared
+  const prevPhaseRef = useRef(isNight);
   useEffect(() => {
     if (!isBrowserMode) return;
 
@@ -605,8 +606,7 @@ export function PlayerPage() {
       toolbarColor = '#F4EFE3';
     }
 
-    // Remove and re-create the meta tag to force Safari to re-read it
-    // (Safari ignores setAttribute changes on theme-color in some cases)
+    // Update theme-color meta tag
     const existing = document.querySelector('meta[name="theme-color"]');
     if (existing) existing.remove();
     const meta = document.createElement('meta');
@@ -615,6 +615,14 @@ export function PlayerPage() {
     document.head.appendChild(meta);
 
     document.body.style.backgroundColor = toolbarColor;
+
+    // Safari ignores dynamic theme-color changes — force a page reload
+    // on actual day/night phase transitions (not on initial mount)
+    if (prevPhaseRef.current !== isNight) {
+      prevPhaseRef.current = isNight;
+      window.location.reload();
+      return;
+    }
 
     return () => {
       document.body.style.backgroundColor = '';
