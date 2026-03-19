@@ -605,10 +605,14 @@ export function PlayerPage() {
       toolbarColor = '#F4EFE3';
     }
 
-    const meta = document.querySelector('meta[name="theme-color"]');
-    if (meta) {
-      meta.setAttribute('content', addressBarColor);
-    }
+    // Remove and re-create the meta tag to force Safari to re-read it
+    // (Safari ignores setAttribute changes on theme-color in some cases)
+    const existing = document.querySelector('meta[name="theme-color"]');
+    if (existing) existing.remove();
+    const meta = document.createElement('meta');
+    meta.name = 'theme-color';
+    meta.content = addressBarColor;
+    document.head.appendChild(meta);
 
     document.body.style.backgroundColor = toolbarColor;
 
