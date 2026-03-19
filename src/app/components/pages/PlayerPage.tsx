@@ -874,7 +874,7 @@ export function PlayerPage() {
             style={{
               backgroundImage: isNight || isPracticeMode
                 ? 'linear-gradient(180deg, rgba(12,13,21,0.45) 0%, rgba(12,13,21,0.75) 50%, rgb(12,13,21) 100%)'
-                : 'linear-gradient(180deg, transparent 0%, rgba(245,240,228,0.6) 60%, #F5F0E4 100%)',
+                : 'none',
             }}
           />
         </div>
@@ -914,7 +914,7 @@ export function PlayerPage() {
             style={{
               backgroundImage: isNight || isPracticeMode
                 ? 'linear-gradient(180deg, rgba(12,13,21,0.45) 0%, rgba(12,13,21,0.75) 50%, rgb(12,13,21) 100%)'
-                : 'linear-gradient(180deg, transparent 0%, rgba(245,240,228,0.6) 60%, #F5F0E4 100%)',
+                : 'none',
             }}
           />
         </div>
