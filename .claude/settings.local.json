@@ -1,0 +1,24 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(gh auth:*)",
+      "Bash(curl -L https://github.com/vuanh-minh/Loupsgarous/archive/refs/heads/main.tar.gz -o /tmp/loupsgarous.tar.gz)",
+      "Read(//private/tmp/**)",
+      "Bash(curl -L https://github.com/vuanh-minh/Loupsgarous/archive/refs/heads/master.tar.gz -o /tmp/loupsgarous.tar.gz)",
+      "Bash(npm install:*)",
+      "mcp__Claude_Preview__preview_start",
+      "WebSearch",
+      "Bash(find /Users/anh-minhvu/Desktop/loups-garous/src -type f \\\\\\(-name *.tsx -o -name *.ts \\\\\\))",
+      "Bash(npx tsc:*)",
+      "Bash(node_modules/.bin/tsc --noEmit)",
+      "Bash(npm run:*)",
+      "Bash(git init:*)",
+      "Bash(git remote:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git push:*)",
+      "Bash(git pull:*)",
+      "Bash(git checkout:*)"
+    ]
+  }
+}
