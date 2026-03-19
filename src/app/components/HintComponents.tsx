@@ -2486,37 +2486,6 @@ function HintRevealModal({
               </motion.div>
             </AnimatePresence>
           </div>
-          {/* Bottom: close or next hint CTA */}
-          <div className="mt-5 flex gap-2">
-            <button
-              onClick={onClose}
-              className={`${hasNext ? 'flex-1' : 'w-full'} py-3 rounded-xl`}
-              style={{
-                background: `rgba(${t.overlayChannel}, 0.06)`,
-                color: t.textSecondary,
-                fontFamily: '"Cinzel", serif',
-                fontSize: '0.75rem',
-              }}
-            >
-              Fermer
-            </button>
-            {hasNext && (
-              <button
-                onClick={() => onNavigate?.(hintIds[currentIndex + 1])}
-                className="flex-1 py-3 rounded-xl flex items-center justify-center gap-1.5"
-                style={{
-                  background: 'rgba(245,158,11,0.12)',
-                  border: '1px solid rgba(245,158,11,0.3)',
-                  color: '#f59e0b',
-                  fontFamily: '"Cinzel", serif',
-                  fontSize: '0.75rem',
-                }}
-              >
-                Suivant
-                <ChevronRight size={14} />
-              </button>
-            )}
-          </div>
         </div>
       </motion.div>
     </motion.div>
