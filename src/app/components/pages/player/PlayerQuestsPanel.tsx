@@ -1008,36 +1008,17 @@ export function PlayerQuestsPanel({
 
   return (
     <div className="flex flex-col gap-4 px-3 py-3">
-      {/* Day/Night header with timer */}
-      <div className="mb-1">
-        <div className="flex items-center gap-2 mb-2">
-          {state.phase === 'night' ? (
-            <Moon size={18} style={{ color: '#7c8db5' }} />
-          ) : (
-            <Sun size={18} style={{ color: '#d4a843' }} />
-          )}
-          <h1
-            style={{
-              fontFamily: '"Cinzel Decorative", "Cinzel", serif',
-              color: state.phase === 'night' ? '#7c8db5' : '#d4a843',
-              fontSize: '1.1rem',
-              fontWeight: 700,
-            }}
-          >
-            {state.phase === 'night' ? `Nuit ${state.turn}` : `Jour ${state.turn}`}
-          </h1>
+      {/* Phase timer */}
+      {state.phaseTimerEndAt && (
+        <div className="flex justify-start">
+          <PhaseTimerDisplay
+            endAt={state.phaseTimerEndAt}
+            isNight={state.phase === 'night'}
+            t={t}
+            size="mini"
+          />
         </div>
-        {state.phaseTimerEndAt && (
-          <div className="flex justify-start">
-            <PhaseTimerDisplay
-              endAt={state.phaseTimerEndAt}
-              isNight={state.phase === 'night'}
-              t={t}
-              size="mini"
-            />
-          </div>
-        )}
-      </div>
+      )}
 
       {/* Header */}
       <div className="flex items-center gap-2.5">

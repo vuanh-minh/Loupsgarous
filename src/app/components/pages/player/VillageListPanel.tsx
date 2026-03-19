@@ -107,36 +107,17 @@ export function VillageListPanel({
 
   return (
     <div className="px-4 py-4 pb-6">
-      {/* Day/Night header with timer */}
-      <div className="mb-4">
-        <div className="flex items-center gap-2 mb-2">
-          {phase === 'night' ? (
-            <Moon size={18} style={{ color: '#7c8db5' }} />
-          ) : (
-            <Sun size={18} style={{ color: '#d4a843' }} />
-          )}
-          <h1
-            style={{
-              fontFamily: '"Cinzel Decorative", "Cinzel", serif',
-              color: phase === 'night' ? '#7c8db5' : '#d4a843',
-              fontSize: '1.1rem',
-              fontWeight: 700,
-            }}
-          >
-            {phase === 'night' ? `Nuit ${turn}` : `Jour ${turn}`}
-          </h1>
+      {/* Phase timer */}
+      {phaseTimerEndAt && (
+        <div className="flex justify-start mb-4">
+          <PhaseTimerDisplay
+            endAt={phaseTimerEndAt}
+            isNight={phase === 'night'}
+            t={t}
+            size="mini"
+          />
         </div>
-        {phaseTimerEndAt && (
-          <div className="flex justify-start">
-            <PhaseTimerDisplay
-              endAt={phaseTimerEndAt}
-              isNight={phase === 'night'}
-              t={t}
-              size="mini"
-            />
-          </div>
-        )}
-      </div>
+      )}
 
       {/* Maire badge */}
       {maire && (
