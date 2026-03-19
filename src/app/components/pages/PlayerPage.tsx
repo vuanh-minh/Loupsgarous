@@ -79,43 +79,6 @@ export function PlayerPage() {
   // for an immersive full-bleed effect. Content stays within h-dvh (visible viewport).
   const isBrowserMode = !pwa.isStandalone;
 
-  // In browser mode, make the document 1px taller than the viewport and scroll to it.
-  // This tricks mobile Safari/Chrome into hiding the address bar and bottom toolbar.
-  useEffect(() => {
-    if (!isBrowserMode) return;
-
-    const html = document.documentElement;
-    const body = document.body;
-
-    // Make body 1px taller than viewport so the document is scrollable
-    body.style.minHeight = 'calc(100dvh + 1px)';
-    // Prevent overscroll rubber-banding from revealing the chrome again
-    html.style.overscrollBehavior = 'none';
-    body.style.overscrollBehavior = 'none';
-
-    // Scroll 1px to trigger browser chrome hiding
-    const scrollDown = () => {
-      if (window.scrollY < 1) window.scrollTo(0, 1);
-    };
-
-    // Delay to ensure layout is ready after first paint
-    const timer = setTimeout(scrollDown, 300);
-
-    // Re-trigger after resize / orientation change
-    window.addEventListener('resize', scrollDown);
-    // Lock scroll position — if it drifts back to 0, push it back
-    window.addEventListener('scroll', scrollDown, { passive: true });
-
-    return () => {
-      clearTimeout(timer);
-      window.removeEventListener('resize', scrollDown);
-      window.removeEventListener('scroll', scrollDown);
-      body.style.minHeight = '';
-      html.style.overscrollBehavior = '';
-      body.style.overscrollBehavior = '';
-    };
-  }, [isBrowserMode]);
-
   // Scale up root font-size for mobile readability (all rem values scale proportionally)
   useEffect(() => {
     const html = document.documentElement;
