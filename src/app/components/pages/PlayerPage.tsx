@@ -594,14 +594,13 @@ export function PlayerPage() {
     let addressBarColor: string;
     let toolbarColor: string;
 
+    addressBarColor = '#867251';
+
     if (isNight || isPracticeMode) {
-      addressBarColor = '#060811';
       toolbarColor = '#060811';
     } else if (activePanel === 'game') {
-      addressBarColor = '#5B88A8';
       toolbarColor = '#302B22';
     } else {
-      addressBarColor = '#F4EFE3';
       toolbarColor = '#F4EFE3';
     }
 
