@@ -254,7 +254,7 @@ export function usePWA(): PWAState {
     setLink('manifest', manifestURL);
 
     // 4. Mobile meta tags
-    setMeta('theme-color', '#0a0e1a');
+    // theme-color is set statically in index.html and dynamically by PlayerPage
     setMeta('apple-mobile-web-app-capable', 'yes');
     setMeta('apple-mobile-web-app-status-bar-style', 'black-translucent');
     setMeta('apple-mobile-web-app-title', 'Loup-Garou');
