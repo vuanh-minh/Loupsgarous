@@ -879,6 +879,19 @@ export function PlayerPage() {
           />
         </div>
       )}
+      {/* Gradient above header — fades from background color at top to transparent, blending browser chrome into the header */}
+      <div
+        className="fixed left-0 right-0 top-0 pointer-events-none"
+        style={{
+          height: 80,
+          zIndex: 59,
+          background: `linear-gradient(180deg, ${
+            isCurrentPlayerDead
+              ? t.pageBg
+              : (isNight || isPracticeMode) ? '#050810' : '#1a1a1a'
+          } 0%, transparent 100%)`,
+        }}
+      />
     <div
       className="h-dvh max-w-md mx-auto flex flex-col overflow-hidden relative"
       style={{
