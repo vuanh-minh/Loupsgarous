@@ -75,6 +75,9 @@ export function PlayerPage() {
     : false;
   const t = isCurrentPlayerDead ? gameThemeDead() : gameTheme(state.phase);
   const pwa = usePWAContext();
+  // In browser (non-standalone) mode, the background extends under the browser chrome
+  // for an immersive full-bleed effect. Content stays within h-dvh (visible viewport).
+  const isBrowserMode = !pwa.isStandalone;
 
   // Scale up root font-size for mobile readability (all rem values scale proportionally)
   useEffect(() => {
@@ -840,22 +843,51 @@ export function PlayerPage() {
     console.log('[PlayerPage] deathAnnouncement READY TO RENDER:', deathAnnouncement.latestTransition, deathAnnouncement.phases.length, 'phases', deathAnnouncement.allDeaths.length, 'deaths');
   }
 
+  const pageBgColor = activePanel === 'game' && !isCurrentPlayerDead
+    ? (isNight || isPracticeMode ? '#050810' : '#1a1a1a')
+    : isCurrentPlayerDead
+      ? t.pageBg
+      : (isNight || isPracticeMode)
+        ? 'linear-gradient(180deg, #050810 0%, #0a1025 50%, #15102a 100%)'
+        : t.pageBg;
+
   return (
+    <>
+      {/* In browser mode: fixed full-bleed background that extends under browser chrome */}
+      {isBrowserMode && (
+        <div
+          className="fixed inset-0 pointer-events-none"
+          style={{ background: pageBgColor, zIndex: -1 }}
+        />
+      )}
+      {isBrowserMode && activePanel === 'game' && !isCurrentPlayerDead && (
+        <div className="fixed inset-0 pointer-events-none" style={{ zIndex: -1 }}>
+          <img
+            key={isNight || isPracticeMode ? 'night' : 'day'}
+            alt=""
+            className="absolute w-full h-full object-cover"
+            src={isNight || isPracticeMode ? nightVillageBg : dayVoteBg}
+            style={{ objectPosition: 'center top' }}
+          />
+          <div
+            className="absolute inset-0"
+            style={{
+              backgroundImage: isNight || isPracticeMode
+                ? 'linear-gradient(180deg, rgba(12,13,21,0.45) 0%, rgba(12,13,21,0.75) 50%, rgb(12,13,21) 100%)'
+                : 'linear-gradient(180deg, rgba(0,0,0,0.3) 0%, rgba(0,0,0,0.45) 40%, rgba(0,0,0,0.6) 100%)',
+            }}
+          />
+        </div>
+      )}
     <div
       className="h-dvh max-w-md mx-auto flex flex-col overflow-hidden relative"
       style={{
-        background: activePanel === 'game' && !isCurrentPlayerDead
-          ? (isNight || isPracticeMode ? '#050810' : '#1a1a1a')
-          : isCurrentPlayerDead
-            ? t.pageBg
-            : (isNight || isPracticeMode)
-              ? 'linear-gradient(180deg, #050810 0%, #0a1025 50%, #15102a 100%)'
-              : t.pageBg,
+        background: isBrowserMode ? 'transparent' : pageBgColor,
         fontFamily: 'system-ui, -apple-system, sans-serif',
       }}
     >
-      {/* Full-screen background image — spans behind header, content & tab bar */}
-      {activePanel === 'game' && !isCurrentPlayerDead && (
+      {/* Full-screen background image — standalone mode only (browser mode uses fixed layer above) */}
+      {!isBrowserMode && activePanel === 'game' && !isCurrentPlayerDead && (
         <div className="absolute inset-0 z-0 pointer-events-none">
           <img
             key={isNight || isPracticeMode ? 'night' : 'day'}
@@ -1799,5 +1831,6 @@ export function PlayerPage() {
         }}
       />
     </div>
+    </>
   );
 }
