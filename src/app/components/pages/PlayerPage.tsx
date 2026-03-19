@@ -79,41 +79,6 @@ export function PlayerPage() {
   // for an immersive full-bleed effect. Content stays within h-dvh (visible viewport).
   const isBrowserMode = !pwa.isStandalone;
 
-  // Dynamically tint the browser chrome (address bar + toolbar) based on phase & tab
-  useEffect(() => {
-    if (!isBrowserMode) return;
-
-    let addressBarColor: string;
-    let toolbarColor: string;
-
-    if (isNight || isPracticeMode) {
-      // Night — all tabs: dark blue/black
-      addressBarColor = '#060811';
-      toolbarColor = '#060811';
-    } else if (activePanel === 'game') {
-      // Day — Game tab
-      addressBarColor = '#5B88A8';
-      toolbarColor = '#302B22';
-    } else {
-      // Day — Village / Quest tabs
-      addressBarColor = '#F4EFE3';
-      toolbarColor = '#F4EFE3';
-    }
-
-    // Address bar: update <meta name="theme-color">
-    const meta = document.querySelector('meta[name="theme-color"]');
-    if (meta) {
-      meta.setAttribute('content', addressBarColor);
-    }
-
-    // Toolbar: browser picks up body background color
-    document.body.style.backgroundColor = toolbarColor;
-
-    return () => {
-      document.body.style.backgroundColor = '';
-    };
-  }, [isBrowserMode, isNight, isPracticeMode, activePanel]);
-
   // Scale up root font-size for mobile readability (all rem values scale proportionally)
   useEffect(() => {
     const html = document.documentElement;
@@ -620,6 +585,37 @@ export function PlayerPage() {
     state.players.some((p) => p.role === roleId && p.alive);
 
   const isNight = state.phase === 'night';
+
+  // Dynamically tint the browser chrome (address bar + toolbar) based on phase & tab
+  // NOTE: must be placed after isNight, isPracticeMode, and activePanel are declared
+  useEffect(() => {
+    if (!isBrowserMode) return;
+
+    let addressBarColor: string;
+    let toolbarColor: string;
+
+    if (isNight || isPracticeMode) {
+      addressBarColor = '#060811';
+      toolbarColor = '#060811';
+    } else if (activePanel === 'game') {
+      addressBarColor = '#5B88A8';
+      toolbarColor = '#302B22';
+    } else {
+      addressBarColor = '#F4EFE3';
+      toolbarColor = '#F4EFE3';
+    }
+
+    const meta = document.querySelector('meta[name="theme-color"]');
+    if (meta) {
+      meta.setAttribute('content', addressBarColor);
+    }
+
+    document.body.style.backgroundColor = toolbarColor;
+
+    return () => {
+      document.body.style.backgroundColor = '';
+    };
+  }, [isBrowserMode, isNight, isPracticeMode, activePanel]);
 
   // ---- Unrevealed hints count (for "Jeu" tab badge) ----
   const unrevealedHintCount = React.useMemo(() => {
