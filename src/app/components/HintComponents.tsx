@@ -1992,15 +1992,58 @@ export function HintFullscreenLightbox({
                 style={{ touchAction: fsMultiple ? 'pan-y' : 'auto', cursor: fsMultiple ? 'grab' : 'default' }}
                 onClick={(e) => e.stopPropagation()}
               >
-                {fsHint.imageUrl && (
-                  <motion.img
-                    src={fsHint.imageUrl}
-                    alt=""
-                    className="max-w-full max-h-[60vh] rounded-xl object-contain"
-                    style={{ boxShadow: '0 8px 40px rgba(0,0,0,0.6)' }}
-                    draggable={false}
-                  />
-                )}
+                {fsHint.imageUrl && (() => {
+                  const assocPlayerId = hintAssociations?.[fullscreenHintId];
+                  const assocPlayer = assocPlayerId != null ? players?.find(p => p.id === assocPlayerId) : null;
+                  const assocAvatarUrl = assocPlayer ? resolveAvatarUrl(assocPlayer.avatarUrl) : null;
+                  const showHypoBtn = players && players.length > 0 && onSetHintAssociation;
+                  return (
+                    <div className="relative inline-block">
+                      <motion.img
+                        src={fsHint.imageUrl}
+                        alt=""
+                        className="max-w-full max-h-[60vh] rounded-xl object-contain"
+                        style={{ boxShadow: '0 8px 40px rgba(0,0,0,0.6)', display: 'block' }}
+                        draggable={false}
+                      />
+                      {showHypoBtn && (
+                        <button
+                          onClick={(e) => { e.stopPropagation(); setDrawerOpen(true); }}
+                          className="absolute bottom-3 right-3 z-20 flex items-center gap-2 active:scale-95 transition-transform"
+                          style={{
+                            background: assocPlayer
+                              ? 'rgba(245,158,11,0.15)'
+                              : 'linear-gradient(135deg, rgba(245,158,11,0.2), rgba(180,130,50,0.15))',
+                            backdropFilter: 'blur(12px)',
+                            border: `1px solid ${assocPlayer ? 'rgba(245,158,11,0.5)' : 'rgba(245,158,11,0.3)'}`,
+                            borderRadius: '9999px',
+                            padding: assocPlayer ? '4px 14px 4px 4px' : '10px',
+                            boxShadow: '0 4px 20px rgba(0,0,0,0.4)',
+                          }}
+                        >
+                          {assocPlayer ? (
+                            <>
+                              <div className="w-8 h-8 rounded-full overflow-hidden" style={{ border: '2px solid rgba(245,158,11,0.6)' }}>
+                                {assocAvatarUrl ? (
+                                  <img src={assocAvatarUrl} alt={assocPlayer.name} className="w-full h-full object-cover" draggable={false} />
+                                ) : (
+                                  <div className="w-full h-full flex items-center justify-center bg-black/30" style={{ fontSize: '0.9rem' }}>
+                                    {assocPlayer.avatar}
+                                  </div>
+                                )}
+                              </div>
+                              <span style={{ color: '#f5deb3', fontSize: '0.75rem', fontFamily: '"Cinzel", serif', fontWeight: 600 }}>
+                                {assocPlayer.name}
+                              </span>
+                            </>
+                          ) : (
+                            <UserPlus size={18} style={{ color: '#f59e0b' }} />
+                          )}
+                        </button>
+                      )}
+                    </div>
+                  );
+                })()}
                 {fsHint.text && (
                   <div
                     className="w-full text-center relative"
@@ -2079,8 +2122,8 @@ export function HintFullscreenLightbox({
               </span>
             </button>
 
-            {/* Floating hypothesis CTA / avatar – bottom right of card */}
-            {players && players.length > 0 && onSetHintAssociation && (() => {
+            {/* Floating hypothesis CTA / avatar – bottom right (text-only hints) */}
+            {!fsHint.imageUrl && players && players.length > 0 && onSetHintAssociation && (() => {
               const assocPlayerId = hintAssociations?.[fullscreenHintId];
               const assocPlayer = assocPlayerId != null ? players.find(p => p.id === assocPlayerId) : null;
               const avatarUrl = assocPlayer ? resolveAvatarUrl(assocPlayer.avatarUrl) : null;
