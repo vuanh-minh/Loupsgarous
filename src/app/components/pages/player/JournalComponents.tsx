@@ -785,8 +785,8 @@ export function HypothesisPickerModal({
         animate={{ y: 0 }}
         exit={{ y: '100%' }}
         transition={{ type: 'spring', stiffness: 300, damping: 30 }}
-        className="w-full rounded-t-2xl p-5 pb-8"
-        style={{ background: t.modalBg, border: `1px solid ${t.goldBorder}` }}
+        className="w-full rounded-t-2xl p-5 pb-8 overflow-y-auto"
+        style={{ background: t.modalBg, border: `1px solid ${t.goldBorder}`, maxHeight: '90dvh' }}
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between mb-4">
