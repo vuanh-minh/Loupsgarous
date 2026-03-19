@@ -1531,12 +1531,12 @@ export function PlayerPage() {
 
       {/* Tab Bar — Floating Bottom Navigation */}
       <div
-        className="flex-shrink-0 flex items-stretch relative z-[2] fixed bottom-0 left-0 right-0 mx-auto max-w-md pointer-events-none"
+        className="flex-shrink-0 flex items-stretch relative z-[2] fixed bottom-0 left-0 right-0 pointer-events-none"
         style={{
-          transform: 'translateX(-50%)',
-          left: '50%',
           bottom: 'calc(env(safe-area-inset-bottom, 12px) + 12px)',
           pointerEvents: 'auto',
+          paddingLeft: '12px',
+          paddingRight: '12px',
         }}
       >
         <div
