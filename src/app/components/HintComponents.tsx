@@ -2138,17 +2138,27 @@ export function HintFullscreenLightbox({
                     animate={{ y: 0 }}
                     exit={{ y: '100%' }}
                     transition={{ type: 'spring', damping: 28, stiffness: 300 }}
+                    drag="y"
+                    dragConstraints={{ top: 0, bottom: 0 }}
+                    dragElastic={{ top: 0, bottom: 0.3 }}
+                    onDragEnd={(_e, info) => {
+                      if (info.offset.y > 80 || info.velocity.y > 400) {
+                        setDrawerOpen(false);
+                        setDrawerSearch('');
+                      }
+                    }}
                     className="absolute bottom-0 left-0 right-0 max-h-[60vh] flex flex-col"
                     style={{
                       background: 'linear-gradient(180deg, #1e1a14 0%, #14100c 100%)',
                       borderTop: '1px solid rgba(245,158,11,0.3)',
                       borderRadius: '20px 20px 0 0',
                       boxShadow: '0 -8px 40px rgba(0,0,0,0.6)',
+                      touchAction: 'none',
                     }}
                     onClick={(e) => e.stopPropagation()}
                   >
                     {/* Drawer handle */}
-                    <div className="flex justify-center py-3">
+                    <div className="flex justify-center py-3" style={{ cursor: 'grab' }}>
                       <div className="w-10 h-1 rounded-full" style={{ background: 'rgba(245,158,11,0.3)' }} />
                     </div>
                     <h4 className="text-center px-4 pb-2" style={{ fontFamily: '"Cinzel", serif', color: '#f5deb3', fontSize: '0.85rem', fontWeight: 600 }}>
