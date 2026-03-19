@@ -959,7 +959,7 @@ export function PlayerPage() {
           style={{ width: containerWidth > 0 ? panelCount * containerWidth : `${panelCount * 100}%` }}
         >
           {/* Panel 1 — Game (card flip is inside GamePanel) */}
-          <div style={{ width: containerWidth > 0 ? containerWidth : `${100 / panelCount}%`, WebkitOverflowScrolling: 'touch', overscrollBehaviorY: 'contain' }} className="h-full overflow-y-auto">
+          <div style={{ width: containerWidth > 0 ? containerWidth : `${100 / panelCount}%`, WebkitOverflowScrolling: 'touch', overscrollBehaviorY: 'contain', paddingBottom: 'calc(120px + env(safe-area-inset-bottom, 12px))' }} className="h-full overflow-y-auto">
                   {(currentPlayer?.alive ?? false) && <GamePanel
                     alivePlayers={presentAlivePlayers}
                     phase={isPracticeMode ? 'night' : state.phase}
@@ -1285,7 +1285,7 @@ export function PlayerPage() {
           </div>
 
           {/* Panel 2 — Quêtes */}
-          <div ref={questsScrollRef} style={{ width: containerWidth > 0 ? containerWidth : `${100 / panelCount}%`, WebkitOverflowScrolling: 'touch', overscrollBehaviorY: 'contain' }} className="h-full overflow-y-auto">
+          <div ref={questsScrollRef} style={{ width: containerWidth > 0 ? containerWidth : `${100 / panelCount}%`, WebkitOverflowScrolling: 'touch', overscrollBehaviorY: 'contain', paddingBottom: 'calc(120px + env(safe-area-inset-bottom, 12px))' }} className="h-full overflow-y-auto">
             <PlayerQuestsPanel
               state={state}
               currentPlayerId={currentPlayerId}
@@ -1322,7 +1322,7 @@ export function PlayerPage() {
           </div>
 
           {/* Panel 3 — Village (player list / role reveal) */}
-          <div ref={villagePanelRef} style={{ width: containerWidth > 0 ? containerWidth : `${100 / panelCount}%`, WebkitOverflowScrolling: 'touch', overscrollBehaviorY: 'contain' }} className="h-full overflow-y-auto">
+          <div ref={villagePanelRef} style={{ width: containerWidth > 0 ? containerWidth : `${100 / panelCount}%`, WebkitOverflowScrolling: 'touch', overscrollBehaviorY: 'contain', paddingBottom: 'calc(120px + env(safe-area-inset-bottom, 12px))' }} className="h-full overflow-y-auto">
             {state.roleRevealDone === false ? (
               <RoleRevealVillagePanel
                 players={state.players}
@@ -1529,18 +1529,28 @@ export function PlayerPage() {
         )}
       </AnimatePresence>
 
-      {/* Tab Bar */}
+      {/* Tab Bar — Floating Bottom Navigation */}
       <div
-        className="flex-shrink-0 flex items-stretch relative z-[2]"
+        className="flex-shrink-0 flex items-stretch relative z-[2] fixed bottom-0 left-0 right-0 mx-auto max-w-md pointer-events-none"
         style={{
-          background: activePanel === 'game' && !isCurrentPlayerDead
-            ? (isNight || isPracticeMode ? 'rgba(5,8,16,0.82)' : 'rgba(20,18,15,0.82)')
-            : isCurrentPlayerDead ? t.headerBg : (isNight || isPracticeMode) ? 'rgba(5,8,16,0.95)' : t.headerBg,
-          borderTop: `1px solid ${isCurrentPlayerDead ? t.headerBorder : (isNight || isPracticeMode) ? 'rgba(255,255,255,0.06)' : 'rgba(255,255,255,0.08)'}`,
-          backdropFilter: 'blur(12px)',
-          paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 12px)',
+          transform: 'translateX(-50%)',
+          left: '50%',
+          bottom: 'calc(env(safe-area-inset-bottom, 12px) + 12px)',
+          pointerEvents: 'auto',
         }}
       >
+        <div
+          className="flex items-stretch w-full rounded-2xl overflow-hidden"
+          style={{
+            background: activePanel === 'game' && !isCurrentPlayerDead
+              ? (isNight || isPracticeMode ? 'rgba(5,8,16,0.92)' : 'rgba(20,18,15,0.92)')
+              : isCurrentPlayerDead ? t.headerBg : (isNight || isPracticeMode) ? 'rgba(5,8,16,0.95)' : t.headerBg,
+            border: `1px solid ${isCurrentPlayerDead ? t.headerBorder : (isNight || isPracticeMode) ? 'rgba(255,255,255,0.12)' : 'rgba(255,255,255,0.15)'}`,
+            backdropFilter: 'blur(16px)',
+            boxShadow: '0 8px 32px rgba(0,0,0,0.4)',
+            padding: '0',
+          }}
+        >
         {visibleTabs.map((tab, tabIdx) => {
           const isActive = activePanel === tab.id;
           const isGameTab = tabIdx === 0;
@@ -1636,6 +1646,7 @@ export function PlayerPage() {
             </button>
           );
         })}
+        </div>
       </div>
 
       {/* Hunter Shot Modal — only shown to the Chasseur */}
