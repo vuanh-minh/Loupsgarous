@@ -928,6 +928,21 @@ export function PlayerPage() {
         activePanel={activePanel}
       />
 
+      {/* Gradient fade below header — blends header into content */}
+      <div className="flex-shrink-0 relative pointer-events-none" style={{ height: 0, zIndex: 55 }}>
+        <div
+          className="absolute left-0 right-0 top-0"
+          style={{
+            height: 56,
+            background: `linear-gradient(180deg, ${
+              isCurrentPlayerDead
+                ? t.pageBg
+                : (isNight || isPracticeMode) ? '#050810' : '#1a1a1a'
+            } 0%, transparent 100%)`,
+          }}
+        />
+      </div>
+
       {/* Death feedback banner */}
       {currentPlayer && !currentPlayer.alive && (
         <motion.div
