@@ -2095,7 +2095,7 @@ export function HintFullscreenLightbox({
                     backdropFilter: 'blur(12px)',
                     border: `1px solid ${assocPlayer ? 'rgba(245,158,11,0.5)' : 'rgba(245,158,11,0.3)'}`,
                     borderRadius: '9999px',
-                    padding: assocPlayer ? '4px 14px 4px 4px' : '8px 14px',
+                    padding: assocPlayer ? '4px 14px 4px 4px' : '10px',
                     boxShadow: '0 4px 20px rgba(0,0,0,0.4)',
                   }}
                 >
@@ -2115,12 +2115,7 @@ export function HintFullscreenLightbox({
                       </span>
                     </>
                   ) : (
-                    <>
-                      <UserPlus size={15} style={{ color: '#f59e0b' }} />
-                      <span style={{ color: '#f5deb3', fontSize: '0.7rem', fontFamily: '"Cinzel", serif', fontWeight: 600 }}>
-                        Hypothese
-                      </span>
-                    </>
+                    <UserPlus size={18} style={{ color: '#f59e0b' }} />
                   )}
                 </button>
               );
