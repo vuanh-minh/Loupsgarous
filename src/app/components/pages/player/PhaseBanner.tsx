@@ -87,7 +87,7 @@ export const PhaseBanner = React.memo(function PhaseBanner({
               : { duration: 0.3 }
           }
           exit={{ opacity: 0, y: 10 }}
-          className={`${isImmersiveVote ? '' : 'rounded-xl'} text-center relative flex flex-col items-center justify-center overflow-hidden ${isVotePhase ? '' : 'flex-1'} min-h-0`}
+          className={`${isImmersiveVote ? '' : 'rounded-xl'} text-center relative flex flex-col items-center justify-center overflow-hidden flex-1 min-h-0`}
           onClick={currentPlayerAlive && isNight && canFlip && onFlip ? onFlip : undefined}
           style={{
             marginTop: undefined,
