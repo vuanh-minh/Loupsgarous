@@ -2486,6 +2486,21 @@ function HintRevealModal({
               </motion.div>
             </AnimatePresence>
           </div>
+          {/* Bottom: close button */}
+          <div className="mt-5 flex gap-2">
+            <button
+              onClick={onClose}
+              className="w-full py-3 rounded-xl"
+              style={{
+                background: `rgba(${t.overlayChannel}, 0.06)`,
+                color: t.textSecondary,
+                fontFamily: '"Cinzel", serif',
+                fontSize: '0.75rem',
+              }}
+            >
+              Fermer
+            </button>
+          </div>
         </div>
       </motion.div>
     </motion.div>
