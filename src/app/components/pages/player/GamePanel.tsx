@@ -90,9 +90,9 @@ export function GamePanel({
     : 0;
 
   return (
-    <div className="px-4 pb-6 flex flex-col min-h-full relative overflow-hidden" style={{ paddingTop: '1rem', paddingBottom: 'calc(93px + env(safe-area-inset-bottom, 0px))' }}>
+    <div className="px-4 flex flex-col h-full relative overflow-hidden" style={{ paddingTop: '1rem', paddingBottom: 'calc(93px + env(safe-area-inset-bottom, 0px))' }}>
       {/* Content */}
-      <div className="relative z-10 flex flex-col min-h-full flex-1">
+      <div className="relative z-10 flex flex-col h-full flex-1">
         {/* Last victim / night victims banner */}
         <VictimBanner
           isNight={isNight}

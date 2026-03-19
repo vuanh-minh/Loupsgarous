@@ -1038,7 +1038,7 @@ export function PlayerPage() {
           style={{ width: containerWidth > 0 ? panelCount * containerWidth : `${panelCount * 100}%` }}
         >
           {/* Panel 1 — Game (card flip is inside GamePanel) */}
-          <div style={{ width: containerWidth > 0 ? containerWidth : `${100 / panelCount}%`, WebkitOverflowScrolling: 'touch', overscrollBehaviorY: 'contain', paddingBottom: '16px' }} className="h-full overflow-y-auto">
+          <div style={{ width: containerWidth > 0 ? containerWidth : `${100 / panelCount}%`, WebkitOverflowScrolling: 'touch', overscrollBehaviorY: 'contain' }} className="h-full overflow-y-auto">
                   {(currentPlayer?.alive ?? false) && <GamePanel
                     alivePlayers={presentAlivePlayers}
                     phase={isPracticeMode ? 'night' : state.phase}
