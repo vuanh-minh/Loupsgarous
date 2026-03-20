@@ -1106,8 +1106,8 @@ export function PlayerPage() {
                       markActionSent();
                       const duringDiscovery = state.roleRevealDone === false;
                       serverDeclareCandidacy(playerId, message, duringDiscovery).then(handlePostAction);
-                      // Push notification to all alive players
-                      if (state.gameId) {
+                      // Push notification only during election phase (not during role revelation)
+                      if (state.gameId && !duringDiscovery) {
                         const playerName = state.players.find((p) => p.id === playerId)?.name || 'Un joueur';
                         const targets = state.players.filter((p) => p.alive).map((p) => p.shortCode);
                         sendPushNotifications(state.gameId, targets, 'Loup-Garou', `${playerName} s'est porté candidat en tant que Maire !`, 'maire-candidacy');
