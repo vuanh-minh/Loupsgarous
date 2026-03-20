@@ -206,28 +206,6 @@ export function GamePanel({
           t={t}
         />
 
-        {/* Practice mode tutorial tips (simulation only) */}
-        {isSimulationMode && !isVillageois && tutorialStep >= 2 && (
-          <motion.div
-            initial={{ opacity: 0, y: -5 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="rounded-lg p-3 mb-3 mt-3 text-center"
-            style={{
-              background: 'rgba(107,142,90,0.08)',
-              border: '1px solid rgba(107,142,90,0.2)',
-            }}
-          >
-            <div className="flex items-center justify-center gap-2 mb-1">
-              <CircleCheck size={13} style={{ color: '#6b8e5a' }} />
-              <span style={{ color: '#6b8e5a', fontSize: '0.65rem', fontFamily: '"Cinzel", serif' }}>
-                Parfait !
-              </span>
-            </div>
-            <p style={{ color: t.textMuted, fontSize: '0.55rem', lineHeight: 1.5 }}>
-              Continuez a vous entrainer. Touchez la carte pour simuler vos pouvoirs.
-            </p>
-          </motion.div>
-        )}
 
         {/* Discovery phase: mayor candidacy for ALL players */}
         {isPracticeMode && (
