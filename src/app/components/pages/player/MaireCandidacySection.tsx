@@ -1,7 +1,9 @@
 /**
  * MaireCandidacySection.tsx
  * Floating candidacy button + bottom-sheet candidacy modal (portalled).
- * Extracted from GamePanel.tsx.
+ * Works during both:
+ *   - Discovery (role revelation) phase: early candidacy before election
+ *   - Mayor election vote phase: standard candidacy during election
  */
 import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
@@ -12,17 +14,22 @@ import type { GameThemeTokens } from '../../../context/gameTheme';
 interface MaireCandidacySectionProps {
   isMaireElection: boolean;
   isVotePhase: boolean;
+  isDiscoveryPhase?: boolean;
   currentPlayerId: number | null;
   currentPlayerAlive: boolean;
   isCandidate: boolean;
+  campaignMessageFromState?: string;
   t: GameThemeTokens;
   onDeclareCandidacy?: (playerId: number, message?: string) => void;
   onWithdrawCandidacy?: (playerId: number) => void;
 }
 
+const MAX_CHARS = 200;
+
 export const MaireCandidacySection = React.memo(function MaireCandidacySection({
-  isMaireElection, isVotePhase,
+  isMaireElection, isVotePhase, isDiscoveryPhase = false,
   currentPlayerId, currentPlayerAlive, isCandidate,
+  campaignMessageFromState,
   t, onDeclareCandidacy, onWithdrawCandidacy,
 }: MaireCandidacySectionProps) {
   const [showCandidacyModal, setShowCandidacyModal] = useState(false);
@@ -37,8 +44,6 @@ export const MaireCandidacySection = React.memo(function MaireCandidacySection({
     const vv = window.visualViewport;
     if (!vv) return;
     const update = () => {
-      // The keyboard height is the difference between the layout viewport
-      // (window.innerHeight) and the visual viewport height.
       const offset = Math.max(0, window.innerHeight - vv.height);
       setKbOffset(offset);
     };
@@ -51,12 +56,16 @@ export const MaireCandidacySection = React.memo(function MaireCandidacySection({
     };
   }, [showCandidacyModal]);
 
-  // Reset when leaving vote phase
+  // Reset modal when leaving both vote phase AND discovery phase
   useEffect(() => {
-    if (!isVotePhase) { setShowCandidacyModal(false); setCampaignMessage(''); }
-  }, [isVotePhase]);
+    if (!isVotePhase && !isDiscoveryPhase) {
+      setShowCandidacyModal(false);
+      setCampaignMessage('');
+    }
+  }, [isVotePhase, isDiscoveryPhase]);
 
-  if (!isMaireElection || currentPlayerId === null || !currentPlayerAlive) return null;
+  // Only render during mayor election OR discovery phase
+  if ((!isMaireElection && !isDiscoveryPhase) || currentPlayerId === null || !currentPlayerAlive) return null;
 
   return (
     <>
@@ -66,28 +75,61 @@ export const MaireCandidacySection = React.memo(function MaireCandidacySection({
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           exit={{ opacity: 0, y: 20 }}
-          className="sticky bottom-4 z-40 mt-auto pt-4"
+          className={isDiscoveryPhase ? 'mt-3' : 'sticky bottom-4 z-40 mt-auto pt-4'}
         >
           {isCandidate ? (
-            <motion.button
-              whileTap={{ scale: 0.96 }}
-              onClick={() => onWithdrawCandidacy?.(currentPlayerId)}
-              className="w-full flex items-center justify-center gap-2.5 py-3.5 rounded-2xl transition-all"
-              style={{
-                background: 'transparent',
-                border: '1.5px solid rgba(212,168,67,0.5)',
-                color: '#d4a843',
-              }}
-            >
-              <Crown size={18} style={{ color: '#d4a843' }} />
-              <span style={{ fontFamily: '"Cinzel", serif', fontSize: '0.85rem', fontWeight: 700 }}>
-                Vous etes candidat(e)
-              </span>
-              <span style={{ color: 'rgba(212,168,67,0.5)', fontSize: '0.65rem', fontFamily: '"Cinzel", serif' }}>
-                · Retirer
-              </span>
-            </motion.button>
+            isDiscoveryPhase ? (
+              /* ── Discovery confirmed state: show confirmation card ── */
+              <motion.div
+                initial={{ opacity: 0, scale: 0.95 }}
+                animate={{ opacity: 1, scale: 1 }}
+                className="rounded-xl p-4 text-center"
+                style={{
+                  background: 'rgba(212,168,67,0.08)',
+                  border: '1.5px solid rgba(212,168,67,0.3)',
+                }}
+              >
+                <div className="flex items-center justify-center gap-2 mb-2">
+                  <Crown size={16} style={{ color: '#d4a843' }} />
+                  <span style={{ fontFamily: '"Cinzel", serif', fontSize: '0.75rem', fontWeight: 700, color: '#d4a843' }}>
+                    Vous etes candidat au poste de maire
+                  </span>
+                </div>
+                {campaignMessageFromState && (
+                  <p style={{
+                    color: t.textMuted,
+                    fontSize: '0.6rem',
+                    lineHeight: 1.5,
+                    fontStyle: 'italic',
+                    marginTop: 4,
+                  }}>
+                    « {campaignMessageFromState} »
+                  </p>
+                )}
+              </motion.div>
+            ) : (
+              /* ── Election confirmed state: with withdraw option ── */
+              <motion.button
+                whileTap={{ scale: 0.96 }}
+                onClick={() => onWithdrawCandidacy?.(currentPlayerId)}
+                className="w-full flex items-center justify-center gap-2.5 py-3.5 rounded-2xl transition-all"
+                style={{
+                  background: 'transparent',
+                  border: '1.5px solid rgba(212,168,67,0.5)',
+                  color: '#d4a843',
+                }}
+              >
+                <Crown size={18} style={{ color: '#d4a843' }} />
+                <span style={{ fontFamily: '"Cinzel", serif', fontSize: '0.85rem', fontWeight: 700 }}>
+                  Vous etes candidat(e)
+                </span>
+                <span style={{ color: 'rgba(212,168,67,0.5)', fontSize: '0.65rem', fontFamily: '"Cinzel", serif' }}>
+                  · Retirer
+                </span>
+              </motion.button>
+            )
           ) : (
+            /* ── Not a candidate: show declare button ── */
             <motion.button
               whileTap={{ scale: 0.96 }}
               onClick={() => { setCampaignMessage(''); setShowCandidacyModal(true); }}
@@ -100,7 +142,7 @@ export const MaireCandidacySection = React.memo(function MaireCandidacySection({
             >
               <Crown size={18} style={{ color: '#0a0e1a' }} />
               <span style={{ fontFamily: '"Cinzel", serif', fontSize: '0.85rem', fontWeight: 700 }}>
-                Se porter candidat(e)
+                {isDiscoveryPhase ? 'Candidater au poste de maire' : 'Se porter candidat(e)'}
               </span>
             </motion.button>
           )}
@@ -157,9 +199,9 @@ export const MaireCandidacySection = React.memo(function MaireCandidacySection({
                     autoFocus
                     value={campaignMessage}
                     onChange={(e) => {
-                      if (e.target.value.length <= 100) setCampaignMessage(e.target.value);
+                      if (e.target.value.length <= MAX_CHARS) setCampaignMessage(e.target.value);
                     }}
-                    placeholder="Why should the kingdom trust you?"
+                    placeholder="Pourquoi devriez-vous etre elu maire ?"
                     rows={3}
                     className="w-full rounded-xl px-3.5 py-3 outline-none resize-none"
                     style={{
@@ -175,13 +217,13 @@ export const MaireCandidacySection = React.memo(function MaireCandidacySection({
                   <span
                     className="absolute bottom-2 right-3"
                     style={{
-                      color: campaignMessage.length >= 90 ? '#c41e3a' : '#a07808',
+                      color: campaignMessage.length >= (MAX_CHARS - 20) ? '#c41e3a' : '#a07808',
                       fontSize: '0.55rem',
                       fontFamily: '"Cinzel", serif',
                       opacity: 0.7,
                     }}
                   >
-                    {campaignMessage.length}/100
+                    {campaignMessage.length}/{MAX_CHARS}
                   </span>
                 </div>
 
@@ -225,7 +267,7 @@ export const MaireCandidacySection = React.memo(function MaireCandidacySection({
                     disabled={!campaignMessage.trim()}
                   >
                     <Crown size={14} />
-                    Confirmer
+                    Confirmer la candidature
                   </motion.button>
                 </div>
               </motion.div>

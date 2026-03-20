@@ -229,7 +229,7 @@ export const VoteSection = React.memo(forwardRef<VoteSectionHandle, VoteSectionP
           {hasCandidates && (
             <div className="flex flex-col gap-2.5">
               {maireCandidates
-                .map((cId) => alivePlayers.find((p) => p.id === cId))
+                .map((cId) => allPlayers.find((p) => p.id === cId))
                 .filter(Boolean)
                 .map((p) => {
                   const player = p!;
@@ -716,9 +716,9 @@ export const VoteSection = React.memo(forwardRef<VoteSectionHandle, VoteSectionP
                     autoFocus
                     value={campaignMessage}
                     onChange={(e) => {
-                      if (e.target.value.length <= 100) setCampaignMessage(e.target.value);
+                      if (e.target.value.length <= 200) setCampaignMessage(e.target.value);
                     }}
-                    placeholder="Why should the kingdom trust you?"
+                    placeholder="Pourquoi devriez-vous etre elu maire ?"
                     rows={3}
                     className="w-full rounded-xl px-3.5 py-3 outline-none resize-none"
                     style={{
@@ -734,13 +734,13 @@ export const VoteSection = React.memo(forwardRef<VoteSectionHandle, VoteSectionP
                   <span
                     className="absolute bottom-2 right-3"
                     style={{
-                      color: campaignMessage.length >= 90 ? '#c41e3a' : '#a07808',
+                      color: campaignMessage.length >= 180 ? '#c41e3a' : '#a07808',
                       fontSize: '0.55rem',
                       fontFamily: '"Cinzel", serif',
                       opacity: 0.7,
                     }}
                   >
-                    {campaignMessage.length}/100
+                    {campaignMessage.length}/200
                   </span>
                 </div>
 

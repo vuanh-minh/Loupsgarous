@@ -124,7 +124,7 @@ actionRoutes.post("/make-server-2c00868b/game/action/cancel-vote", async (c) => 
 actionRoutes.post("/make-server-2c00868b/game/action/declare-candidacy", async (c) => {
   try {
     const body = await c.req.json();
-    const { playerId, message } = body;
+    const { playerId, message, duringDiscovery } = body;
     const key = await resolveGameKey(body);
 
     const res = await withGameLock(key, (state) => {
@@ -134,13 +134,16 @@ actionRoutes.post("/make-server-2c00868b/game/action/declare-candidacy", async (
       }
       if (message !== undefined) {
         if (!state.maireCampaignMessages) state.maireCampaignMessages = {};
-        state.maireCampaignMessages[playerId] = String(message).slice(0, 100);
+        state.maireCampaignMessages[playerId] = String(message).slice(0, 200);
       }
-      if (!state.votes) state.votes = {};
-      state.votes[playerId] = playerId;
-      if (!state.nominations) state.nominations = {};
-      if (!(playerId in state.nominations)) {
-        state.nominations[playerId] = playerId;
+      // Auto-vote/nominate only during election, not during discovery phase
+      if (!duringDiscovery) {
+        if (!state.votes) state.votes = {};
+        state.votes[playerId] = playerId;
+        if (!state.nominations) state.nominations = {};
+        if (!(playerId in state.nominations)) {
+          state.nominations[playerId] = playerId;
+        }
       }
     });
     if (!res) return c.json({ error: "Aucune partie en cours" }, 404);

@@ -18,6 +18,7 @@ import { VictimBanner } from './VictimBanner';
 import { PhaseBanner } from './PhaseBanner';
 import { LoverBanner } from './LoverBanner';
 import { VoteSection, type VoteSectionHandle } from './VoteSection';
+import { MaireCandidacySection } from './MaireCandidacySection';
 
 export type { GamePanelProps } from './gamePanelTypes';
 
@@ -228,21 +229,19 @@ export function GamePanel({
           </motion.div>
         )}
 
-        {/* Discovery phase waiting message for passive roles */}
-        {isPracticeMode && (isVillageois || currentRole?.id === 'petite-fille') && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            className="rounded-lg p-3 mt-3 text-center"
-            style={{
-              background: `${t.nightSky}0f`,
-              border: `1px solid ${t.nightSky}1f`,
-            }}
-          >
-            <p style={{ color: t.textMuted, fontSize: '0.6rem', lineHeight: 1.5 }}>
-              Explorez l'onglet <strong style={{ color: t.textSecondary }}>Village</strong> ou le <strong style={{ color: t.textSecondary }}>Journal</strong> en attendant le debut de la partie.
-            </p>
-          </motion.div>
+        {/* Discovery phase: mayor candidacy for ALL players */}
+        {isPracticeMode && (
+          <MaireCandidacySection
+            isMaireElection={false}
+            isDiscoveryPhase={true}
+            isVotePhase={false}
+            currentPlayerId={currentPlayerId}
+            currentPlayerAlive={currentPlayerAlive}
+            isCandidate={isCandidate}
+            campaignMessageFromState={currentPlayerId !== null ? maireCampaignMessages[currentPlayerId] : undefined}
+            t={t}
+            onDeclareCandidacy={onDeclareCandidacy}
+          />
         )}
 
         {/* Non-vote day/night info */}

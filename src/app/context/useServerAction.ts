@@ -459,16 +459,19 @@ export function useServerActions() {
   // ────────────────────────────────────────────────────────────────
 
   // ── Declare candidacy (Maire election) ──
-  const serverDeclareCandidacy = useCallback((playerId: number, message?: string) => {
+  const serverDeclareCandidacy = useCallback((playerId: number, message?: string, duringDiscovery?: boolean) => {
     if (localMode) return applyLocal((s) => {
       const candidates = [...(s.maireCandidates || [])];
       if (!candidates.includes(playerId)) candidates.push(playerId);
       const maireCampaignMessages = { ...(s.maireCampaignMessages || {}) };
-      if (message !== undefined) maireCampaignMessages[playerId] = message.slice(0, 100);
-      // Auto-vote for self when declaring candidacy
-      const votes = { ...(s.votes || {}), [playerId]: playerId };
-      const nominations = { ...(s.nominations || {}) };
-      if (!(playerId in nominations)) nominations[playerId] = playerId;
+      if (message !== undefined) maireCampaignMessages[playerId] = message.slice(0, 200);
+      // Auto-vote for self when declaring candidacy (skip during discovery — no active vote yet)
+      const votes = duringDiscovery ? (s.votes || {}) : { ...(s.votes || {}), [playerId]: playerId };
+      const nominations = duringDiscovery ? (s.nominations || {}) : (() => {
+        const n = { ...(s.nominations || {}) };
+        if (!(playerId in n)) n[playerId] = playerId;
+        return n;
+      })();
       return { ...s, maireCandidates: candidates, maireCampaignMessages, votes, nominations };
     });
     // Optimistic update: reflect candidacy immediately in UI
@@ -476,13 +479,16 @@ export function useServerActions() {
       const candidates = [...(s.maireCandidates || [])];
       if (!candidates.includes(playerId)) candidates.push(playerId);
       const maireCampaignMessages = { ...(s.maireCampaignMessages || {}) };
-      if (message !== undefined) maireCampaignMessages[playerId] = message.slice(0, 100);
-      const votes = { ...(s.votes || {}), [playerId]: playerId };
-      const nominations = { ...(s.nominations || {}) };
-      if (!(playerId in nominations)) nominations[playerId] = playerId;
+      if (message !== undefined) maireCampaignMessages[playerId] = message.slice(0, 200);
+      const votes = duringDiscovery ? (s.votes || {}) : { ...(s.votes || {}), [playerId]: playerId };
+      const nominations = duringDiscovery ? (s.nominations || {}) : (() => {
+        const n = { ...(s.nominations || {}) };
+        if (!(playerId in n)) n[playerId] = playerId;
+        return n;
+      })();
       return { ...s, maireCandidates: candidates, maireCampaignMessages, votes, nominations };
     });
-    return postAction('declare-candidacy', { playerId, message, gameId });
+    return postAction('declare-candidacy', { playerId, message, duringDiscovery, gameId });
   }, [gameId, localMode, applyLocal]);
 
   // ── Withdraw candidacy (Maire election) ──

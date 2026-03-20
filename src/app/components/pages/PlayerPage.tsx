@@ -1104,7 +1104,8 @@ export function PlayerPage() {
                     dayEliminationsCount={state.dayEliminationsCount || 1}
                     onDeclareCandidacy={(playerId, message) => {
                       markActionSent();
-                      serverDeclareCandidacy(playerId, message).then(handlePostAction);
+                      const duringDiscovery = state.roleRevealDone === false;
+                      serverDeclareCandidacy(playerId, message, duringDiscovery).then(handlePostAction);
                       // Push notification to all alive players
                       if (state.gameId) {
                         const playerName = state.players.find((p) => p.id === playerId)?.name || 'Un joueur';
