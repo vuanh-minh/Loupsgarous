@@ -391,12 +391,13 @@ export function PlayerPage() {
           playerId: currentPlayer.id,
           playerName: currentPlayer.name,
           playerAvatar: currentPlayer.avatar,
+          playerAvatarUrl: currentPlayer.avatarUrl,
           gameId: state.gameId,
           shortCode,
         }));
       } catch { /* ignore */ }
     }
-  }, [currentPlayer?.id, currentPlayer?.name, currentPlayer?.avatar, state.gameId, shortCode]);
+  }, [currentPlayer?.id, currentPlayer?.name, currentPlayer?.avatar, currentPlayer?.avatarUrl, state.gameId, shortCode]);
 
   // Detect revive — dual strategy:
   // 1. Ref-based: detect dead→alive transition in real time
