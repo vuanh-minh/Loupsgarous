@@ -297,40 +297,6 @@ export function GamePanel({
           )}
         </AnimatePresence>
 
-        {/* Hint section — Night phase (bottom of panel, hidden when card is flipped) */}
-        {isNight && !isFlipped && currentPlayerId !== null && !isPracticeMode && (
-          <div className="mt-auto relative" style={{ zIndex: 20, paddingTop: '16px' }}>
-            <PlayerHintSection
-              hints={hints}
-              playerHints={playerHints}
-              playerId={currentPlayerId}
-              t={t}
-              onReveal={(hintId) => onRevealHint?.(hintId)}
-              compact
-              players={allPlayers}
-              onSetHypothesis={onSetHypothesis}
-              gameId={gameId}
-            />
-          </div>
-        )}
-
-        {/* Hint section — Day phase (both vote & non-vote), pushed to bottom */}
-        {!isNight && currentPlayerId !== null && !isPracticeMode && (
-          <div className="mt-auto relative" style={{ zIndex: 20, paddingTop: '16px' }}>
-            <PlayerHintSection
-              hints={hints}
-              playerHints={playerHints}
-              playerId={currentPlayerId}
-              t={t}
-              onReveal={(hintId) => onRevealHint?.(hintId)}
-              compact
-              players={allPlayers}
-              onSetHypothesis={onSetHypothesis}
-              gameId={gameId}
-            />
-          </div>
-        )}
-
         {/* ── "Annuler" cancel-vote button — shown when player has voted ── */}
         <AnimatePresence>
           {isVotePhase && myVote !== undefined && currentPlayerId !== null && currentPlayerAlive && (
@@ -364,6 +330,40 @@ export function GamePanel({
             </motion.div>
           )}
         </AnimatePresence>
+
+        {/* Hint section — Night phase (bottom of panel, hidden when card is flipped) */}
+        {isNight && !isFlipped && currentPlayerId !== null && !isPracticeMode && (
+          <div className="mt-auto relative" style={{ zIndex: 20, paddingTop: '16px' }}>
+            <PlayerHintSection
+              hints={hints}
+              playerHints={playerHints}
+              playerId={currentPlayerId}
+              t={t}
+              onReveal={(hintId) => onRevealHint?.(hintId)}
+              compact
+              players={allPlayers}
+              onSetHypothesis={onSetHypothesis}
+              gameId={gameId}
+            />
+          </div>
+        )}
+
+        {/* Hint section — Day phase (both vote & non-vote), pushed to bottom */}
+        {!isNight && currentPlayerId !== null && !isPracticeMode && (
+          <div className="mt-auto relative" style={{ zIndex: 20, paddingTop: '16px' }}>
+            <PlayerHintSection
+              hints={hints}
+              playerHints={playerHints}
+              playerId={currentPlayerId}
+              t={t}
+              onReveal={(hintId) => onRevealHint?.(hintId)}
+              compact
+              players={allPlayers}
+              onSetHypothesis={onSetHypothesis}
+              gameId={gameId}
+            />
+          </div>
+        )}
       </div>
     </div>
   );
