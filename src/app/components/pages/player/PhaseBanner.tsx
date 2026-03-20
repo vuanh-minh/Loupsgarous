@@ -192,7 +192,7 @@ export const PhaseBanner = React.memo(function PhaseBanner({
 
                 {/* Maire election: candidacy button under vote count */}
                 {isMaireElection && currentPlayerId !== null && currentPlayerAlive && (
-                  <div className="mt-2 w-full px-2 flex justify-center">
+                  <div className="mt-1 w-full px-2 flex justify-center">
                     {isCandidate ? (
                       <motion.button
                         whileTap={{ scale: 0.96 }}
