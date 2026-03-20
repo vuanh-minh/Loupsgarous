@@ -147,6 +147,10 @@ export function GamePanel({
                 totalVotes={totalVotes}
                 totalAlivePlayers={alivePlayers.length}
                 dayEliminationsCount={dayEliminationsCount}
+                currentPlayerId={currentPlayerId}
+                isCandidate={isCandidate}
+                onDeclareCandidacy={onDeclareCandidacy}
+                onWithdrawCandidacy={onWithdrawCandidacy}
               />
             </div>
 

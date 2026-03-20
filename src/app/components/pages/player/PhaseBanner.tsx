@@ -5,9 +5,11 @@
  */
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
+import { Crown } from 'lucide-react';
 import type { RoleDefinition } from '../../../data/roles';
 import type { GameThemeTokens } from '../../../context/gameTheme';
 import { PhaseTimerDisplay, computeRemaining, formatTime } from '../../PhaseTimer';
+import { MaireCandidacySection } from './MaireCandidacySection';
 
 interface PhaseBannerProps {
   isNight: boolean;
@@ -30,6 +32,11 @@ interface PhaseBannerProps {
   totalAlivePlayers?: number;
   /** Number of players eliminated during the day vote (>1 = multi-elimination) */
   dayEliminationsCount?: number;
+  /** Mayor election: candidacy state */
+  currentPlayerId?: number | null;
+  isCandidate?: boolean;
+  onDeclareCandidacy?: (playerId: number, message?: string) => void;
+  onWithdrawCandidacy?: (playerId: number) => void;
 }
 
 export const PhaseBanner = React.memo(function PhaseBanner({
@@ -38,6 +45,7 @@ export const PhaseBanner = React.memo(function PhaseBanner({
   isPracticeMode, isSimulationMode, isDemoMode, tutorialStep, isVillageois, currentRole,
   phaseTimerEndAt, t,
   totalVotes, totalAlivePlayers, dayEliminationsCount,
+  currentPlayerId, isCandidate, onDeclareCandidacy, onWithdrawCandidacy,
 }: PhaseBannerProps) {
   // Large countdown for immersive vote phase
   const [voteRemaining, setVoteRemaining] = useState(() =>
@@ -166,7 +174,7 @@ export const PhaseBanner = React.memo(function PhaseBanner({
                     textTransform: 'uppercase',
                   }}
                 >
-                  {isMaireElection ? 'Votez pour le maire' : 'Votez qui eliminer'}
+                  {isMaireElection ? 'Election du Maire' : 'Votez qui eliminer'}
                 </p>
 
                 {/* Vote counter */}
@@ -181,6 +189,35 @@ export const PhaseBanner = React.memo(function PhaseBanner({
                 >
                   {totalVotes ?? 0} / {totalAlivePlayers ?? 0} votes
                 </p>
+
+                {/* Maire election: candidacy button under vote count */}
+                {isMaireElection && currentPlayerId !== null && currentPlayerAlive && (
+                  <div className="mt-2 w-full px-2 flex justify-center">
+                    {isCandidate ? (
+                      <motion.button
+                        whileTap={{ scale: 0.96 }}
+                        onClick={() => onWithdrawCandidacy?.(currentPlayerId!)}
+                        className="mx-auto flex items-center justify-center gap-1.5 px-4 py-2 rounded-xl transition-all cursor-pointer"
+                        style={{ background: 'transparent', border: '1px solid rgba(212,168,67,0.4)', color: '#d4a843' }}
+                      >
+                        <Crown size={13} style={{ color: '#d4a843' }} />
+                        <span style={{ fontFamily: '"Cinzel", serif', fontSize: '0.7rem', fontWeight: 700 }}>Vous êtes candidat(e)</span>
+                        <span style={{ color: 'rgba(212,168,67,0.5)', fontSize: '0.55rem', fontFamily: '"Cinzel", serif' }}>· Retirer</span>
+                      </motion.button>
+                    ) : (
+                      <MaireCandidacySection
+                        isMaireElection={true}
+                        isVotePhase={true}
+                        compact={true}
+                        currentPlayerId={currentPlayerId}
+                        currentPlayerAlive={currentPlayerAlive}
+                        isCandidate={false}
+                        t={t}
+                        onDeclareCandidacy={onDeclareCandidacy}
+                      />
+                    )}
+                  </div>
+                )}
 
                 {/* Multi-elimination indicator */}
                 {!isMaireElection && dayEliminationsCount && dayEliminationsCount > 1 && (

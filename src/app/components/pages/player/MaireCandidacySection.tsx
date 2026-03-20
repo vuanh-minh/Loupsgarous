@@ -15,6 +15,8 @@ interface MaireCandidacySectionProps {
   isMaireElection: boolean;
   isVotePhase: boolean;
   isDiscoveryPhase?: boolean;
+  /** Renders a compact inline pill button instead of full-width (for use in PhaseBanner) */
+  compact?: boolean;
   currentPlayerId: number | null;
   currentPlayerAlive: boolean;
   isCandidate: boolean;
@@ -27,7 +29,7 @@ interface MaireCandidacySectionProps {
 const MAX_CHARS = 200;
 
 export const MaireCandidacySection = React.memo(function MaireCandidacySection({
-  isMaireElection, isVotePhase, isDiscoveryPhase = false,
+  isMaireElection, isVotePhase, isDiscoveryPhase = false, compact = false,
   currentPlayerId, currentPlayerAlive, isCandidate,
   campaignMessageFromState,
   t, onDeclareCandidacy, onWithdrawCandidacy,
@@ -133,15 +135,15 @@ export const MaireCandidacySection = React.memo(function MaireCandidacySection({
             <motion.button
               whileTap={{ scale: 0.96 }}
               onClick={() => { setCampaignMessage(''); setShowCandidacyModal(true); }}
-              className="w-full flex items-center justify-center gap-2.5 py-3.5 rounded-2xl transition-all"
+              className={`${compact ? 'mx-auto px-4 py-1.5 rounded-xl' : 'w-full py-3.5 rounded-2xl'} flex items-center justify-center gap-1.5 transition-all`}
               style={{
                 background: 'linear-gradient(135deg, #d4a843, #b8960a)',
-                boxShadow: '0 6px 24px rgba(212,168,67,0.4), 0 2px 8px rgba(0,0,0,0.2)',
+                boxShadow: compact ? '0 2px 8px rgba(212,168,67,0.3)' : '0 6px 24px rgba(212,168,67,0.4), 0 2px 8px rgba(0,0,0,0.2)',
                 color: '#0a0e1a',
               }}
             >
-              <Crown size={18} style={{ color: '#0a0e1a' }} />
-              <span style={{ fontFamily: '"Cinzel", serif', fontSize: '0.85rem', fontWeight: 700 }}>
+              <Crown size={compact ? 13 : 18} style={{ color: '#0a0e1a' }} />
+              <span style={{ fontFamily: '"Cinzel", serif', fontSize: compact ? '0.7rem' : '0.85rem', fontWeight: 700 }}>
                 {isDiscoveryPhase ? 'Candidater au poste de maire' : 'Se porter candidat(e)'}
               </span>
             </motion.button>
