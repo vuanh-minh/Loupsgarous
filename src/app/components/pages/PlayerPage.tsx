@@ -383,6 +383,21 @@ export function PlayerPage() {
       : null;
   const currentRole = currentPlayer ? getRoleById(currentPlayer.role) : null;
 
+  // Persist player session for quick reconnect on HomePage
+  useEffect(() => {
+    if (currentPlayer && shortCode && state.gameId) {
+      try {
+        localStorage.setItem('loup-garou-player-session', JSON.stringify({
+          playerId: currentPlayer.id,
+          playerName: currentPlayer.name,
+          playerAvatar: currentPlayer.avatar,
+          gameId: state.gameId,
+          shortCode,
+        }));
+      } catch { /* ignore */ }
+    }
+  }, [currentPlayer?.id, currentPlayer?.name, currentPlayer?.avatar, state.gameId, shortCode]);
+
   // Detect revive — dual strategy:
   // 1. Ref-based: detect dead→alive transition in real time
   // 2. Flag-based: use justRevived from server state (catches page refresh, timing edge cases)

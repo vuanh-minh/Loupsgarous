@@ -1,12 +1,13 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Moon, Crown, Eye, Lock, X, AlertCircle, LogIn, Sparkles } from 'lucide-react';
+import { Moon, Crown, Eye, Lock, X, AlertCircle, LogIn, Sparkles, UserCircle, ArrowRight } from 'lucide-react';
 import { useNavigate } from 'react-router';
 import { useGame } from '../../context/GameContext';
 import { API_BASE, publicAnonKey } from '../../context/apiConfig';
 import { localLoadGamesList } from '../../context/gameContextConstants';
 import { usePWAContext } from '../layout/RootLayout';
 import { PWAInstallBanner } from '../PWAInstallBanner';
+import { resolveAvatarUrl } from '../../data/avatarResolver';
 const wolfIcon = '/assets/icons/wolf-icon.png';
 const CODE_ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
 const CODE_LENGTH = 4;
@@ -29,15 +30,31 @@ export function HomePage() {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
+  // Quick reconnect state
+  const [cachedSession, setCachedSession] = useState<{
+    playerId: number;
+    playerName: string;
+    playerAvatar: string;
+    gameId: string;
+    shortCode: string;
+  } | null>(() => {
+    try {
+      const raw = localStorage.getItem('loup-garou-player-session');
+      return raw ? JSON.parse(raw) : null;
+    } catch { return null; }
+  });
+
   // Create game modal state
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [newGameName, setNewGameName] = useState('');
   const [creating, setCreating] = useState(false);
   const [createError, setCreateError] = useState('');
 
-  // Auto-focus first code input on mount
+  // Auto-focus first code input on mount (skip if quick reconnect is showing)
   useEffect(() => {
-    setTimeout(() => inputRefs.current[0]?.focus(), 300);
+    if (!cachedSession) {
+      setTimeout(() => inputRefs.current[0]?.focus(), 300);
+    }
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Cmd+D / Ctrl+D to open GM modal
@@ -459,109 +476,202 @@ export function HomePage() {
           transition={{ duration: 0.8, delay: 1.2 }}
           className="flex flex-col gap-4 w-full max-w-sm"
         >
-          {/* Join panel — 4-char code input (always visible) */}
-          <motion.div
-            initial={{ opacity: 0, height: 0 }}
-            animate={{ opacity: 1, height: 'auto' }}
-          >
-            <div
-              className="rounded-xl p-5"
-              style={{
-                background: 'rgba(255,255,255,0.03)',
-                border: '1px solid rgba(212,168,67,0.15)',
-              }}
-            >
-              <div className="flex items-center justify-center gap-2 mb-4">
-                <LogIn size={16} style={{ color: '#d4a843' }} />
-                <p
-                  style={{ color: '#d4a843', fontSize: '0.9rem', fontFamily: '"Cinzel", serif', fontWeight: 600 }}
+          {/* Quick Reconnect or Join panel */}
+          <AnimatePresence mode="wait">
+            {cachedSession ? (
+              /* Quick Reconnect */
+              <motion.div
+                key="reconnect"
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -10 }}
+              >
+                <div
+                  className="rounded-xl p-5"
+                  style={{
+                    background: 'rgba(255,255,255,0.03)',
+                    border: '1px solid rgba(212,168,67,0.15)',
+                  }}
                 >
-                  Rejoindre la partie
-                </p>
-              </div>
-              <p
-                className="text-center mb-4"
-                style={{ color: '#8090b0', fontSize: '0.75rem', fontFamily: '"Cinzel", serif' }}
-              >
-                Entrez votre code joueur
-              </p>
+                  <div className="flex items-center justify-center gap-2 mb-4">
+                    <LogIn size={16} style={{ color: '#d4a843' }} />
+                    <p style={{ color: '#d4a843', fontSize: '0.9rem', fontFamily: '"Cinzel", serif', fontWeight: 600 }}>
+                      Reprendre la partie
+                    </p>
+                  </div>
 
-              {/* 4-digit code inputs */}
-              <div className="flex justify-center gap-3 mb-4" onPaste={handlePaste}>
-                {codeDigits.map((digit, i) => (
-                  <input
-                    key={i}
-                    ref={(el) => { inputRefs.current[i] = el; }}
-                    type="text"
-                    inputMode="text"
-                    autoCapitalize="characters"
-                    maxLength={1}
-                    value={digit}
-                    onChange={(e) => handleDigitChange(i, e.target.value)}
-                    onKeyDown={(e) => handleDigitKeyDown(i, e)}
-                    className="w-14 h-16 rounded-xl text-center outline-none transition-all duration-200 focus:ring-2"
+                  {/* Player identity */}
+                  <div className="flex items-center gap-3 mb-4 px-2">
+                    {(() => {
+                      const avatarSrc = resolveAvatarUrl(cachedSession.playerAvatar);
+                      return avatarSrc ? (
+                        <img
+                          src={avatarSrc}
+                          alt={cachedSession.playerName}
+                          className="w-12 h-12 rounded-full object-cover"
+                          style={{ border: '2px solid rgba(212,168,67,0.3)' }}
+                        />
+                      ) : (
+                        <div
+                          className="w-12 h-12 rounded-full flex items-center justify-center"
+                          style={{ background: 'rgba(212,168,67,0.1)', border: '2px solid rgba(212,168,67,0.3)' }}
+                        >
+                          <UserCircle size={24} style={{ color: '#d4a843' }} />
+                        </div>
+                      );
+                    })()}
+                    <div className="flex-1 min-w-0">
+                      <p style={{ color: '#e8dcc8', fontFamily: '"Cinzel", serif', fontSize: '0.95rem', fontWeight: 600 }} className="truncate">
+                        {cachedSession.playerName}
+                      </p>
+                      <p style={{ color: '#8090b0', fontSize: '0.7rem' }}>
+                        Code : {cachedSession.shortCode}
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Reconnect button */}
+                  <button
+                    onClick={() => navigate(`/player/${cachedSession.shortCode}`)}
+                    className="w-full flex items-center justify-center gap-2 py-3 rounded-xl transition-all active:scale-95"
                     style={{
-                      background: digit ? 'rgba(212,168,67,0.08)' : 'rgba(0,0,0,0.3)',
-                      border: joinError
-                        ? '2px solid rgba(196,30,58,0.5)'
-                        : digit
-                          ? '2px solid rgba(212,168,67,0.4)'
-                          : '2px solid rgba(255,255,255,0.08)',
-                      color: '#d4a843',
+                      background: 'linear-gradient(135deg, #b8860b 0%, #d4a843 50%, #b8860b 100%)',
+                      color: '#0a0e1a',
                       fontFamily: '"Cinzel", serif',
-                      fontSize: '1.5rem',
-                      fontWeight: 700,
-                      letterSpacing: '0.05em',
-                      caretColor: '#d4a843',
-                      // @ts-expect-error ring color
-                      '--tw-ring-color': 'rgba(212,168,67,0.3)',
+                      fontSize: '0.85rem',
                     }}
-                  />
-                ))}
-              </div>
-
-              {/* Error */}
-              <AnimatePresence>
-                {joinError && (
-                  <motion.div
-                    initial={{ opacity: 0, y: -5 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0, y: -5 }}
-                    className="flex items-center justify-center gap-2 mb-3"
                   >
-                    <AlertCircle size={14} style={{ color: '#c41e3a' }} />
-                    <span style={{ color: '#c41e3a', fontSize: '0.75rem' }}>{joinError}</span>
-                  </motion.div>
-                )}
-              </AnimatePresence>
-
-              {/* Join button */}
-              <button
-                onClick={() => handleJoinGame(codeDigits.join(''))}
-                disabled={joining || codeDigits.join('').length < CODE_LENGTH}
-                className="w-full flex items-center justify-center gap-2 py-3 rounded-xl transition-all active:scale-95"
-                style={{
-                  background: codeDigits.join('').length === CODE_LENGTH
-                    ? 'linear-gradient(135deg, #b8860b 0%, #d4a843 50%, #b8860b 100%)'
-                    : 'rgba(255,255,255,0.04)',
-                  color: codeDigits.join('').length === CODE_LENGTH ? '#0a0e1a' : '#4a5568',
-                  fontFamily: '"Cinzel", serif',
-                  fontSize: '0.85rem',
-                  cursor: codeDigits.join('').length === CODE_LENGTH ? 'pointer' : 'not-allowed',
-                  opacity: joining ? 0.7 : 1,
-                }}
-              >
-                {joining ? (
-                  <span>Connexion...</span>
-                ) : (
-                  <>
-                    <LogIn size={16} />
+                    <ArrowRight size={16} />
                     Rejoindre
-                  </>
-                )}
-              </button>
-            </div>
-          </motion.div>
+                  </button>
+
+                  {/* Not me */}
+                  <button
+                    onClick={() => {
+                      try { localStorage.removeItem('loup-garou-player-session'); } catch { /* ignore */ }
+                      setCachedSession(null);
+                      setTimeout(() => inputRefs.current[0]?.focus(), 300);
+                    }}
+                    className="w-full flex items-center justify-center gap-2 py-2 mt-2 rounded-lg transition-all"
+                    style={{
+                      color: '#6b7b9b',
+                      fontSize: '0.7rem',
+                      fontFamily: '"Cinzel", serif',
+                    }}
+                  >
+                    <X size={12} />
+                    Ce n'est pas moi
+                  </button>
+                </div>
+              </motion.div>
+            ) : (
+              /* Standard code input */
+              <motion.div
+                key="code-input"
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -10 }}
+              >
+                <div
+                  className="rounded-xl p-5"
+                  style={{
+                    background: 'rgba(255,255,255,0.03)',
+                    border: '1px solid rgba(212,168,67,0.15)',
+                  }}
+                >
+                  <div className="flex items-center justify-center gap-2 mb-4">
+                    <LogIn size={16} style={{ color: '#d4a843' }} />
+                    <p
+                      style={{ color: '#d4a843', fontSize: '0.9rem', fontFamily: '"Cinzel", serif', fontWeight: 600 }}
+                    >
+                      Rejoindre la partie
+                    </p>
+                  </div>
+                  <p
+                    className="text-center mb-4"
+                    style={{ color: '#8090b0', fontSize: '0.75rem', fontFamily: '"Cinzel", serif' }}
+                  >
+                    Entrez votre code joueur
+                  </p>
+
+                  {/* 4-digit code inputs */}
+                  <div className="flex justify-center gap-3 mb-4" onPaste={handlePaste}>
+                    {codeDigits.map((digit, i) => (
+                      <input
+                        key={i}
+                        ref={(el) => { inputRefs.current[i] = el; }}
+                        type="text"
+                        inputMode="text"
+                        autoCapitalize="characters"
+                        maxLength={1}
+                        value={digit}
+                        onChange={(e) => handleDigitChange(i, e.target.value)}
+                        onKeyDown={(e) => handleDigitKeyDown(i, e)}
+                        className="w-14 h-16 rounded-xl text-center outline-none transition-all duration-200 focus:ring-2"
+                        style={{
+                          background: digit ? 'rgba(212,168,67,0.08)' : 'rgba(0,0,0,0.3)',
+                          border: joinError
+                            ? '2px solid rgba(196,30,58,0.5)'
+                            : digit
+                              ? '2px solid rgba(212,168,67,0.4)'
+                              : '2px solid rgba(255,255,255,0.08)',
+                          color: '#d4a843',
+                          fontFamily: '"Cinzel", serif',
+                          fontSize: '1.5rem',
+                          fontWeight: 700,
+                          letterSpacing: '0.05em',
+                          caretColor: '#d4a843',
+                          // @ts-expect-error ring color
+                          '--tw-ring-color': 'rgba(212,168,67,0.3)',
+                        }}
+                      />
+                    ))}
+                  </div>
+
+                  {/* Error */}
+                  <AnimatePresence>
+                    {joinError && (
+                      <motion.div
+                        initial={{ opacity: 0, y: -5 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0, y: -5 }}
+                        className="flex items-center justify-center gap-2 mb-3"
+                      >
+                        <AlertCircle size={14} style={{ color: '#c41e3a' }} />
+                        <span style={{ color: '#c41e3a', fontSize: '0.75rem' }}>{joinError}</span>
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+
+                  {/* Join button */}
+                  <button
+                    onClick={() => handleJoinGame(codeDigits.join(''))}
+                    disabled={joining || codeDigits.join('').length < CODE_LENGTH}
+                    className="w-full flex items-center justify-center gap-2 py-3 rounded-xl transition-all active:scale-95"
+                    style={{
+                      background: codeDigits.join('').length === CODE_LENGTH
+                        ? 'linear-gradient(135deg, #b8860b 0%, #d4a843 50%, #b8860b 100%)'
+                        : 'rgba(255,255,255,0.04)',
+                      color: codeDigits.join('').length === CODE_LENGTH ? '#0a0e1a' : '#4a5568',
+                      fontFamily: '"Cinzel", serif',
+                      fontSize: '0.85rem',
+                      cursor: codeDigits.join('').length === CODE_LENGTH ? 'pointer' : 'not-allowed',
+                      opacity: joining ? 0.7 : 1,
+                    }}
+                  >
+                    {joining ? (
+                      <span>Connexion...</span>
+                    ) : (
+                      <>
+                        <LogIn size={16} />
+                        Rejoindre
+                      </>
+                    )}
+                  </button>
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
 
           {/* Créer une partie — outlined golden button */}
           
