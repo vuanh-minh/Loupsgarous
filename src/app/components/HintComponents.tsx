@@ -1552,9 +1552,13 @@ export function PlayerHintSection({
                 transition={{ type: 'spring', stiffness: 280, damping: 24 }}
                 className="w-[92%] max-w-md max-h-[85vh] rounded-2xl overflow-hidden relative flex flex-col"
                 style={{
-                  background: 'linear-gradient(170deg, #f5e6c8 0%, #e8d5a8 25%, #f0dbb8 50%, #e5cea0 75%, #f2dfc0 100%)',
-                  border: '2px solid #c4a06a',
-                  boxShadow: '0 20px 60px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.4), inset 0 -1px 0 rgba(139,90,43,0.2)',
+                  background: t.isDay
+                    ? 'linear-gradient(170deg, #f5e6c8 0%, #e8d5a8 25%, #f0dbb8 50%, #e5cea0 75%, #f2dfc0 100%)'
+                    : 'linear-gradient(170deg, #1a1d2e 0%, #13152a 25%, #181c30 50%, #111428 75%, #1a1e32 100%)',
+                  border: t.isDay ? '2px solid #c4a06a' : '2px solid rgba(124,141,181,0.25)',
+                  boxShadow: t.isDay
+                    ? '0 20px 60px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.4), inset 0 -1px 0 rgba(139,90,43,0.2)'
+                    : '0 20px 60px rgba(0,0,0,0.7), inset 0 1px 0 rgba(124,141,181,0.15), inset 0 -1px 0 rgba(0,0,0,0.3)',
                 }}
                 onClick={e => e.stopPropagation()}
               >
@@ -1562,34 +1566,36 @@ export function PlayerHintSection({
                 <div
                   className="absolute inset-0 pointer-events-none rounded-2xl"
                   style={{
-                    background: 'radial-gradient(ellipse at 20% 0%, rgba(139,90,43,0.06) 0%, transparent 60%), radial-gradient(ellipse at 80% 100%, rgba(139,90,43,0.08) 0%, transparent 60%)',
+                    background: t.isDay
+                      ? 'radial-gradient(ellipse at 20% 0%, rgba(139,90,43,0.06) 0%, transparent 60%), radial-gradient(ellipse at 80% 100%, rgba(139,90,43,0.08) 0%, transparent 60%)'
+                      : 'radial-gradient(ellipse at 20% 0%, rgba(124,141,181,0.06) 0%, transparent 60%), radial-gradient(ellipse at 80% 100%, rgba(124,141,181,0.04) 0%, transparent 60%)',
                   }}
                 />
                 {/* Aged stain effect */}
                 <div
                   className="absolute top-8 right-6 w-20 h-20 rounded-full pointer-events-none"
-                  style={{ background: 'radial-gradient(circle, rgba(139,90,43,0.04) 0%, transparent 70%)' }}
+                  style={{ background: t.isDay ? 'radial-gradient(circle, rgba(139,90,43,0.04) 0%, transparent 70%)' : 'radial-gradient(circle, rgba(124,141,181,0.04) 0%, transparent 70%)' }}
                 />
                 <div
                   className="absolute bottom-12 left-4 w-16 h-16 rounded-full pointer-events-none"
-                  style={{ background: 'radial-gradient(circle, rgba(139,90,43,0.05) 0%, transparent 70%)' }}
+                  style={{ background: t.isDay ? 'radial-gradient(circle, rgba(139,90,43,0.05) 0%, transparent 70%)' : 'radial-gradient(circle, rgba(124,141,181,0.03) 0%, transparent 70%)' }}
                 />
 
                 {/* Header with decorative rule */}
                 <div className="relative px-6 pt-6 pb-3 shrink-0">
                   <div className="flex items-center justify-center gap-3 mb-1">
-                    <div className="h-px flex-1" style={{ background: 'linear-gradient(to right, transparent, #8b5a2b, transparent)' }} />
-                    <ScrollText size={22} style={{ color: '#6b4226' }} />
-                    <div className="h-px flex-1" style={{ background: 'linear-gradient(to right, transparent, #8b5a2b, transparent)' }} />
+                    <div className="h-px flex-1" style={{ background: t.isDay ? 'linear-gradient(to right, transparent, #8b5a2b, transparent)' : `linear-gradient(to right, transparent, ${t.nightSky}, transparent)` }} />
+                    <ScrollText size={22} style={{ color: t.isDay ? '#6b4226' : t.nightSky }} />
+                    <div className="h-px flex-1" style={{ background: t.isDay ? 'linear-gradient(to right, transparent, #8b5a2b, transparent)' : `linear-gradient(to right, transparent, ${t.nightSky}, transparent)` }} />
                   </div>
                   <h3
                     className="text-center"
                     style={{
                       fontFamily: '"Cinzel Decorative", "Cinzel", serif',
-                      color: '#3d2b1f',
+                      color: t.isDay ? '#3d2b1f' : '#c0c8d8',
                       fontSize: '1rem',
                       letterSpacing: '0.08em',
-                      textShadow: '0 1px 0 rgba(255,255,255,0.3)',
+                      textShadow: t.isDay ? '0 1px 0 rgba(255,255,255,0.3)' : '0 1px 4px rgba(0,0,0,0.5)',
                     }}
                   >
                     Manuscrit des Indices
@@ -1598,7 +1604,7 @@ export function PlayerHintSection({
                     className="text-center mt-1"
                     style={{
                       fontFamily: '"IM Fell English", "Cinzel", serif',
-                      color: '#7a5c3a',
+                      color: t.isDay ? '#7a5c3a' : t.textMuted,
                       fontSize: '0.6rem',
                       fontStyle: 'italic',
                       letterSpacing: '0.04em',
@@ -1606,11 +1612,11 @@ export function PlayerHintSection({
                   >
                     {myHints.length} indice{myHints.length > 1 ? 's' : ''} du Maitre du Jeu
                   </p>
-                  <div className="mt-2 h-px" style={{ background: 'linear-gradient(to right, transparent, rgba(139,90,43,0.3), transparent)' }} />
+                  <div className="mt-2 h-px" style={{ background: t.isDay ? 'linear-gradient(to right, transparent, rgba(139,90,43,0.3), transparent)' : `linear-gradient(to right, transparent, rgba(124,141,181,0.15), transparent)` }} />
                 </div>
 
                 {/* Hint grid */}
-                <div className="relative px-4 pb-2 overflow-y-auto min-h-0 flex-1" style={{ scrollbarWidth: 'thin', scrollbarColor: '#c4a06a #e8d5a8', WebkitOverflowScrolling: 'touch', overscrollBehavior: 'contain' }}>
+                <div className="relative px-4 pb-2 overflow-y-auto min-h-0 flex-1" style={{ scrollbarWidth: 'thin', scrollbarColor: t.isDay ? '#c4a06a #e8d5a8' : 'rgba(124,141,181,0.3) rgba(20,24,40,0.5)', WebkitOverflowScrolling: 'touch', overscrollBehavior: 'contain' }}>
                   <div className="grid grid-cols-2 gap-3">
                     {sortedHints.map((ph, index) => {
                       const isRevealed = ph.revealed || localRevealedIds.has(ph.hintId);
@@ -1628,9 +1634,11 @@ export function PlayerHintSection({
                             style={{
                               aspectRatio: '3/4',
                               borderRadius: 12,
-                              background: 'linear-gradient(160deg, #e8d5a8 0%, #d4b896 50%, #c4a06a 100%)',
-                              border: '1px solid rgba(139,90,43,0.3)',
-                              boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+                              background: t.isDay
+                                ? 'linear-gradient(160deg, #e8d5a8 0%, #d4b896 50%, #c4a06a 100%)'
+                                : 'linear-gradient(160deg, rgba(25,30,50,0.9) 0%, rgba(18,22,42,0.95) 50%, rgba(14,17,35,1) 100%)',
+                              border: t.isDay ? '1px solid rgba(139,90,43,0.3)' : '1px solid rgba(124,141,181,0.2)',
+                              boxShadow: t.isDay ? '0 4px 12px rgba(0,0,0,0.15)' : '0 4px 12px rgba(0,0,0,0.35)',
                             }}
                             onClick={() => {
                               onReveal(ph.hintId);
@@ -1641,10 +1649,10 @@ export function PlayerHintSection({
                             }}
                           >
                             <div className="absolute inset-0 flex flex-col items-center justify-center p-3">
-                              <div className="w-10 h-10 rounded-full flex items-center justify-center mb-2" style={{ background: 'rgba(139,90,43,0.15)', border: '1px solid rgba(139,90,43,0.3)' }}>
-                                <Lightbulb size={18} style={{ color: '#6b4226' }} />
+                              <div className="w-10 h-10 rounded-full flex items-center justify-center mb-2" style={{ background: t.isDay ? 'rgba(139,90,43,0.15)' : 'rgba(124,141,181,0.1)', border: t.isDay ? '1px solid rgba(139,90,43,0.3)' : '1px solid rgba(124,141,181,0.2)' }}>
+                                <Lightbulb size={18} style={{ color: t.isDay ? '#6b4226' : t.nightSky }} />
                               </div>
-                              <span style={{ fontSize: '0.6rem', color: '#6b4226', fontFamily: '"Cinzel", serif', textAlign: 'center' }}>
+                              <span style={{ fontSize: '0.6rem', color: t.isDay ? '#6b4226' : t.textMuted, fontFamily: '"Cinzel", serif', textAlign: 'center' }}>
                                 Toucher pour reveler
                               </span>
                             </div>
@@ -1664,9 +1672,13 @@ export function PlayerHintSection({
                           style={{
                             aspectRatio: '3/4',
                             borderRadius: 12,
-                            border: '1px solid rgba(139,90,43,0.3)',
-                            boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
-                            background: hasImage ? '#1a1a2e' : 'linear-gradient(160deg, #e8d5a8 0%, #d4b896 40%, #c4a06a 100%)',
+                            border: t.isDay ? '1px solid rgba(139,90,43,0.3)' : '1px solid rgba(124,141,181,0.2)',
+                            boxShadow: t.isDay ? '0 4px 12px rgba(0,0,0,0.15)' : '0 4px 12px rgba(0,0,0,0.35)',
+                            background: hasImage
+                              ? '#1a1a2e'
+                              : t.isDay
+                                ? 'linear-gradient(160deg, #e8d5a8 0%, #d4b896 40%, #c4a06a 100%)'
+                                : 'linear-gradient(160deg, rgba(25,30,50,0.9) 0%, rgba(18,22,42,0.95) 40%, rgba(14,17,35,1) 100%)',
                           }}
                           onClick={() => setFullscreenHintId(hint.id)}
                         >
@@ -1708,14 +1720,16 @@ export function PlayerHintSection({
                               <div
                                 className="absolute inset-0 pointer-events-none"
                                 style={{
-                                  background: 'radial-gradient(ellipse at 30% 20%, rgba(139,90,43,0.08) 0%, transparent 60%), radial-gradient(ellipse at 70% 80%, rgba(139,90,43,0.06) 0%, transparent 60%)',
+                                  background: t.isDay
+                                    ? 'radial-gradient(ellipse at 30% 20%, rgba(139,90,43,0.08) 0%, transparent 60%), radial-gradient(ellipse at 70% 80%, rgba(139,90,43,0.06) 0%, transparent 60%)'
+                                    : 'radial-gradient(ellipse at 30% 20%, rgba(124,141,181,0.06) 0%, transparent 60%), radial-gradient(ellipse at 70% 80%, rgba(124,141,181,0.04) 0%, transparent 60%)',
                                 }}
                               />
-                              <ScrollText size={22} style={{ color: '#8b5a2b', opacity: 0.35, marginBottom: 8 }} />
+                              <ScrollText size={22} style={{ color: t.isDay ? '#8b5a2b' : t.nightSky, opacity: 0.35, marginBottom: 8 }} />
                               <p
                                 className="text-center relative z-10"
                                 style={{
-                                  color: '#4a3520',
+                                  color: t.isDay ? '#4a3520' : t.text,
                                   fontSize: '0.75rem',
                                   lineHeight: 1.5,
                                   fontFamily: '"IM Fell English", "Cinzel", serif',
@@ -1737,7 +1751,9 @@ export function PlayerHintSection({
                               style={{
                                 background: hasImage
                                   ? 'linear-gradient(to top, rgba(0,0,0,0.75) 0%, rgba(0,0,0,0.4) 60%, transparent 100%)'
-                                  : 'linear-gradient(to top, rgba(139,90,43,0.2) 0%, transparent 100%)',
+                                  : t.isDay
+                                    ? 'linear-gradient(to top, rgba(139,90,43,0.2) 0%, transparent 100%)'
+                                    : 'linear-gradient(to top, rgba(0,0,0,0.3) 0%, transparent 100%)',
                                 borderRadius: '0 0 12px 12px',
                               }}
                             >
@@ -1768,14 +1784,14 @@ export function PlayerHintSection({
 
                 {/* Footer with close */}
                 <div className="relative px-6 pt-2 pb-5 shrink-0">
-                  <div className="mb-3 h-px" style={{ background: 'linear-gradient(to right, transparent, rgba(139,90,43,0.3), transparent)' }} />
+                  <div className="mb-3 h-px" style={{ background: t.isDay ? 'linear-gradient(to right, transparent, rgba(139,90,43,0.3), transparent)' : `linear-gradient(to right, transparent, rgba(124,141,181,0.15), transparent)` }} />
                   <button
                     onClick={() => setAllHintsModalOpen(false)}
                     className="w-full py-2.5 rounded-xl flex items-center justify-center gap-2 transition-colors"
                     style={{
-                      background: 'rgba(139,90,43,0.1)',
-                      border: '1px solid rgba(139,90,43,0.25)',
-                      color: '#5c3a1e',
+                      background: t.isDay ? 'rgba(139,90,43,0.1)' : 'rgba(124,141,181,0.08)',
+                      border: t.isDay ? '1px solid rgba(139,90,43,0.25)' : '1px solid rgba(124,141,181,0.18)',
+                      color: t.isDay ? '#5c3a1e' : t.textMuted,
                       fontSize: '0.75rem',
                       fontFamily: '"Cinzel", serif',
                     }}

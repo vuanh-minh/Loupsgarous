@@ -100,7 +100,7 @@ export const PhaseBanner = React.memo(function PhaseBanner({
               : isImmersiveVote
                 ? 'transparent'
                 : isNight
-                    ? 'rgba(12,13,21,0.4)'
+                    ? 'rgba(15,15,15,0.35)'
                     : `linear-gradient(135deg, ${t.cardBg}, ${t.surfaceBg})`,
             border: isImmersiveVote
               ? 'none'

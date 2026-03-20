@@ -42,7 +42,7 @@ import { PlayerEndGameOverlay } from './player/PlayerEndGameOverlay';
 import { RoleRevealVillagePanel } from './player/RoleRevealVillagePanel';
 import { JoinVillageScreen } from './player/JoinVillageScreen';
 const nightVillageBg = '/assets/backgrounds/night-village-player.png';
-const dayVoteBg = '/assets/backgrounds/day-village-peaceful.png';
+const dayVoteBg = '/assets/backgrounds/day-village-player.png';
 
 export function PlayerPage() {
   const { shortCode: shortCodeParam } = useParams();
@@ -907,8 +907,8 @@ export function PlayerPage() {
             className="absolute inset-0"
             style={{
               backgroundImage: isNight || isPracticeMode
-                ? 'linear-gradient(180deg, rgba(12,13,21,0.45) 0%, rgba(12,13,21,0.75) 50%, rgb(12,13,21) 100%)'
-                : 'none',
+                ? 'none'
+                : 'linear-gradient(180deg, rgba(0,0,0,0.15) 0%, rgba(0,0,0,0.25) 40%, rgba(0,0,0,0.35) 100%)',
             }}
           />
         </div>
@@ -919,11 +919,11 @@ export function PlayerPage() {
         style={{
           height: 80,
           zIndex: 59,
-          background: `linear-gradient(180deg, ${
-            isCurrentPlayerDead
-              ? t.pageBg
-              : (isNight || isPracticeMode) ? '#050810' : '#F5F0E4'
-          } 0%, transparent 100%)`,
+          background: isCurrentPlayerDead
+            ? `linear-gradient(180deg, ${t.pageBg} 0%, transparent 100%)`
+            : (!isNight && !isPracticeMode)
+              ? 'transparent'
+              : `linear-gradient(180deg, #050810 0%, transparent 100%)`,
         }}
       />
     <div
@@ -1650,7 +1650,7 @@ export function PlayerPage() {
           className="flex items-stretch w-full rounded-2xl overflow-hidden relative"
           style={{
             background: isNightGlass
-              ? 'linear-gradient(160deg, rgba(15,22,41,0.30) 0%, rgba(7,11,26,0.52) 40%, rgba(5,8,18,0.62) 100%)'
+              ? 'linear-gradient(160deg, rgba(30,24,12,0.35) 0%, rgba(12,10,5,0.58) 40%, rgba(6,5,2,0.68) 100%)'
               : isDayGame
                 ? 'linear-gradient(160deg, rgba(38,28,16,0.30) 0%, rgba(20,15,8,0.52) 40%, rgba(13,10,5,0.62) 100%)'
                 : isCurrentPlayerDead
@@ -1658,7 +1658,7 @@ export function PlayerPage() {
                   : 'linear-gradient(160deg, rgba(245,240,228,0.30) 0%, rgba(235,228,210,0.50) 40%, rgba(227,218,198,0.62) 100%)',
             border: `1px solid ${
               isNightGlass
-                ? 'rgba(124,141,181,0.14)'
+                ? 'rgba(212,168,67,0.12)'
                 : isDayGame
                   ? 'rgba(120,90,50,0.22)'
                   : isCurrentPlayerDead
@@ -1668,7 +1668,7 @@ export function PlayerPage() {
             backdropFilter: 'blur(28px) saturate(120%)',
             WebkitBackdropFilter: 'blur(28px) saturate(120%)',
             boxShadow: isNightGlass
-              ? '0 8px 40px rgba(0,0,0,0.55), 0 2px 8px rgba(0,0,0,0.3), inset 0 1.5px 0 rgba(124,141,181,0.20), inset 0 -1px 0 rgba(0,0,0,0.25)'
+              ? '0 8px 40px rgba(0,0,0,0.55), 0 2px 8px rgba(0,0,0,0.3), inset 0 1.5px 0 rgba(212,168,67,0.12), inset 0 -1px 0 rgba(0,0,0,0.30)'
               : isDayGame
                 ? '0 8px 40px rgba(0,0,0,0.50), 0 2px 8px rgba(0,0,0,0.25), inset 0 1.5px 0 rgba(160,120,60,0.18), inset 0 -1px 0 rgba(0,0,0,0.25)'
                 : isCurrentPlayerDead
@@ -1682,7 +1682,7 @@ export function PlayerPage() {
             className="absolute inset-x-0 top-0 h-px pointer-events-none z-10"
             style={{
               background: isNightGlass
-                ? 'linear-gradient(90deg, transparent 4%, rgba(124,141,181,0.40) 30%, rgba(160,175,210,0.55) 50%, rgba(124,141,181,0.40) 70%, transparent 96%)'
+                ? 'linear-gradient(90deg, transparent 4%, rgba(212,168,67,0.20) 30%, rgba(212,168,67,0.30) 50%, rgba(212,168,67,0.20) 70%, transparent 96%)'
                 : isDayGame
                   ? 'linear-gradient(90deg, transparent 4%, rgba(180,140,80,0.35) 30%, rgba(210,170,100,0.45) 50%, rgba(180,140,80,0.35) 70%, transparent 96%)'
                   : 'linear-gradient(90deg, transparent 4%, rgba(255,255,255,0.60) 30%, rgba(255,255,255,0.80) 50%, rgba(255,255,255,0.60) 70%, transparent 96%)',
@@ -1693,7 +1693,7 @@ export function PlayerPage() {
             className="absolute inset-0 pointer-events-none rounded-2xl z-0"
             style={{
               background: isNightGlass
-                ? 'linear-gradient(180deg, rgba(124,141,181,0.07) 0%, transparent 52%)'
+                ? 'linear-gradient(180deg, rgba(212,168,67,0.05) 0%, transparent 52%)'
                 : isDayGame
                   ? 'linear-gradient(180deg, rgba(160,120,60,0.06) 0%, transparent 52%)'
                   : 'linear-gradient(180deg, rgba(255,255,255,0.14) 0%, transparent 52%)',
@@ -1702,7 +1702,7 @@ export function PlayerPage() {
         {visibleTabs.map((tab, tabIdx) => {
           const isActive = activePanel === tab.id;
           const isGameTab = tabIdx === 0;
-          const tabColor = isActive ? t.gold : t.textDim;
+          const tabColor = isActive ? t.gold : (isNightGlass ? 'rgba(212,168,67,0.45)' : t.textDim);
           return (
             <button
               key={tab.id}
