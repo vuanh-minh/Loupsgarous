@@ -503,7 +503,9 @@ export function HomePage() {
                   {/* Player identity */}
                   <div className="flex items-center gap-3 mb-4 px-2">
                     {(() => {
-                      const avatarSrc = resolveAvatarUrl(cachedSession.playerAvatar);
+                      const raw = cachedSession.playerAvatar;
+                      const isImageRef = raw && (raw.startsWith('gallery:') || raw.startsWith('/') || raw.startsWith('http'));
+                      const avatarSrc = isImageRef ? resolveAvatarUrl(raw) : undefined;
                       return avatarSrc ? (
                         <img
                           src={avatarSrc}
@@ -511,6 +513,13 @@ export function HomePage() {
                           className="w-12 h-12 rounded-full object-cover"
                           style={{ border: '2px solid rgba(212,168,67,0.3)' }}
                         />
+                      ) : raw && !isImageRef ? (
+                        <div
+                          className="w-12 h-12 rounded-full flex items-center justify-center"
+                          style={{ background: 'rgba(212,168,67,0.1)', border: '2px solid rgba(212,168,67,0.3)', fontSize: '1.5rem' }}
+                        >
+                          {raw}
+                        </div>
                       ) : (
                         <div
                           className="w-12 h-12 rounded-full flex items-center justify-center"
