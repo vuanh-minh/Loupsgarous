@@ -93,7 +93,7 @@ export function GamePanel({
   return (
     <div className="px-4 flex flex-col h-full relative overflow-hidden" style={{ paddingTop: '1rem', paddingBottom: 'calc(32px + env(safe-area-inset-bottom, 0px))' }}>
       {/* Content */}
-      <div className={`relative z-10 flex flex-col flex-1 ${isVotePhase ? 'overflow-y-auto min-h-0' : 'h-full'}`}>
+      <div className="relative z-10 flex flex-col h-full flex-1 min-h-0">
         {/* Last victim / night victims banner */}
         <VictimBanner
           isNight={isNight}
@@ -171,7 +171,8 @@ export function GamePanel({
           </motion.div>
         </div>
 
-        {/* Vote section (only during vote phase) — placed right after PhaseBanner */}
+        {/* Vote section (only during vote phase) — scrollable when many candidates */}
+        <div className={isVotePhase ? 'flex-1 overflow-y-auto min-h-0' : ''}>
         <VoteSection
           ref={voteSectionRef}
           alivePlayers={alivePlayers}
@@ -196,6 +197,7 @@ export function GamePanel({
           onDeclareCandidacy={onDeclareCandidacy}
           onWithdrawCandidacy={onWithdrawCandidacy}
         />
+        </div>
 
         {/* Lover banner */}
         <LoverBanner
