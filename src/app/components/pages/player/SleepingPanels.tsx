@@ -768,7 +768,7 @@ export function VillagerSleepingPanel({
               transition={{ delay: 0.8 }}
               whileTap={{ scale: 0.95 }}
               onClick={onInvestigate}
-              className="flex items-center justify-center gap-2 px-5 py-2 rounded-lg transition-all duration-200"
+              className="w-full flex items-center justify-center gap-2 px-5 py-2 rounded-lg transition-all duration-200"
               style={{
                 marginTop: "1rem",
                 background: "rgba(124,141,181,0.13)",
@@ -792,7 +792,7 @@ export function VillagerSleepingPanel({
                 transition={{ delay: 1.0 }}
                 whileTap={{ scale: 0.95 }}
                 onClick={onQuests}
-                className="flex items-center justify-center gap-2 px-5 py-2 rounded-lg transition-all duration-200"
+                className="w-full flex items-center justify-center gap-2 px-5 py-2 rounded-lg transition-all duration-200"
                 style={{
                   marginTop: "0.5rem",
                   background: "rgba(212,168,67,0.1)",
