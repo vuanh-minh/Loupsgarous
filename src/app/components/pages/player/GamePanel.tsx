@@ -264,6 +264,39 @@ export function GamePanel({
           null
         )}
 
+        {/* ── "Nominer" button — above Indices ── */}
+        <AnimatePresence>
+          {isVotePhase && !isMaireElection && myVote === undefined && currentPlayerAlive && (
+            <motion.div
+              initial={{ opacity: 0, y: 12 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: 12 }}
+              className="relative z-30 px-[0px] pb-[0px]"
+              style={{ paddingTop: 'clamp(6px, 1.5vh, 15px)' }}
+            >
+              <motion.button
+                whileTap={{ scale: 0.95 }}
+                onClick={() => voteSectionRef.current?.openNominate()}
+                className="w-full flex items-center justify-center gap-2 rounded-[14px] transition-colors"
+                style={{
+                  background: 'rgba(61,52,36,0.8)',
+                  border: '1.6px solid rgba(212,168,67,0.3)',
+                  boxShadow: '0 4px 16px rgba(0,0,0,0.3)',
+                  color: '#d4a843',
+                  fontSize: 'clamp(14px, 4vw, 16px)',
+                  fontFamily: '"Cinzel", serif',
+                  fontWeight: 700,
+                  backdropFilter: 'blur(12px)',
+                  padding: 'clamp(10px, 2vh, 14px) 0',
+                }}
+              >
+                <Vote size={16} />
+                Nominer
+              </motion.button>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
         {/* Hint section — Night phase (bottom of panel, hidden when card is flipped) */}
         {isNight && !isFlipped && currentPlayerId !== null && !isPracticeMode && (
           <div className="mt-auto relative" style={{ zIndex: 20, paddingTop: '16px' }}>
@@ -297,39 +330,6 @@ export function GamePanel({
             />
           </div>
         )}
-
-        {/* ── "Nominer" button — between Indices and footer ── */}
-        <AnimatePresence>
-          {isVotePhase && !isMaireElection && myVote === undefined && currentPlayerAlive && (
-            <motion.div
-              initial={{ opacity: 0, y: 12 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: 12 }}
-              className="relative z-30 px-[0px] pb-[0px]"
-              style={{ paddingTop: 'clamp(6px, 1.5vh, 15px)' }}
-            >
-              <motion.button
-                whileTap={{ scale: 0.95 }}
-                onClick={() => voteSectionRef.current?.openNominate()}
-                className="w-full flex items-center justify-center gap-2 rounded-[14px] transition-colors"
-                style={{
-                  background: 'rgba(61,52,36,0.8)',
-                  border: '1.6px solid rgba(212,168,67,0.3)',
-                  boxShadow: '0 4px 16px rgba(0,0,0,0.3)',
-                  color: '#d4a843',
-                  fontSize: 'clamp(14px, 4vw, 16px)',
-                  fontFamily: '"Cinzel", serif',
-                  fontWeight: 700,
-                  backdropFilter: 'blur(12px)',
-                  padding: 'clamp(10px, 2vh, 14px) 0',
-                }}
-              >
-                <Vote size={16} />
-                Nominer
-              </motion.button>
-            </motion.div>
-          )}
-        </AnimatePresence>
 
         {/* ── "Annuler" cancel-vote button — shown when player has voted ── */}
         <AnimatePresence>
