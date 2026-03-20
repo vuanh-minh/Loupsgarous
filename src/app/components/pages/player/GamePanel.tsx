@@ -93,7 +93,7 @@ export function GamePanel({
   return (
     <div className="px-4 flex flex-col h-full relative overflow-hidden" style={{ paddingTop: '1rem', paddingBottom: 'calc(32px + env(safe-area-inset-bottom, 0px))' }}>
       {/* Content */}
-      <div className="relative z-10 flex flex-col h-full flex-1">
+      <div className={`relative z-10 flex flex-col flex-1 ${isVotePhase ? 'overflow-y-auto min-h-0' : 'h-full'}`}>
         {/* Last victim / night victims banner */}
         <VictimBanner
           isNight={isNight}
