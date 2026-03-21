@@ -105,6 +105,21 @@ export interface Quest {
   galleryPreQuestId?: number;
 }
 
+/** Role Reveal Quest — simple onboarding quest configured by GM, shown to ALL players during role reveal */
+export interface RoleRevealQuestConfig {
+  enabled: boolean;
+  title: string;
+  question: string;
+  inputType: QuestTaskInputType;
+  choices?: string[];
+  correctAnswer: string;
+  hintText: string;
+  hintImageUrl?: string;
+  hintCaption?: string;
+  completedBy: number[];
+  failedBy: number[];
+}
+
 export type GamePhase = 'night' | 'day';
 export type NightStep = 'werewolves' | 'seer' | 'witch' | 'cupidon' | 'idle' | 'done' | 'active';
 export type DayStep = 'discussion' | 'vote' | 'result' | 'announcement';
@@ -259,4 +274,6 @@ export interface GameState {
   dynamicHints?: DynamicHint[];
   /** Task library: reusable task templates for quest creation */
   taskLibrary?: TaskTemplate[];
+  /** Optional onboarding quest shown during role reveal phase */
+  roleRevealQuest?: RoleRevealQuestConfig;
 }

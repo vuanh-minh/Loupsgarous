@@ -383,7 +383,8 @@ export function useGameSync({ setState, state, stateRef }: SyncDeps) {
              (s.quests ?? []).map((q: any) => ({ pa: q.tasks?.map((t: any) => t.playerAnswers), ps: q.playerStatuses, cv: q.collaborativeVotes }))) &&
         same(mergedQuestAssignments, s.questAssignments ?? {}) &&
         same(mergedVillagePresentIds, s.villagePresentIds ?? []) &&
-        same(mergedMidGameJoinIds, s.midGameJoinIds ?? []);
+        same(mergedMidGameJoinIds, s.midGameJoinIds ?? []) &&
+        same(serverState.roleRevealQuest ?? null, s.roleRevealQuest ?? null);
 
       if (unchanged) return false;
 
@@ -430,6 +431,7 @@ export function useGameSync({ setState, state, stateRef }: SyncDeps) {
         gmAlerts: serverState.gmAlerts !== undefined ? serverState.gmAlerts : s.gmAlerts,
         villagePresentIds: mergedVillagePresentIds,
         midGameJoinIds: mergedMidGameJoinIds,
+        roleRevealQuest: serverState.roleRevealQuest !== undefined ? serverState.roleRevealQuest : s.roleRevealQuest,
       }));
       return true;
     } catch (err) {

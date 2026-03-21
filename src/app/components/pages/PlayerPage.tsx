@@ -104,6 +104,7 @@ export function PlayerPage() {
     serverCancelCollabVote,
     serverJoinVillage,
     serverSetDiscoveryWolfTarget,
+    serverAnswerRoleRevealQuest,
   } = useServerActions();
 
   // Realtime channel: receive GM state broadcasts instantly
@@ -285,7 +286,8 @@ export function PlayerPage() {
     }
     return true;
   });
-  const unreadQuestCount = myVisibleQuests.filter(q => !readQuestIds.has(q.id)).length;
+  const hasUncompletedRoleRevealQuest = !!state.roleRevealQuest?.enabled && !state.roleRevealDone && currentPlayerId !== null && !state.roleRevealQuest.completedBy.includes(currentPlayerId);
+  const unreadQuestCount = myVisibleQuests.filter(q => !readQuestIds.has(q.id)).length + (hasUncompletedRoleRevealQuest ? 1 : 0);
 
   // Close quest detail overlay when switching tabs
   useEffect(() => {
@@ -1410,6 +1412,12 @@ export function PlayerPage() {
                 }
               }}
               onOpenQuest={handleOpenQuest}
+              onAnswerRoleRevealQuest={(answer) => {
+                if (currentPlayerId !== null) {
+                  markActionSent();
+                  serverAnswerRoleRevealQuest(currentPlayerId, answer).then(handlePostAction);
+                }
+              }}
               readQuestIds={readQuestIds}
               isActive={activePanel === 'quests'}
               onNavigateToPlayer={navigateToPlayer}

@@ -2023,3 +2023,42 @@ actionRoutes.post("/make-server-2c00868b/game/action/quest-collab-cancel", async
     return c.json({ error: `Erreur quest-collab-cancel: ${err}` }, 500);
   }
 });
+
+// ── Role Reveal Quest Answer ──
+actionRoutes.post("/make-server-2c00868b/game/action/role-reveal-quest-answer", async (c) => {
+  try {
+    const body = await c.req.json();
+    const { playerId, answer } = body;
+    const key = await resolveGameKey(body);
+
+    const res = await withGameLock(key, (state) => {
+      const config = state.roleRevealQuest;
+      if (!config?.enabled) return;
+      if ((config.completedBy || []).includes(playerId)) return;
+
+      const isCorrect = (answer || '').trim().toLowerCase() === (config.correctAnswer || '').trim().toLowerCase();
+
+      if (isCorrect) {
+        const hints = state.hints || [];
+        const playerHints = state.playerHints || [];
+        const maxHintId = hints.length > 0 ? Math.max(...hints.map((h: any) => h.id)) : 0;
+        const newHintId = maxHintId + 1;
+        const now = new Date().toISOString();
+
+        hints.push({ id: newHintId, text: config.hintText, imageUrl: config.hintImageUrl, createdAt: now });
+        playerHints.push({ hintId: newHintId, playerId, sentAt: now, revealed: true, revealedAt: now });
+
+        state.hints = hints;
+        state.playerHints = playerHints;
+        state.roleRevealQuest = { ...config, completedBy: [...(config.completedBy || []), playerId] };
+      } else {
+        state.roleRevealQuest = { ...config, failedBy: [...(config.failedBy || []), playerId] };
+      }
+    });
+    if (!res) return c.json({ error: "Aucune partie en cours" }, 404);
+    return c.json({ success: true });
+  } catch (err) {
+    console.log("Role reveal quest answer error:", err);
+    return c.json({ error: `Erreur role-reveal-quest-answer: ${err}` }, 500);
+  }
+});

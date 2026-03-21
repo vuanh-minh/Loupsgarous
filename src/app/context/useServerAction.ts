@@ -544,6 +544,37 @@ export function useServerActions() {
     return postAction('reveal-hint', { playerId, hintId, gameId });
   }, [gameId, localMode, applyLocal]);
 
+  // ── Answer role reveal quest ──
+  const serverAnswerRoleRevealQuest = useCallback((playerId: number, answer: string) => {
+    const mutator = (s: GameState): GameState => {
+      const config = s.roleRevealQuest;
+      if (!config?.enabled) return s;
+      if (config.completedBy.includes(playerId)) return s;
+
+      const isCorrect = answer.trim().toLowerCase() === config.correctAnswer.trim().toLowerCase();
+
+      if (isCorrect) {
+        const maxHintId = (s.hints ?? []).length > 0 ? Math.max(...(s.hints ?? []).map((h) => h.id)) : 0;
+        const newHintId = maxHintId + 1;
+        const now = new Date().toISOString();
+        return {
+          ...s,
+          roleRevealQuest: { ...config, completedBy: [...config.completedBy, playerId] },
+          hints: [...(s.hints ?? []), { id: newHintId, text: config.hintText, imageUrl: config.hintImageUrl, createdAt: now }],
+          playerHints: [...(s.playerHints ?? []), { hintId: newHintId, playerId, sentAt: now, revealed: true, revealedAt: now }],
+        };
+      } else {
+        return {
+          ...s,
+          roleRevealQuest: { ...config, failedBy: [...(config.failedBy || []), playerId] },
+        };
+      }
+    };
+    if (localMode) return applyLocal(mutator);
+    applyLocal(mutator);
+    return postAction('role-reveal-quest-answer', { playerId, answer, gameId });
+  }, [gameId, localMode, applyLocal]);
+
   // ── Join village (away player becomes present) ──
   const serverJoinVillage = useCallback((playerId: number) => {
     if (localMode) return applyLocal((s) => {
@@ -584,5 +615,6 @@ export function useServerActions() {
     serverCollabVote,
     serverCancelCollabVote,
     serverJoinVillage,
+    serverAnswerRoleRevealQuest,
   };
 }

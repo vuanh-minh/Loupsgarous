@@ -9,6 +9,7 @@ import { GMWolfInactivitySettings } from './GMWolfInactivitySettings';
 import { GMVillagerInactivitySettings } from './GMVillagerInactivitySettings';
 import { GMRandomVoteSettings } from './GMRandomVoteSettings';
 import { GMDayEliminationsStepper } from './GMDayEliminationsStepper';
+import { GMRoleRevealQuestSettings } from './GMRoleRevealQuestSettings';
 
 /* ================================================================
    GMGameSettingsAccordion — collapsible "Reglages de partie" that
@@ -159,6 +160,7 @@ export const GMGameSettingsAccordion = React.memo(function GMGameSettingsAccordi
           <GMWolfInactivitySettings state={state} updateState={updateState} t={t} />
           <GMVillagerInactivitySettings state={state} updateState={updateState} t={t} />
           <GMRandomVoteSettings state={state} updateState={updateState} t={t} />
+          <GMRoleRevealQuestSettings state={state} updateState={updateState} t={t} />
 
           {/* GM access code for this game */}
           <div

@@ -32,6 +32,7 @@ import type {
 import type { GameThemeTokens } from "../../../context/gameTheme";
 import { PhaseTimerDisplay } from "../../PhaseTimer";
 import { PAvatar } from "./PAvatar";
+import { RoleRevealQuestCard } from "./RoleRevealQuestCard";
 
 interface PlayerQuestsPanelProps {
   state: GameState;
@@ -44,6 +45,7 @@ interface PlayerQuestsPanelProps {
   onCollabVote?: (questId: number, vote: boolean) => void;
   onCancelCollabVote?: (questId: number) => void;
   onOpenQuest?: (questId: number) => void;
+  onAnswerRoleRevealQuest?: (answer: string) => void;
   readQuestIds?: Set<number>;
   isActive?: boolean;
   onNavigateToPlayer?: (playerId: number) => void;
@@ -289,6 +291,7 @@ export function PlayerQuestsPanel({
   onCollabVote,
   onCancelCollabVote,
   onOpenQuest,
+  onAnswerRoleRevealQuest,
   readQuestIds,
   isActive,
   onNavigateToPlayer,
@@ -353,7 +356,10 @@ export function PlayerQuestsPanel({
 
   const displayedQuests = activeTab === 'ongoing' ? ongoingQuests : finishedQuests;
 
-  if (quests.length === 0) {
+  // Role reveal quest (separate onboarding mechanic)
+  const showRoleRevealQuest = !!state.roleRevealQuest?.enabled && !state.roleRevealDone && onAnswerRoleRevealQuest;
+
+  if (quests.length === 0 && !showRoleRevealQuest) {
     return (
       <div className="flex flex-col items-center justify-center gap-3 py-12 px-4">
         <div
@@ -388,6 +394,21 @@ export function PlayerQuestsPanel({
           Le Maitre du Jeu n'a pas encore revele de missions
           pour vous. Restez a l'ecoute !
         </p>
+      </div>
+    );
+  }
+
+  // If only the role reveal quest is available (no regular quests)
+  if (quests.length === 0 && showRoleRevealQuest) {
+    return (
+      <div className="px-4 py-4">
+        <RoleRevealQuestCard
+          config={state.roleRevealQuest!}
+          playerId={pid}
+          onAnswer={onAnswerRoleRevealQuest}
+          phase={state.phase}
+          t={t}
+        />
       </div>
     );
   }
@@ -1048,6 +1069,18 @@ export function PlayerQuestsPanel({
           </span>
         )}
       </div>
+
+      {/* Role reveal quest (onboarding) */}
+      {showRoleRevealQuest && (
+        <div className="mb-3">
+          <RoleRevealQuestCard
+            config={state.roleRevealQuest!}
+            playerId={pid}
+            onAnswer={onAnswerRoleRevealQuest}
+            t={t}
+          />
+        </div>
+      )}
 
       {/* Tab navigation */}
       <div
