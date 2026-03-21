@@ -6,13 +6,14 @@ import {
   ChevronDown, AlertTriangle, Target,
   ClipboardPaste, X, Check, Clock, MessageSquarePlus, Download,
   Lightbulb, ImagePlus, Home, Image, Search,
-  ChevronUp, Minus, Lock, UserX, FileText,
+  ChevronUp, Minus, Lock, UserX, FileText, CheckCircle,
 } from 'lucide-react';
 import type { GameState, DynamicHint, Player, Hint } from '../../../context/gameTypes';
 import type { GameThemeTokens } from '../../../context/gameTheme';
 import type { PlayerEntry } from '../setup/setupConstants';
 import { getRoleById } from '../../../data/roles';
 import { nextHintId, GMHintPanel } from '../../HintComponents';
+import { resolveHintText, distributeVillagerP2Clues } from './gmPureHelpers';
 import { resolveAvatarUrl } from '../../../data/avatarResolver';
 import { AVATAR_GALLERY } from '../../../data/avatarGallery';
 import { sendPushNotifications } from '../../../context/useNotifications';
@@ -40,28 +41,6 @@ function computeRecipientTeam(player: Player): RecipientTeam {
   return null;
 }
 
-/** Resolve {role} and {durole} placeholders in hint text — includes French articles with auto-capitalization */
-function resolveHintText(text: string, player: Player): string {
-  const role = getRoleById(player.role);
-  if (!role) return text.replace(/\{role\}/gi, player.role).replace(/\{durole\}/gi, player.role);
-  // {role} → "le Loup-Garou", "la Voyante" (auto-cap at start)
-  let result = text.replace(/\{role\}/gi, (_match, offset: number) => {
-    const capitalize = offset === 0;
-    const art = capitalize
-      ? role.article.charAt(0).toUpperCase() + role.article.slice(1)
-      : role.article;
-    return `${art} ${role.name}`;
-  });
-  // {durole} → "du Loup-Garou" (le→du), "de la Voyante" (la→de la), auto-cap at start
-  result = result.replace(/\{durole\}/gi, (_match, offset: number) => {
-    const capitalize = offset === 0;
-    if (role.article === 'le') {
-      return capitalize ? `Du ${role.name}` : `du ${role.name}`;
-    }
-    return capitalize ? `De la ${role.name}` : `de la ${role.name}`;
-  });
-  return result;
-}
 
 /** Get next dynamic hint ID */
 function nextDynamicHintId(hints: DynamicHint[]): number {
@@ -155,6 +134,8 @@ export function GMDynamicHintsPanel({
   const dynImageTextRef = useRef<string>('');
   const inputRef = useRef<HTMLInputElement | null>(null);
   const [galleryTargetPlayer, setGalleryTargetPlayer] = useState<number | null>(null);
+  const [villagerDistribFeedback, setVillagerDistribFeedback] = useState<string | null>(null);
+  const [manualDistribPriority, setManualDistribPriority] = useState<1 | 2>(2);
   const [shareHintPlayerId, setShareHintPlayerId] = useState<number | null>(null);
   const [shareHintSearch, setShareHintSearch] = useState('');
 
@@ -340,6 +321,22 @@ export function GMDynamicHintsPanel({
     // Keep focus on input for rapid multi-hint entry
     setTimeout(() => inputRef.current?.focus(), 50);
   }, [newText, newPriority, dynamicHints, onUpdateState]);
+
+  // ── Distribute villager clues manually ──
+  const distributeVillagerClues = useCallback(() => {
+    let count = 0;
+    onUpdateState((s) => {
+      const result = distributeVillagerP2Clues(s, manualDistribPriority);
+      count = result.distributedCount;
+      return result.state;
+    });
+    requestAnimationFrame(() => {
+      if (count > 0) {
+        setVillagerDistribFeedback(`${count} indice${count > 1 ? 's' : ''} distribué${count > 1 ? 's' : ''}`);
+        setTimeout(() => setVillagerDistribFeedback(null), 4000);
+      }
+    });
+  }, [onUpdateState, manualDistribPriority]);
 
   // ── Delete hint ──
   const deleteHint = useCallback((hintId: number) => {
@@ -844,6 +841,96 @@ export function GMDynamicHintsPanel({
           ))}
         </div>
       )}
+
+      {/* ── Distribute Villager P2 clues button ── */}
+      {stats.villageois > 0 && (() => {
+        const totalGranted = dynamicHints
+          .filter((h) => {
+            if (h.priority !== 2 || h.revealed) return false;
+            const tp = players.find((p) => p.id === h.targetPlayerId);
+            return tp && getRoleById(tp.role)?.id === 'villageois';
+          })
+          .reduce((sum, h) => sum + (h.grantedToPlayerIds?.length ?? 0), 0);
+        const alivePlayers = players.filter((p) => p.alive).length;
+        const perPlayer = alivePlayers > 0 ? Math.floor(totalGranted / alivePlayers) : 0;
+        return (
+          <div style={{ marginTop: 16, marginBottom: 16 }}>
+            {/* P1 / P2 selector */}
+            <div className="flex gap-1.5 mb-2">
+              {([1, 2] as const).map((p) => {
+                const pColor = p === 1 ? '#ef4444' : '#f59e0b';
+                const isActive = manualDistribPriority === p;
+                return (
+                  <button
+                    key={p}
+                    onClick={() => setManualDistribPriority(p)}
+                    className="flex-1 py-1 rounded-md transition-colors"
+                    style={{
+                      background: isActive ? `${pColor}20` : `${pColor}08`,
+                      border: `1px solid ${isActive ? `${pColor}60` : `${pColor}20`}`,
+                      color: isActive ? pColor : `${pColor}80`,
+                      fontSize: '0.6rem',
+                      fontWeight: 700,
+                      fontFamily: '"Cinzel", serif',
+                      cursor: 'pointer',
+                    }}
+                  >
+                    P{p}
+                  </button>
+                );
+              })}
+            </div>
+            <motion.button
+              onClick={distributeVillagerClues}
+              whileTap={{ scale: 0.95, opacity: 0.8 }}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg w-full justify-center"
+              style={{
+                background: `${TEAM_COLORS.villageois.text}12`,
+                border: `1px solid ${TEAM_COLORS.villageois.border}`,
+                color: TEAM_COLORS.villageois.text,
+                fontSize: '0.6rem',
+                fontWeight: 700,
+                fontFamily: '"Cinzel", serif',
+                cursor: 'pointer',
+              }}
+            >
+              <Home size={10} />
+              Distribuer indice Villageois
+              {perPlayer > 0 && (
+                <span
+                  style={{
+                    marginLeft: 4,
+                    background: `${TEAM_COLORS.villageois.text}20`,
+                    border: `1px solid ${TEAM_COLORS.villageois.border}`,
+                    borderRadius: 4,
+                    padding: '1px 5px',
+                    fontSize: '0.55rem',
+                    fontWeight: 700,
+                  }}
+                >
+                  {perPlayer} / joueur
+                </span>
+              )}
+            </motion.button>
+            <AnimatePresence>
+              {villagerDistribFeedback && (
+                <motion.div
+                  initial={{ opacity: 0, y: -6 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -6 }}
+                  className="rounded-lg px-3 py-2 flex items-center gap-2 mt-1.5"
+                  style={{ background: `${TEAM_COLORS.villageois.text}12`, border: `1px solid ${TEAM_COLORS.villageois.border}` }}
+                >
+                  <CheckCircle size={13} style={{ color: TEAM_COLORS.villageois.text }} />
+                  <span style={{ color: TEAM_COLORS.villageois.text, fontSize: '0.65rem', fontWeight: 600 }}>
+                    {villagerDistribFeedback}
+                  </span>
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
+        );
+      })()}
 
       {/* Hidden file input for dynamic hint image upload */}
       <input

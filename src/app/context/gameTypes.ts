@@ -235,6 +235,8 @@ export interface GameState {
   villagerInactivityThreshold: number;
   /** Whether inactive players get a random vote assigned automatically. true = enabled (default). */
   randomVoteIfInactive: boolean;
+  /** Whether P2 villager clues are automatically distributed at each phase transition. true = enabled (default). */
+  villagerP2AutoDistrib?: boolean;
   /** Tracks who first nominated each target: targetId -> first nominatorId */
   nominations: Record<number, number>;
   /** Whether the Maire election success screen is currently showing */

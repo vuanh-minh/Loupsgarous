@@ -1,8 +1,9 @@
 import {
   type Player, type GameState,
-  type GameEvent, type Quest,
+  type GameEvent, type Quest, type Hint, type PlayerHint,
 } from '../../../context/gameTypes';
 import { getRoleById, type RoleDefinition } from '../../../data/roles';
+import { nextHintId } from '../../HintComponents';
 
 /* ================================================================
    gmPureHelpers — pure functions & types for GM game logic.
@@ -672,6 +673,130 @@ export function distributeQuestRound(s: GameState): { state: GameState; distribu
 
   return {
     state: { ...s, quests: updatedQuests, questAssignments: newAssignments },
+    distributedCount,
+  };
+}
+
+// ── Villager P2 Clue Distribution ────────────────────────────────
+
+/** Resolve {role} and {durole} placeholders in hint text — includes French articles with auto-capitalization */
+export function resolveHintText(text: string, player: Player): string {
+  const role = getRoleById(player.role);
+  if (!role) return text.replace(/\{role\}/gi, player.role).replace(/\{durole\}/gi, player.role);
+  let result = text.replace(/\{role\}/gi, (_match, offset: number) => {
+    const capitalize = offset === 0;
+    const art = capitalize
+      ? role.article.charAt(0).toUpperCase() + role.article.slice(1)
+      : role.article;
+    return `${art} ${role.name}`;
+  });
+  result = result.replace(/\{durole\}/gi, (_match, offset: number) => {
+    const capitalize = offset === 0;
+    if (role.article === 'le') {
+      return capitalize ? `Du ${role.name}` : `du ${role.name}`;
+    }
+    return capitalize ? `De la ${role.name}` : `de la ${role.name}`;
+  });
+  return result;
+}
+
+/**
+ * Pure villager clue distribution.
+ * For each alive present player, picks one random unrevealed dynamic hint
+ * of the given priority targeting a simple villager (role 'villageois')
+ * that they haven't received yet, and delivers it as a normal Hint + PlayerHint entry.
+ *
+ * Does NOT mark dynamic hints as revealed — each distribution is an independent
+ * random draw. Uses grantedToPlayerIds to avoid duplicate grants per player.
+ *
+ * @param priority - Which priority pool to draw from (1 or 2). Defaults to 2.
+ */
+export function distributeVillagerP2Clues(s: GameState, priority: 1 | 2 = 2): { state: GameState; distributedCount: number } {
+  const dynamicHints = s.dynamicHints ?? [];
+
+  // Build villageois pool: unrevealed hints of the given priority targeting a simple villager
+  const p2Pool = dynamicHints.filter((h) => {
+    if (h.priority !== priority || h.revealed) return false;
+    const targetPlayer = s.players.find((p) => p.id === h.targetPlayerId);
+    if (!targetPlayer) return false;
+    return getRoleById(targetPlayer.role)?.id === 'villageois';
+  });
+
+  if (p2Pool.length === 0) return { state: s, distributedCount: 0 };
+
+  const vpSet = s.villagePresentIds ? new Set(s.villagePresentIds) : null;
+  const alivePlayers = s.players.filter((p) => p.alive && (!vpSet || vpSet.has(p.id)));
+
+  // Track updates to dynamic hints (for grantedToPlayerIds)
+  const updatedDynamicHints = dynamicHints.map((h) => ({ ...h }));
+
+  // Map: dynamicHintId → playerIds receiving it this round
+  const assignments = new Map<number, number[]>();
+  let distributedCount = 0;
+
+  for (const player of alivePlayers) {
+    const available = p2Pool.filter((h) => {
+      // Exclude clue about this player themselves
+      if (h.targetPlayerId === player.id) return false;
+      // Exclude if already granted to this player
+      const granted = h.grantedToPlayerIds ?? [];
+      return !granted.includes(player.id);
+    });
+    if (available.length === 0) continue;
+
+    const picked = available[Math.floor(Math.random() * available.length)];
+
+    // Update grantedToPlayerIds on the mutable copy
+    const dhIdx = updatedDynamicHints.findIndex((h) => h.id === picked.id);
+    if (dhIdx >= 0) {
+      const dh = updatedDynamicHints[dhIdx];
+      updatedDynamicHints[dhIdx] = {
+        ...dh,
+        grantedToPlayerIds: [...(dh.grantedToPlayerIds ?? []), player.id],
+      };
+      // Keep pool reference in sync so subsequent players see updated grantedToPlayerIds
+      const poolIdx = p2Pool.findIndex((h) => h.id === picked.id);
+      if (poolIdx >= 0) p2Pool[poolIdx] = updatedDynamicHints[dhIdx];
+    }
+
+    if (!assignments.has(picked.id)) assignments.set(picked.id, []);
+    assignments.get(picked.id)!.push(player.id);
+    distributedCount++;
+  }
+
+  if (distributedCount === 0) return { state: s, distributedCount: 0 };
+
+  // Build Hint + PlayerHint entries: one Hint per unique dynamic hint drawn
+  const newHints: Hint[] = [...(s.hints ?? [])];
+  const newPlayerHints: PlayerHint[] = [...(s.playerHints ?? [])];
+  const now = new Date().toISOString();
+
+  for (const [dhId, playerIds] of assignments) {
+    const dh = updatedDynamicHints.find((h) => h.id === dhId)!;
+    const targetPlayer = s.players.find((p) => p.id === dh.targetPlayerId)!;
+    const resolvedText = resolveHintText(dh.text, targetPlayer);
+
+    const hintId = nextHintId(newHints);
+    newHints.push({
+      id: hintId,
+      text: resolvedText,
+      ...(dh.imageUrl ? { imageUrl: dh.imageUrl } : {}),
+      fromDynamic: true,
+      createdAt: now,
+    });
+
+    for (const pid of playerIds) {
+      newPlayerHints.push({ hintId, playerId: pid, sentAt: now, revealed: false });
+    }
+  }
+
+  return {
+    state: {
+      ...s,
+      dynamicHints: updatedDynamicHints,
+      hints: newHints,
+      playerHints: newPlayerHints,
+    },
     distributedCount,
   };
 }

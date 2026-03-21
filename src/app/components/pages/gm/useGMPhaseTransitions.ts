@@ -5,7 +5,7 @@ import {
 } from '../../../context/gameTypes';
 import { computeEndAt } from '../../PhaseTimer';
 import { sendPushNotifications } from '../../../context/useNotifications';
-import { distributeQuestRound } from './gmPureHelpers';
+import { distributeQuestRound, distributeVillagerP2Clues } from './gmPureHelpers';
 import { nextEventId } from '../../../context/gameContextConstants';
 
 /* ================================================================
@@ -125,7 +125,10 @@ export function useGMPhaseTransitions(deps: GMPhaseTransitionDeps) {
     snapshotAlive();
 
     // Auto-distribute quests at phase start
-    updateState((s) => distributeQuestRound(s).state);
+    updateState((s) => {
+      const afterQuests = distributeQuestRound(s).state;
+      return s.villagerP2AutoDistrib !== false ? distributeVillagerP2Clues(afterQuests).state : afterQuests;
+    });
   }, [
     state.maireElectionDone, state.phaseTimerDuration,
     state.phaseTimerDayDuration, state.phaseTimerNightDuration, state.phaseTimerMaireDuration,
@@ -194,7 +197,10 @@ export function useGMPhaseTransitions(deps: GMPhaseTransitionDeps) {
       : '\uD83C\uDFDB\uFE0F Aucun Maire n\'a ete elu.', 'phase-maire-result');
 
     // Auto-distribute quests at phase start
-    updateState((s) => distributeQuestRound(s).state);
+    updateState((s) => {
+      const afterQuests = distributeQuestRound(s).state;
+      return s.villagerP2AutoDistrib !== false ? distributeVillagerP2Clues(afterQuests).state : afterQuests;
+    });
   }, [
     state.votes, state.players,
     addEvent, updateState,
@@ -417,7 +423,10 @@ export function useGMPhaseTransitions(deps: GMPhaseTransitionDeps) {
     }
 
     // Auto-distribute quests at phase start (dawn → day)
-    updateState((s) => distributeQuestRound(s).state);
+    updateState((s) => {
+      const afterQuests = distributeQuestRound(s).state;
+      return s.villagerP2AutoDistrib !== false ? distributeVillagerP2Clues(afterQuests).state : afterQuests;
+    });
   }, [
     state, confirmWerewolfKill, addEvent, eliminatePlayer,
     setNightStep, setPhase, setDayStep, setWerewolfTarget,
@@ -483,7 +492,10 @@ export function useGMPhaseTransitions(deps: GMPhaseTransitionDeps) {
     }
 
     // Auto-distribute quests at phase start (dusk → night)
-    updateState((s) => distributeQuestRound(s).state);
+    updateState((s) => {
+      const afterQuests = distributeQuestRound(s).state;
+      return s.villagerP2AutoDistrib !== false ? distributeVillagerP2Clues(afterQuests).state : afterQuests;
+    });
   }, [
     state.turn, state.phaseTimerDuration, state.phaseTimerNightDuration,
     state.maireSuccessionPending,
