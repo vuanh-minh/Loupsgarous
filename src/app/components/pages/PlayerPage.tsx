@@ -924,9 +924,7 @@ export function PlayerPage() {
           <div
             className="absolute inset-0"
             style={{
-              backgroundImage: isNight || isPracticeMode
-                ? 'none'
-                : 'linear-gradient(180deg, rgba(0,0,0,0.15) 0%, rgba(0,0,0,0.25) 40%, rgba(0,0,0,0.35) 100%)',
+              backgroundImage: 'none',
             }}
           />
         </div>
