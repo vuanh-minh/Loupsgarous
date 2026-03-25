@@ -2050,7 +2050,7 @@ actionRoutes.post("/make-server-2c00868b/game/action/role-reveal-quest-answer", 
 
         state.hints = hints;
         state.playerHints = playerHints;
-        state.roleRevealQuest = { ...config, completedBy: [...(config.completedBy || []), playerId] };
+        state.roleRevealQuest = { ...config, completedBy: [...(config.completedBy || []), playerId], rewardHintIds: { ...(config.rewardHintIds || {}), [playerId]: newHintId } };
       } else {
         state.roleRevealQuest = { ...config, failedBy: [...(config.failedBy || []), playerId] };
       }

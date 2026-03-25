@@ -378,7 +378,12 @@ export function useServerActions() {
       const resolvedQuest = quests.find((q) => q.id === questId);
       if (resolvedQuest?.playerStatuses?.[playerId] === 'success') {
         const reward = grantDynamicHintRewardClient(s, playerId);
-        return { ...s, quests, dynamicHints: reward.dynamicHints, hints: reward.hints, playerHints: reward.playerHints };
+        const updatedQuests = reward.rewardHintId !== null
+          ? quests.map((q) => q.id === questId
+              ? { ...q, rewardHintIds: { ...(q.rewardHintIds || {}), [playerId]: reward.rewardHintId! } }
+              : q)
+          : quests;
+        return { ...s, quests: updatedQuests, dynamicHints: reward.dynamicHints, hints: reward.hints, playerHints: reward.playerHints };
       }
 
       return { ...s, quests };
@@ -397,6 +402,7 @@ export function useServerActions() {
         if (q.id !== questId) return q;
         const collaborativeVotes = { ...(q.collaborativeVotes || {}), [playerId]: vote };
         const playerStatuses = { ...(q.playerStatuses || {}), [playerId]: 'pending-resolution' as const };
+        let rewardHintIds = { ...(q.rewardHintIds || {}) };
 
         // Check if this player's group has all voted → auto-resolve group
         const groups: number[][] = q.collaborativeGroups || [];
@@ -421,12 +427,15 @@ export function useServerActions() {
                 // Merge reward state back — dynamicHints/hints may have been mutated
                 Object.assign(s, { dynamicHints: reward.dynamicHints, hints: reward.hints });
                 playerHints = reward.playerHints;
+                if (reward.rewardHintId !== null) {
+                  rewardHintIds[pid] = reward.rewardHintId!;
+                }
               }
             }
           }
         }
 
-        return { ...q, collaborativeVotes, playerStatuses };
+        return { ...q, collaborativeVotes, playerStatuses, rewardHintIds };
       });
       return { ...s, quests, playerHints };
     };
@@ -559,7 +568,7 @@ export function useServerActions() {
         const now = new Date().toISOString();
         return {
           ...s,
-          roleRevealQuest: { ...config, completedBy: [...config.completedBy, playerId] },
+          roleRevealQuest: { ...config, completedBy: [...config.completedBy, playerId], rewardHintIds: { ...(config.rewardHintIds || {}), [playerId]: newHintId } },
           hints: [...(s.hints ?? []), { id: newHintId, text: config.hintText, imageUrl: config.hintImageUrl, createdAt: now }],
           playerHints: [...(s.playerHints ?? []), { hintId: newHintId, playerId, sentAt: now, revealed: true, revealedAt: now }],
         };

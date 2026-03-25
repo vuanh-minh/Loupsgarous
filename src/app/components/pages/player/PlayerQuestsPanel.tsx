@@ -408,6 +408,7 @@ export function PlayerQuestsPanel({
           onAnswer={onAnswerRoleRevealQuest}
           phase={state.phase}
           t={t}
+          hints={state.hints}
         />
       </div>
     );
@@ -1078,6 +1079,7 @@ export function PlayerQuestsPanel({
             playerId={pid}
             onAnswer={onAnswerRoleRevealQuest}
             t={t}
+            hints={state.hints}
           />
         </div>
       )}

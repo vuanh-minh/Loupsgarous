@@ -118,6 +118,7 @@ export interface RoleRevealQuestConfig {
   hintCaption?: string;
   completedBy: number[];
   failedBy: number[];
+  rewardHintIds?: Record<number, number>; // playerId → hintId
 }
 
 export type GamePhase = 'night' | 'day';

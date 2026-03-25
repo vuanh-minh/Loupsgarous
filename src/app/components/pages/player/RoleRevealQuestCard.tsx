@@ -3,7 +3,7 @@ import {
   CheckCircle, XCircle, Swords, Lightbulb, Send, ImageIcon, ZoomIn,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-import type { RoleRevealQuestConfig } from '../../../context/gameTypes';
+import type { RoleRevealQuestConfig, Hint } from '../../../context/gameTypes';
 import type { GameThemeTokens } from '../../../context/gameTheme';
 import { HintFullscreenLightbox } from '../../HintComponents';
 
@@ -92,10 +92,11 @@ interface Props {
   onAnswer: (answer: string) => void;
   phase?: string;
   t: GameThemeTokens;
+  hints?: Hint[];
 }
 
 export const RoleRevealQuestCard = React.memo(function RoleRevealQuestCard({
-  config, playerId, onAnswer, phase = 'night', t,
+  config, playerId, onAnswer, phase = 'night', t, hints,
 }: Props) {
   const [answer, setAnswer] = useState('');
   const [showFail, setShowFail] = useState(false);
@@ -107,6 +108,12 @@ export const RoleRevealQuestCard = React.memo(function RoleRevealQuestCard({
 
   const isNight = phase === 'night';
   const cp = getCardPalette(phase);
+
+  // Look up the real Hint object from state.hints if available; fall back to config fields
+  const rewardHintId = config.rewardHintIds?.[playerId];
+  const rewardHint = rewardHintId != null ? hints?.find((h) => h.id === rewardHintId) : null;
+  const hintText = rewardHint?.text ?? config.hintText;
+  const hintImageUrl = rewardHint?.imageUrl ?? config.hintImageUrl;
 
   const borderColor = completed
     ? (isNight ? '#5a8a46' : '#a0b890')
@@ -202,7 +209,7 @@ export const RoleRevealQuestCard = React.memo(function RoleRevealQuestCard({
               </div>
 
               {/* Hint content — clickable to open fullscreen lightbox */}
-              {(config.hintText || config.hintImageUrl) && (
+              {(hintText || hintImageUrl) && (
                 <motion.div
                   whileTap={{ scale: 0.98 }}
                   onClick={() => setShowLightbox(true)}
@@ -213,7 +220,7 @@ export const RoleRevealQuestCard = React.memo(function RoleRevealQuestCard({
                   }}
                 >
                   <div className="flex items-start gap-2 mb-2">
-                    {config.hintImageUrl
+                    {hintImageUrl
                       ? <ImageIcon size={14} className="shrink-0 mt-0.5" style={{ color: '#d4a843' }} />
                       : <Lightbulb size={14} className="shrink-0 mt-0.5" style={{ color: '#d4a843' }} />
                     }
@@ -222,7 +229,7 @@ export const RoleRevealQuestCard = React.memo(function RoleRevealQuestCard({
                     </span>
                     <ZoomIn size={12} className="ml-auto shrink-0 mt-0.5" style={{ color: 'rgba(212,168,67,0.5)' }} />
                   </div>
-                  {config.hintText && (
+                  {hintText && (
                     <p
                       style={{
                         color: cp.text,
@@ -233,13 +240,13 @@ export const RoleRevealQuestCard = React.memo(function RoleRevealQuestCard({
                         paddingLeft: '1.5rem',
                       }}
                     >
-                      {config.hintText}
+                      {hintText}
                     </p>
                   )}
-                  {config.hintImageUrl && (
-                    <div style={{ paddingLeft: '1.5rem', marginTop: config.hintText ? '0.5rem' : 0 }}>
+                  {hintImageUrl && (
+                    <div style={{ paddingLeft: '1.5rem', marginTop: hintText ? '0.5rem' : 0 }}>
                       <img
-                        src={config.hintImageUrl}
+                        src={hintImageUrl}
                         alt="Indice"
                         className="rounded-lg w-full object-contain"
                         style={{ maxHeight: '180px' }}
@@ -381,14 +388,17 @@ export const RoleRevealQuestCard = React.memo(function RoleRevealQuestCard({
     </motion.div>
 
     {/* Fullscreen hint lightbox */}
-    {completed && (config.hintText || config.hintImageUrl) && (
-      <HintFullscreenLightbox
-        hints={[{ id: -1, text: config.hintText, imageUrl: config.hintImageUrl, createdAt: '' }]}
-        revealedHintIds={[-1]}
-        fullscreenHintId={showLightbox ? -1 : null}
-        setFullscreenHintId={(id) => setShowLightbox(id !== null)}
-      />
-    )}
+    {completed && (hintText || hintImageUrl) && (() => {
+      const lightboxHint = rewardHint ?? { id: -1, text: hintText, imageUrl: hintImageUrl, createdAt: '' };
+      return (
+        <HintFullscreenLightbox
+          hints={[lightboxHint]}
+          revealedHintIds={[lightboxHint.id]}
+          fullscreenHintId={showLightbox ? lightboxHint.id : null}
+          setFullscreenHintId={(id) => setShowLightbox(id !== null)}
+        />
+      );
+    })()}
   </>
   );
 });
