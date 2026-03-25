@@ -1074,6 +1074,15 @@ export function GameMasterPage() {
   };
 
   // ── Phase transition logic (extracted to useGMGameLogic) ──
+  const clearServerMidGameJoins = useCallback(() => {
+    if (!state.gameId) return;
+    fetch(`${API_BASE}/game/action/clear-mid-game-joins`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${publicAnonKey}` },
+      body: JSON.stringify({ gameId: state.gameId }),
+    }).catch(() => {});
+  }, [state.gameId]);
+
   const {
     leverLeSoleil,
     handleAdvanceTurn,
@@ -1083,6 +1092,7 @@ export function GameMasterPage() {
     state, setPhase, setNightStep, setDayStep,
     addEvent, eliminatePlayer, setWerewolfTarget,
     confirmWerewolfKill, nextTurn, updateState, setRoleRevealDone,
+    clearServerMidGameJoins,
   });
 
   // ── Vote result notification ──

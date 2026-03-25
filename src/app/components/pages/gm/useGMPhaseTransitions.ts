@@ -27,6 +27,7 @@ export interface GMPhaseTransitionDeps {
   nextTurn: () => void;
   updateState: (updater: (s: GameState) => GameState) => void;
   setRoleRevealDone: (v: boolean) => void;
+  clearServerMidGameJoins?: () => void;
 }
 
 export function useGMPhaseTransitions(deps: GMPhaseTransitionDeps) {
@@ -34,6 +35,7 @@ export function useGMPhaseTransitions(deps: GMPhaseTransitionDeps) {
     state, setPhase, setNightStep, setDayStep,
     addEvent, eliminatePlayer, setWerewolfTarget,
     confirmWerewolfKill, nextTurn, updateState, setRoleRevealDone,
+    clearServerMidGameJoins,
   } = deps;
 
   /** Helper: start night phase timer if enabled */
@@ -416,6 +418,8 @@ export function useGMPhaseTransitions(deps: GMPhaseTransitionDeps) {
         midGameJoinIds: [],
       };
     });
+    // Clear server's midGameJoinIds so stale values don't resurface via state sync
+    clearServerMidGameJoins?.();
 
     // Auto-resolve maire succession ONLY if it was already pending before this phase transition
     if (wasSuccessionPendingBefore) {
@@ -485,6 +489,8 @@ export function useGMPhaseTransitions(deps: GMPhaseTransitionDeps) {
         midGameJoinIds: [],
       };
     });
+    // Clear server's midGameJoinIds so stale values don't resurface via state sync
+    clearServerMidGameJoins?.();
 
     // Auto-resolve maire succession ONLY if it was already pending before this phase transition
     if (wasSuccessionPendingBefore) {

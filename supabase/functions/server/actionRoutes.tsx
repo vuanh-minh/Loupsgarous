@@ -219,6 +219,23 @@ actionRoutes.post("/make-server-2c00868b/game/action/werewolf-vote", async (c) =
   }
 });
 
+// ── Clear mid-game join IDs after GM captures them in a phase record ──
+actionRoutes.post("/make-server-2c00868b/game/action/clear-mid-game-joins", async (c) => {
+  try {
+    const body = await c.req.json();
+    const key = await resolveGameKey(body);
+
+    const res = await withGameLock(key, (state) => {
+      state.midGameJoinIds = [];
+    });
+    if (!res) return c.json({ error: "Aucune partie en cours" }, 404);
+    return c.json({ success: true });
+  } catch (err) {
+    console.log("Clear mid-game joins error:", err);
+    return c.json({ error: `Erreur clear-mid-game-joins: ${err}` }, 500);
+  }
+});
+
 // ── Wolf long-press pre-target (set during day, visible to GM) ──
 actionRoutes.post("/make-server-2c00868b/game/action/wolf-pre-target", async (c) => {
   try {
