@@ -959,14 +959,7 @@ export function PlayerPage() {
             src={isNight || isPracticeMode ? nightVillageBg : dayVoteBg}
             style={{ objectPosition: 'center top' }}
           />
-          <div
-            className="absolute inset-0"
-            style={{
-              backgroundImage: isNight || isPracticeMode
-                ? 'linear-gradient(180deg, rgba(12,13,21,0.45) 0%, rgba(12,13,21,0.75) 50%, rgb(12,13,21) 100%)'
-                : 'none',
-            }}
-          />
+          <div className="absolute inset-0" style={{ backgroundImage: 'none' }} />
         </div>
       )}
 
