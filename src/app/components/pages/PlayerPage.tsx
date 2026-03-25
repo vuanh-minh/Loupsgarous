@@ -436,7 +436,31 @@ export function PlayerPage() {
 
   const isVillageois = currentPlayer?.role === 'villageois';
   const isWerewolf = currentPlayer?.role === 'loup-garou';
+  const isWolfTeam = currentPlayer ? getRoleById(currentPlayer.role)?.team === 'werewolf' : false;
   const isSeer = currentPlayer?.role === 'voyante';
+
+  // Wolf night target — stored in localStorage, invisible to non-wolves
+  const wolfTargetKey = state.gameId && currentPlayerId != null ? `wolf-target-${state.gameId}-${currentPlayerId}` : null;
+  const [wolfNightTarget, setWolfNightTargetState] = useState<number | null>(() => {
+    if (!wolfTargetKey) return null;
+    try { return JSON.parse(localStorage.getItem(wolfTargetKey) || 'null'); } catch { return null; }
+  });
+  const setWolfNightTarget = (targetId: number | null) => {
+    setWolfNightTargetState(targetId);
+    if (wolfTargetKey) {
+      if (targetId === null) localStorage.removeItem(wolfTargetKey);
+      else localStorage.setItem(wolfTargetKey, JSON.stringify(targetId));
+    }
+  };
+  // Clear wolf target if targeted player dies
+  useEffect(() => {
+    if (wolfNightTarget === null) return;
+    const targetAlive = state.players.some((p) => p.id === wolfNightTarget && p.alive);
+    if (!targetAlive) setWolfNightTarget(null);
+  }, [state.players, wolfNightTarget]);
+
+  // Day pre-target: cleared after confirmation in WerewolfAction
+  const clearWolfNightTarget = React.useCallback(() => setWolfNightTarget(null), []);
   const wolfHasVoted = isWerewolf && currentPlayer && state.werewolfVotes[currentPlayer.id] !== undefined;
   const seerHasActed = isSeer && currentPlayer && state.seerTargets?.[currentPlayer.id] !== undefined;
   const cupidHasActed = currentPlayer?.role === 'cupidon' && (state.cupidLinkedBy || []).includes(currentPlayer?.id ?? -1);
@@ -1180,6 +1204,8 @@ export function PlayerPage() {
                             serverSetDiscoveryWolfTarget(wolfId, targetId);
                           }}
                           discoveryPreTarget={isDiscoveryRealMode ? undefined : discoveryPreTarget}
+                          dayPreTarget={isWolfTeam && !isSimulationMode ? wolfNightTarget : null}
+                          onClearDayPreTarget={clearWolfNightTarget}
                           onFlipBack={() => {
                             setIsFlipped(false);
                             setSeerRevealing(false);
@@ -1456,6 +1482,13 @@ export function PlayerPage() {
                 turn={state.turn}
                 phaseTimerEndAt={state.phaseTimerEndAt ?? null}
                 villagePresentIds={state.villagePresentIds}
+                isWolf={isWolfTeam}
+                wolfTarget={wolfNightTarget}
+                onSetWolfTarget={setWolfNightTarget}
+                onWerewolfVote={isWolfTeam ? (wolfId, targetId) => {
+                  castWerewolfVote(wolfId, targetId);
+                  serverCastWerewolfVote(wolfId, targetId).then(handlePostAction);
+                } : undefined}
               />
             )}
           </div>

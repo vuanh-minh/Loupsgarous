@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Skull, Users, Target, X, Search, CircleCheck, ChevronDown, MessageCircle, BookmarkCheck, RefreshCw, AlertTriangle } from 'lucide-react';
+import { Skull, Users, Target, X, Search, CircleCheck, ChevronDown, MessageCircle, BookmarkCheck, RefreshCw, AlertTriangle, Moon } from 'lucide-react';
 import { PAvatar } from '../PAvatar';
 import { type RoleActionBaseProps } from './roleActionTypes';
 
@@ -12,13 +12,18 @@ interface Props extends RoleActionBaseProps {
   onDiscoveryTarget?: (wolfId: number, targetId: number) => void;
   /** Night-1-only: the discovery pre-selected target, or null if they are away */
   discoveryPreTarget?: { id: number; name: string; isPresent: boolean } | null;
+  /** Day-phase long-press pre-selection to auto-fill confirmation overlay when night starts */
+  dayPreTarget?: number | null;
+  /** Called after day pre-target is confirmed, to clear it from localStorage */
+  onClearDayPreTarget?: () => void;
 }
 
-export function WerewolfAction({ state, alivePlayers, currentPlayer, allPlayers, onFlipBack, onWerewolfVote, t, isDiscoveryPhase, onDiscoveryTarget, discoveryPreTarget }: Props) {
+export function WerewolfAction({ state, alivePlayers, currentPlayer, allPlayers, onFlipBack, onWerewolfVote, t, isDiscoveryPhase, onDiscoveryTarget, discoveryPreTarget, dayPreTarget, onClearDayPreTarget }: Props) {
   const [pendingWolfTarget, setPendingWolfTarget] = useState<number | null>(null);
   const [pendingMessage, setPendingMessage] = useState('');
   const [showMeute, setShowMeute] = useState(false);
   const [wolfTargetSearch, setWolfTargetSearch] = useState('');
+  const [forceShowPicker, setForceShowPicker] = useState(false);
 
   // Night 1: pre-fill confirmation modal when discovery target is present
   useEffect(() => {
@@ -28,6 +33,19 @@ export function WerewolfAction({ state, alivePlayers, currentPlayer, allPlayers,
   // only run once on mount when this condition is first true
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [discoveryPreTarget?.isPresent, discoveryPreTarget?.id]);
+
+  // Day long-press: pre-fill confirmation modal when night starts
+  const wolfHasVoted = state.werewolfVotes[currentPlayer.id] !== undefined;
+  useEffect(() => {
+    if (dayPreTarget != null && pendingWolfTarget === null && !wolfHasVoted) {
+      setPendingWolfTarget(dayPreTarget);
+    }
+  // Only trigger when dayPreTarget changes (e.g. on night start)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dayPreTarget]);
+
+  const myVoteTargetId = wolfHasVoted ? (state.werewolfVotes[currentPlayer.id] ?? null) : null;
+  const myVoteTarget = myVoteTargetId != null ? allPlayers.find((p) => p.id === myVoteTargetId) ?? null : null;
 
   const wolves = allPlayers.filter((p) => p.alive && p.role === 'loup-garou');
   // During discovery: target all alive players (incl. future away ones). Normal night: present alive players.
@@ -366,6 +384,46 @@ export function WerewolfAction({ state, alivePlayers, currentPlayer, allPlayers,
             </p>
           )}
         </div>
+      ) : wolfHasVoted && pendingWolfTarget === null && !forceShowPicker ? (
+        /* Wolf already voted → sleeping state */
+        <motion.div
+          initial={{ opacity: 0, scale: 0.95 }}
+          animate={{ opacity: 1, scale: 1 }}
+          className="rounded-lg p-4 text-center"
+          style={{
+            background: 'rgba(196,30,58,0.06)',
+            border: '1px solid rgba(196,30,58,0.15)',
+          }}
+        >
+          <Moon size={18} style={{ color: '#c41e3a', opacity: 0.6, margin: '0 auto 0.5rem', display: 'block' }} />
+          <p style={{ color: t.textMuted, fontSize: '0.65rem', fontFamily: '"Cinzel", serif', marginBottom: myVoteTarget ? '0.5rem' : 0 }}>
+            Vous dormez...
+          </p>
+          {myVoteTarget && (
+            <div className="flex items-center justify-center gap-2 mt-1">
+              <div className="w-7 h-7 rounded-full overflow-hidden flex-shrink-0">
+                <PAvatar player={myVoteTarget} size="text-xl" />
+              </div>
+              <span style={{ color: '#e8c8c8', fontSize: '0.75rem', fontFamily: '"Cinzel", serif' }}>
+                {myVoteTarget.name}
+              </span>
+            </div>
+          )}
+          <motion.button
+            whileTap={{ scale: 0.95 }}
+            onClick={() => setForceShowPicker(true)}
+            className="mt-3 flex items-center justify-center gap-1 mx-auto px-3 py-1 rounded-lg"
+            style={{
+              color: t.textDim,
+              fontSize: '0.55rem',
+              fontFamily: '"Cinzel", serif',
+              background: `rgba(${t.overlayChannel}, 0.04)`,
+              border: `1px solid rgba(${t.overlayChannel}, 0.1)`,
+            }}
+          >
+            <RefreshCw size={9} /> Modifier
+          </motion.button>
+        </motion.div>
       ) : (
         /* Normal night: confirmation overlay or target picker */
         pendingTarget ? (
@@ -414,8 +472,10 @@ export function WerewolfAction({ state, alivePlayers, currentPlayer, allPlayers,
               whileTap={{ scale: 0.95 }}
               onClick={() => {
                 onWerewolfVote(currentPlayer.id, pendingWolfTarget!, pendingMessage.trim() || undefined);
+                onClearDayPreTarget?.();
                 setPendingWolfTarget(null);
                 setPendingMessage('');
+                setForceShowPicker(false);
                 if (onFlipBack) onFlipBack();
               }}
               className="flex items-center justify-center gap-1.5 px-4 py-2 rounded-lg"
@@ -432,7 +492,7 @@ export function WerewolfAction({ state, alivePlayers, currentPlayer, allPlayers,
             </motion.button>
             <motion.button
               whileTap={{ scale: 0.95 }}
-              onClick={() => { setPendingWolfTarget(null); setPendingMessage(''); }}
+              onClick={() => { setPendingWolfTarget(null); setPendingMessage(''); setForceShowPicker(false); }}
               className="flex items-center justify-center gap-1.5 px-4 py-2 rounded-lg"
               style={{
                 background: `rgba(${t.overlayChannel}, 0.04)`,
