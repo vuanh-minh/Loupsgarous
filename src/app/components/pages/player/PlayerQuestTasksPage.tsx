@@ -690,7 +690,7 @@ export const PlayerQuestTasksPage = React.memo(function PlayerQuestTasksPage({
                 )}
                 {rewardHint.imageUrl && (() => {
                   const hypothesisPlayerId = hintAssociations[rewardHint.id];
-                  const hypothesisPlayer = hypothesisPlayerId ? state.players.find(p => p.id === hypothesisPlayerId) : null;
+                  const hypothesisPlayer = hypothesisPlayerId != null ? state.players.find(p => p.id === hypothesisPlayerId) : null;
                   return (
                     <div className="relative inline-block mt-1">
                       <img
