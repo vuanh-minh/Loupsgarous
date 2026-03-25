@@ -52,7 +52,14 @@
       "Bash(claude mcp:*)",
       "Bash(lsof -ti:5173)",
       "Bash(curl -s -o /dev/null -w %{http_code} http://localhost:5173)",
-      "mcp__plugin_figma_figma__generate_figma_design"
+      "mcp__plugin_figma_figma__generate_figma_design",
+      "Bash(npx --package typescript tsc --noEmit --pretty)",
+      "Bash(./node_modules/.bin/tsc --noEmit)",
+      "Bash(open \"http://localhost:5173/player/LOU1#figmacapture=4a2ac6fb-3be4-4d99-bbae-835ef9ebb4f8&figmaendpoint=https%3A%2F%2Fmcp.figma.com%2Fmcp%2Fcapture%2F4a2ac6fb-3be4-4d99-bbae-835ef9ebb4f8%2Fsubmit&figmadelay=3000\")",
+      "Bash(npx --package=typescript tsc --noEmit)",
+      "Bash(npx --package=typescript tsc --noEmit --project tsconfig.json)",
+      "Bash(find /Users/anh-minhvu/Desktop/loups-garous/src/app/components -type f -name \"*.tsx\" -exec grep -l \"hint\\\\|Hint\\\\|indice\\\\|Indice\" {})",
+      "Bash(curl -s http://localhost:5173)"
     ]
   }
 }

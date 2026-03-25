@@ -459,8 +459,20 @@ export function PlayerPage() {
     if (!targetAlive) setWolfNightTarget(null);
   }, [state.players, wolfNightTarget]);
 
-  // Day pre-target: cleared after confirmation in WerewolfAction
-  const clearWolfNightTarget = React.useCallback(() => setWolfNightTarget(null), []);
+  // When night begins, auto-submit the stored day-phase wolf target as a vote (already confirmed by long-press)
+  const prevPhaseRef = React.useRef<string>(state.phase);
+  useEffect(() => {
+    const prev = prevPhaseRef.current;
+    prevPhaseRef.current = state.phase;
+    if (prev === 'day' && state.phase === 'night' && wolfNightTarget !== null && currentPlayerId !== null && isWolfTeam) {
+      const targetAlive = state.players.some((p) => p.id === wolfNightTarget && p.alive);
+      if (targetAlive) {
+        castWerewolfVote(currentPlayerId, wolfNightTarget);
+        serverCastWerewolfVote(currentPlayerId, wolfNightTarget).then(handlePostAction);
+      }
+      setWolfNightTarget(null);
+    }
+  }, [state.phase]);
   const wolfHasVoted = isWerewolf && currentPlayer && state.werewolfVotes[currentPlayer.id] !== undefined;
   const seerHasActed = isSeer && currentPlayer && state.seerTargets?.[currentPlayer.id] !== undefined;
   const cupidHasActed = currentPlayer?.role === 'cupidon' && (state.cupidLinkedBy || []).includes(currentPlayer?.id ?? -1);
@@ -1204,8 +1216,6 @@ export function PlayerPage() {
                             serverSetDiscoveryWolfTarget(wolfId, targetId);
                           }}
                           discoveryPreTarget={isDiscoveryRealMode ? undefined : discoveryPreTarget}
-                          dayPreTarget={isWolfTeam && !isSimulationMode ? wolfNightTarget : null}
-                          onClearDayPreTarget={clearWolfNightTarget}
                           onFlipBack={() => {
                             setIsFlipped(false);
                             setSeerRevealing(false);

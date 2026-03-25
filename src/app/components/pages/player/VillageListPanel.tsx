@@ -1,9 +1,9 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'motion/react';
 import {
   Users, Crown, CircleCheck, Skull, Vote, PenLine, Search, X,
-  Sun, Moon, UserX,
+  Sun, Moon, UserX, Target,
 } from 'lucide-react';
 import { type Player } from '../../../context/GameContext';
 import { getRoleById } from '../../../data/roles';
@@ -28,6 +28,10 @@ export function VillageListPanel({
   turn = 1,
   phaseTimerEndAt = null,
   villagePresentIds,
+  isWolf = false,
+  wolfTarget = null,
+  onSetWolfTarget,
+  onWerewolfVote,
 }: {
   alivePlayers: Player[];
   deadPlayers: Player[];
@@ -46,6 +50,10 @@ export function VillageListPanel({
   turn?: number;
   phaseTimerEndAt?: string | null;
   villagePresentIds?: number[];
+  isWolf?: boolean;
+  wolfTarget?: number | null;
+  onSetWolfTarget?: (targetId: number | null) => void;
+  onWerewolfVote?: (wolfId: number, targetId: number) => void;
 }) {
   const maire = maireId !== null ? allPlayers.find((p) => p.id === maireId) ?? null : null;
   const isMaireMe = currentPlayerId === maireId;
@@ -91,6 +99,11 @@ export function VillageListPanel({
   const filteredPresentPlayers = hypothesisFilter === 'absents'
     ? [] // absents filter shows only the dedicated section
     : filteredAlivePlayers.filter((p) => !awayPlayers.some((ap) => ap.id === p.id));
+
+  // Wolf targeting state
+  const [wolfPendingTarget, setWolfPendingTarget] = useState<Player | null>(null);
+  const [wolfFeedback, setWolfFeedback] = useState<string | null>(null);
+  const longPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Early vote state
   const [showEarlyVoteModal, setShowEarlyVoteModal] = useState(false);
@@ -327,6 +340,20 @@ export function VillageListPanel({
           const hypothesisRole = hypothesisRoleId ? getRoleById(hypothesisRoleId) : null;
           const isHighlighted = highlightedPlayerId === p.id;
           const isAway = villagePresentIds && !villagePresentIds.includes(p.id);
+          const isCurrentPlayerAlive = currentPlayerId !== null && alivePlayers.some((p) => p.id === currentPlayerId);
+          const startLongPress = (e: React.PointerEvent) => {
+            if (!isWolf || isSelf || !onSetWolfTarget || !isCurrentPlayerAlive) return;
+            e.preventDefault();
+            longPressTimerRef.current = setTimeout(() => {
+              setWolfPendingTarget(p);
+            }, 500);
+          };
+          const cancelLongPress = () => {
+            if (longPressTimerRef.current) {
+              clearTimeout(longPressTimerRef.current);
+              longPressTimerRef.current = null;
+            }
+          };
 
           return (
             <motion.div
@@ -340,6 +367,11 @@ export function VillageListPanel({
               onClick={() => {
                 if (!isSelf && currentPlayerId !== null) onOpenHypothesis(p.id);
               }}
+              onPointerDown={startLongPress}
+              onPointerUp={cancelLongPress}
+              onPointerCancel={cancelLongPress}
+              onPointerLeave={cancelLongPress}
+              onContextMenu={(e) => { if (isWolf && !isSelf) e.preventDefault(); }}
               className="flex flex-col items-center gap-1 cursor-pointer"
               style={{ overflow: 'visible', opacity: isAway ? 0.4 : 1 }}
             >
@@ -850,6 +882,154 @@ export function VillageListPanel({
           </motion.div>
         )}
       </AnimatePresence>
+      , document.body)}
+
+      {/* Wolf targeting confirmation sheet */}
+      {createPortal(
+        <AnimatePresence>
+          {wolfPendingTarget && (
+            <motion.div
+              key="wolf-target-overlay"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.2 }}
+              className="fixed inset-0 z-[9999] flex items-end justify-center"
+              style={{ background: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(4px)' }}
+              onClick={() => setWolfPendingTarget(null)}
+            >
+              <motion.div
+                key="wolf-target-sheet"
+                initial={{ y: '100%' }}
+                animate={{ y: 0 }}
+                exit={{ y: '100%' }}
+                transition={{ type: 'spring', damping: 28, stiffness: 300 }}
+                className="w-full max-w-md rounded-t-2xl overflow-hidden"
+                style={{
+                  background: 'linear-gradient(180deg, #150d0d 0%, #0a0c1a 100%)',
+                  border: '1px solid rgba(196,30,58,0.2)',
+                  borderBottomWidth: 0,
+                }}
+                onClick={(e) => e.stopPropagation()}
+              >
+                {/* Handle bar */}
+                <div className="flex justify-center pt-3 pb-1">
+                  <div className="w-10 h-1 rounded-full" style={{ background: 'rgba(255,255,255,0.15)' }} />
+                </div>
+
+                {/* Header */}
+                <div className="px-5 pt-3 pb-4 flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Target size={16} style={{ color: '#ff6b7a' }} />
+                    <h3 style={{ fontFamily: '"Cinzel", serif', color: '#ff6b7a', fontSize: '0.95rem', fontWeight: 700 }}>
+                      {phase === 'night' ? 'Cibler' : 'Cibler la prochaine nuit'}
+                    </h3>
+                  </div>
+                  <motion.button
+                    whileTap={{ scale: 0.9 }}
+                    onClick={() => setWolfPendingTarget(null)}
+                    className="w-7 h-7 rounded-full flex items-center justify-center"
+                    style={{ background: 'rgba(255,255,255,0.06)' }}
+                  >
+                    <X size={14} style={{ color: 'rgba(255,255,255,0.4)' }} />
+                  </motion.button>
+                </div>
+
+                {/* Target player preview */}
+                <div className="px-5 pb-4 flex items-center gap-3">
+                  <div
+                    className="w-14 h-14 rounded-full flex items-center justify-center shrink-0"
+                    style={{ background: 'rgba(196,30,58,0.15)', border: '2px solid rgba(196,30,58,0.4)' }}
+                  >
+                    <PAvatar player={wolfPendingTarget} size="text-2xl" />
+                  </div>
+                  <div>
+                    <p style={{ color: '#fff', fontSize: '1rem', fontFamily: '"Cinzel", serif', fontWeight: 700 }}>
+                      {wolfPendingTarget.name}
+                    </p>
+                    <p style={{ color: 'rgba(255,107,122,0.7)', fontSize: '0.6rem', marginTop: '0.2rem' }}>
+                      {phase === 'night'
+                        ? 'Cibler ce joueur ? Ce joueur sera la cible des loups pour cette nuit.'
+                        : 'Cibler ce joueur pour la prochaine nuit ? Cette cible sera utilisée lors de la prochaine phase de nuit.'}
+                    </p>
+                  </div>
+                </div>
+
+                {/* Confirm button */}
+                <div className="px-5 pb-6 flex gap-3">
+                  <motion.button
+                    whileTap={{ scale: 0.97 }}
+                    onClick={() => {
+                      if (onSetWolfTarget) onSetWolfTarget(wolfPendingTarget.id);
+                      // During night, vote immediately; during day, only store — vote will be re-applied at night start
+                      if (isNightPhase && onWerewolfVote && currentPlayerId !== null) {
+                        onWerewolfVote(currentPlayerId, wolfPendingTarget.id);
+                      }
+                      setWolfPendingTarget(null);
+                      setWolfFeedback('🎯 Cible enregistrée');
+                      setTimeout(() => setWolfFeedback(null), 1200);
+                    }}
+                    className="flex-1 py-3 rounded-xl flex items-center justify-center gap-2"
+                    style={{
+                      background: 'rgba(196,30,58,0.3)',
+                      border: '1.5px solid rgba(196,30,58,0.5)',
+                      color: '#ff6b7a',
+                      fontSize: '0.75rem',
+                      fontFamily: '"Cinzel", serif',
+                      fontWeight: 700,
+                    }}
+                  >
+                    <Target size={14} />
+                    {phase === 'night' ? 'Cibler' : 'Cibler la prochaine nuit'}
+                  </motion.button>
+                  <motion.button
+                    whileTap={{ scale: 0.97 }}
+                    onClick={() => setWolfPendingTarget(null)}
+                    className="px-5 py-3 rounded-xl flex items-center justify-center"
+                    style={{
+                      background: 'rgba(255,255,255,0.05)',
+                      border: '1px solid rgba(255,255,255,0.1)',
+                      color: 'rgba(255,255,255,0.4)',
+                      fontSize: '0.7rem',
+                      fontFamily: '"Cinzel", serif',
+                    }}
+                  >
+                    Annuler
+                  </motion.button>
+                </div>
+              </motion.div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+      , document.body)}
+
+      {/* Wolf feedback toast */}
+      {createPortal(
+        <AnimatePresence>
+          {wolfFeedback && (
+            <motion.div
+              key="wolf-feedback-toast"
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: 20 }}
+              transition={{ duration: 0.25 }}
+              className="fixed bottom-24 left-1/2 -translate-x-1/2 z-[10000] px-5 py-2.5 rounded-xl"
+              style={{
+                background: 'rgba(196,30,58,0.9)',
+                border: '1px solid rgba(255,100,120,0.4)',
+                backdropFilter: 'blur(8px)',
+                color: '#fff',
+                fontSize: '0.8rem',
+                fontFamily: '"Cinzel", serif',
+                fontWeight: 600,
+                whiteSpace: 'nowrap',
+                boxShadow: '0 4px 20px rgba(196,30,58,0.4)',
+              }}
+            >
+              {wolfFeedback}
+            </motion.div>
+          )}
+        </AnimatePresence>
       , document.body)}
     </div>
   );

@@ -29,8 +29,6 @@ export function RoleActionsPanel({
   isDiscoveryPhase = false,
   onDiscoveryTarget,
   discoveryPreTarget,
-  dayPreTarget,
-  onClearDayPreTarget,
   practiceMode = false,
   t,
 }: {
@@ -60,8 +58,6 @@ export function RoleActionsPanel({
   isDiscoveryPhase?: boolean;
   onDiscoveryTarget?: (wolfId: number, targetId: number) => void;
   discoveryPreTarget?: { id: number; name: string; isPresent: boolean } | null;
-  dayPreTarget?: number | null;
-  onClearDayPreTarget?: () => void;
   practiceMode?: boolean;
   t: GameThemeTokens;
 }) {
@@ -225,8 +221,6 @@ export function RoleActionsPanel({
               isDiscoveryPhase={isDiscoveryPhase}
               onDiscoveryTarget={onDiscoveryTarget}
               discoveryPreTarget={discoveryPreTarget}
-              dayPreTarget={dayPreTarget}
-              onClearDayPreTarget={onClearDayPreTarget}
             />
           )}
 

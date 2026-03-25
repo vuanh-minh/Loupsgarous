@@ -12,13 +12,9 @@ interface Props extends RoleActionBaseProps {
   onDiscoveryTarget?: (wolfId: number, targetId: number) => void;
   /** Night-1-only: the discovery pre-selected target, or null if they are away */
   discoveryPreTarget?: { id: number; name: string; isPresent: boolean } | null;
-  /** Day-phase long-press pre-selection to auto-fill confirmation overlay when night starts */
-  dayPreTarget?: number | null;
-  /** Called after day pre-target is confirmed, to clear it from localStorage */
-  onClearDayPreTarget?: () => void;
 }
 
-export function WerewolfAction({ state, alivePlayers, currentPlayer, allPlayers, onFlipBack, onWerewolfVote, t, isDiscoveryPhase, onDiscoveryTarget, discoveryPreTarget, dayPreTarget, onClearDayPreTarget }: Props) {
+export function WerewolfAction({ state, alivePlayers, currentPlayer, allPlayers, onFlipBack, onWerewolfVote, t, isDiscoveryPhase, onDiscoveryTarget, discoveryPreTarget }: Props) {
   const [pendingWolfTarget, setPendingWolfTarget] = useState<number | null>(null);
   const [pendingMessage, setPendingMessage] = useState('');
   const [showMeute, setShowMeute] = useState(false);
@@ -34,15 +30,7 @@ export function WerewolfAction({ state, alivePlayers, currentPlayer, allPlayers,
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [discoveryPreTarget?.isPresent, discoveryPreTarget?.id]);
 
-  // Day long-press: pre-fill confirmation modal when night starts
   const wolfHasVoted = state.werewolfVotes[currentPlayer.id] !== undefined;
-  useEffect(() => {
-    if (dayPreTarget != null && pendingWolfTarget === null && !wolfHasVoted) {
-      setPendingWolfTarget(dayPreTarget);
-    }
-  // Only trigger when dayPreTarget changes (e.g. on night start)
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [dayPreTarget]);
 
   const myVoteTargetId = wolfHasVoted ? (state.werewolfVotes[currentPlayer.id] ?? null) : null;
   const myVoteTarget = myVoteTargetId != null ? allPlayers.find((p) => p.id === myVoteTargetId) ?? null : null;
@@ -472,7 +460,6 @@ export function WerewolfAction({ state, alivePlayers, currentPlayer, allPlayers,
               whileTap={{ scale: 0.95 }}
               onClick={() => {
                 onWerewolfVote(currentPlayer.id, pendingWolfTarget!, pendingMessage.trim() || undefined);
-                onClearDayPreTarget?.();
                 setPendingWolfTarget(null);
                 setPendingMessage('');
                 setForceShowPicker(false);
