@@ -537,6 +537,14 @@ export const PlayerQuestTasksPage = React.memo(function PlayerQuestTasksPage({
     setHintAssoc(state.gameId, pid, hintId, targetPlayerId);
     setHintAssociations(getHintAssociations(state.gameId, pid));
   }, [state.gameId, pid]);
+  // Sync hintAssociations when another view (e.g. Manuscrit) updates them
+  useEffect(() => {
+    const handler = () => {
+      if (state.gameId) setHintAssociations(getHintAssociations(state.gameId, pid));
+    };
+    window.addEventListener('hint-associations-changed', handler);
+    return () => window.removeEventListener('hint-associations-changed', handler);
+  }, [state.gameId, pid]);
   const revealedHintIds = React.useMemo(() => {
     const playerHints = state.playerHints || [];
     const hintIdSet = new Set((state.hints || []).map(h => h.id));

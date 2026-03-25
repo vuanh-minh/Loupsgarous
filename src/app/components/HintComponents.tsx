@@ -52,6 +52,7 @@ export function setHintAssociation(gameId: string, playerId: number, hintId: num
     if (targetPlayerId === null) { delete map[hintId]; }
     else { map[hintId] = targetPlayerId; }
     localStorage.setItem(`hint-hypo-${gameId}-${playerId}`, JSON.stringify(map));
+    window.dispatchEvent(new CustomEvent('hint-associations-changed', { detail: { gameId, playerId } }));
   } catch { /* ignore */ }
 }
 
@@ -1290,6 +1291,14 @@ export function PlayerHintSection({
   const [hintAssociations, setHintAssociations] = useState<Record<number, number>>(() =>
     gameId ? getHintAssociations(gameId, playerId) : {}
   );
+  // Sync hintAssociations when another view (e.g. Quest tab) updates them
+  useEffect(() => {
+    const handler = () => {
+      if (gameId) setHintAssociations(getHintAssociations(gameId, playerId));
+    };
+    window.addEventListener('hint-associations-changed', handler);
+    return () => window.removeEventListener('hint-associations-changed', handler);
+  }, [gameId, playerId]);
   const handleSetHintAssociation = (hintId: number, targetPlayerId: number | null) => {
     if (!gameId) return;
     // Capture previous association before updating
