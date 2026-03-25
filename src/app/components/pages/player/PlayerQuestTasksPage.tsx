@@ -688,24 +688,25 @@ export const PlayerQuestTasksPage = React.memo(function PlayerQuestTasksPage({
                     {rewardHint.text}
                   </p>
                 )}
-                {rewardHint.imageUrl && (
-                  <div className="relative inline-block mt-1">
-                    <img
-                      src={rewardHint.imageUrl}
-                      alt="Indice"
-                      className="rounded-lg max-h-40 object-contain"
-                      style={{ border: `1px solid ${isDead ? 'rgba(155,139,184,0.2)' : 'rgba(212,168,67,0.2)'}` }}
-                    />
-                    {hintAssociations[rewardHint.id] && (() => {
-                      const hypothesisPlayer = state.players.find(p => p.id === hintAssociations[rewardHint.id]);
-                      return hypothesisPlayer ? (
+                {rewardHint.imageUrl && (() => {
+                  const hypothesisPlayerId = hintAssociations[rewardHint.id];
+                  const hypothesisPlayer = hypothesisPlayerId ? state.players.find(p => p.id === hypothesisPlayerId) : null;
+                  return (
+                    <div className="relative inline-block mt-1">
+                      <img
+                        src={rewardHint.imageUrl}
+                        alt="Indice"
+                        className="rounded-lg max-h-40 object-contain"
+                        style={{ border: `1px solid ${isDead ? 'rgba(155,139,184,0.2)' : 'rgba(212,168,67,0.2)'}` }}
+                      />
+                      {hypothesisPlayer && (
                         <div className="absolute bottom-1 right-1 w-8 h-8 rounded-full overflow-hidden border-2" style={{ borderColor: isDead ? 'rgba(155,139,184,0.5)' : 'rgba(212,168,67,0.5)' }}>
                           <PAvatar player={hypothesisPlayer} size="text-xs" />
                         </div>
-                      ) : null;
-                    })()}
-                  </div>
-                )}
+                      )}
+                    </div>
+                  );
+                })()}
               </div>
             </div>
           )}
