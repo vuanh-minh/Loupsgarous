@@ -1,5 +1,5 @@
 import React from 'react';
-import { Skull, Shield, Zap, Vote, Heart, AlertCircle, Crown } from 'lucide-react';
+import { Skull, Shield, Zap, Vote, Heart, AlertCircle, Crown, Clock } from 'lucide-react';
 import { type Player, type GameState } from '../../../context/gameTypes';
 import { getRoleById } from '../../../data/roles';
 import { type GameThemeTokens } from '../../../context/gameTheme';
@@ -62,6 +62,26 @@ export const GMPhaseOutcome = React.memo(function GMPhaseOutcome({
         });
       });
     }
+
+    // Wolf long-press pre-targets (set during day, not yet voted)
+    const wolfPreTargets = state.wolfPreTargets ?? {};
+    Object.entries(wolfPreTargets).forEach(([wolfIdStr, targetId]) => {
+      const wolfId = parseInt(wolfIdStr);
+      // Skip if this wolf already cast an actual vote
+      if (state.werewolfVotes[wolfId] !== undefined) return;
+      const wolf = state.players.find((p: Player) => p.id === wolfId);
+      if (!wolf?.alive) return;
+      const target = state.players.find((p: Player) => p.id === (targetId as number) && p.alive);
+      if (!target) return;
+      items.push({
+        key: `wolf-pre-${targetId}`,
+        icon: <Clock size={11} />,
+        label: 'Pré-cible',
+        player: target,
+        color: '#f59e0b',
+        detail: `par ${wolf.name}`,
+      });
+    });
 
     // Witch kill targets
     const witchKills = state.witchKillTargets;

@@ -219,6 +219,29 @@ actionRoutes.post("/make-server-2c00868b/game/action/werewolf-vote", async (c) =
   }
 });
 
+// ── Wolf long-press pre-target (set during day, visible to GM) ──
+actionRoutes.post("/make-server-2c00868b/game/action/wolf-pre-target", async (c) => {
+  try {
+    const body = await c.req.json();
+    const { wolfId, targetId } = body;
+    const key = await resolveGameKey(body);
+
+    const res = await withGameLock(key, (state) => {
+      if (!state.wolfPreTargets) state.wolfPreTargets = {};
+      if (targetId === null || targetId === undefined) {
+        delete state.wolfPreTargets[wolfId];
+      } else {
+        state.wolfPreTargets[wolfId] = targetId;
+      }
+    });
+    if (!res) return c.json({ error: "Aucune partie en cours" }, 404);
+    return c.json({ success: true });
+  } catch (err) {
+    console.log("Wolf pre-target action error:", err);
+    return c.json({ error: `Erreur wolf-pre-target: ${err}` }, 500);
+  }
+});
+
 // ── Seer target ──
 actionRoutes.post("/make-server-2c00868b/game/action/seer-target", async (c) => {
   try {

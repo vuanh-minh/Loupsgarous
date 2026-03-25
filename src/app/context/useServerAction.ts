@@ -298,6 +298,16 @@ export function useServerActions() {
     return postAction('discovery-wolf-target', { wolfId, targetId, gameId });
   }, [gameId, localMode]);
 
+  const serverSetWolfPreTarget = useCallback((wolfId: number, targetId: number | null) => {
+    if (localMode) return applyLocal((s) => ({
+      ...s,
+      wolfPreTargets: targetId === null
+        ? Object.fromEntries(Object.entries(s.wolfPreTargets ?? {}).filter(([k]) => parseInt(k) !== wolfId))
+        : { ...(s.wolfPreTargets ?? {}), [wolfId]: targetId },
+    }));
+    return postAction('wolf-pre-target', { wolfId, targetId, gameId });
+  }, [gameId, localMode, applyLocal]);
+
   const serverSetEmpoisonneurTarget = useCallback((actorId: number, playerId: number | null) => {
     if (localMode) return Promise.resolve(true);
     return postAction('empoisonneur-target', { actorId, playerId, gameId });
@@ -620,6 +630,7 @@ export function useServerActions() {
     serverSetFoxTarget,
     serverSetConciergeTarget,
     serverSetDiscoveryWolfTarget,
+    serverSetWolfPreTarget,
     serverAnswerQuestTask,
     serverCollabVote,
     serverCancelCollabVote,

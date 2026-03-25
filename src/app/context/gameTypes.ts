@@ -159,6 +159,8 @@ export interface GameState {
   winner: 'village' | 'werewolf' | 'lovers' | null;
   werewolfTarget: number | null;
   werewolfVotes: Record<number, number>;
+  /** Wolf long-press pre-targets set during day (wolfId → targetId) — cleared each night */
+  wolfPreTargets?: Record<number, number>;
   werewolfVoteMessages: Record<number, string>; // wolfId -> optional message when voting
   werewolfTargets: number[];          // all resolved wolf kill targets (top N by vote)
   wolfKillsPerNight: number;          // max wolf kills per night (GM setting, default 1)

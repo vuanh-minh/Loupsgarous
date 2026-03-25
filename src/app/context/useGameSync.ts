@@ -378,6 +378,7 @@ export function useGameSync({ setState, state, stateRef }: SyncDeps) {
         same(serverState.nominations ?? {}, s.nominations ?? {}) &&
         same(serverState.lastWillUsed ?? {}, s.lastWillUsed ?? {}) &&
         same(serverState.wolfMissedVotes ?? {}, s.wolfMissedVotes ?? {}) &&
+        same(serverState.wolfPreTargets ?? {}, s.wolfPreTargets ?? {}) &&
         same(serverState.villagerMissedVotes ?? {}, s.villagerMissedVotes ?? {}) &&
         same(mergedQuests.map((q: any) => ({ pa: q.tasks?.map((t: any) => t.playerAnswers), ps: q.playerStatuses, cv: q.collaborativeVotes })),
              (s.quests ?? []).map((q: any) => ({ pa: q.tasks?.map((t: any) => t.playerAnswers), ps: q.playerStatuses, cv: q.collaborativeVotes }))) &&
@@ -419,6 +420,7 @@ export function useGameSync({ setState, state, stateRef }: SyncDeps) {
         nominations: serverState.nominations !== undefined ? serverState.nominations : s.nominations,
         lastWillUsed: serverState.lastWillUsed !== undefined ? serverState.lastWillUsed : s.lastWillUsed,
         wolfMissedVotes: serverState.wolfMissedVotes !== undefined ? serverState.wolfMissedVotes : s.wolfMissedVotes,
+        wolfPreTargets: serverState.wolfPreTargets !== undefined ? serverState.wolfPreTargets : s.wolfPreTargets,
         villagerMissedVotes: serverState.villagerMissedVotes !== undefined ? serverState.villagerMissedVotes : s.villagerMissedVotes,
         quests: mergedQuests,
         questAssignments: mergedQuestAssignments,

@@ -104,6 +104,7 @@ export function PlayerPage() {
     serverCancelCollabVote,
     serverJoinVillage,
     serverSetDiscoveryWolfTarget,
+    serverSetWolfPreTarget,
     serverAnswerRoleRevealQuest,
   } = useServerActions();
 
@@ -450,6 +451,9 @@ export function PlayerPage() {
     if (wolfTargetKey) {
       if (targetId === null) localStorage.removeItem(wolfTargetKey);
       else localStorage.setItem(wolfTargetKey, JSON.stringify(targetId));
+    }
+    if (currentPlayerId != null) {
+      serverSetWolfPreTarget(currentPlayerId, targetId).then(handlePostAction);
     }
   };
   // Clear wolf target if targeted player dies
