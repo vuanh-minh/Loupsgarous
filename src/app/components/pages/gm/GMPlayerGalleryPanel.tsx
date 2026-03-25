@@ -585,7 +585,7 @@ export function GMPlayerGalleryPanel({
 
   // ── Image upload helper ──
   const uploadGalleryImage = useCallback(async (file: File, type: 'hint' | 'task'): Promise<string | null> => {
-    if (!selectedGalleryId) return null;
+    if (selectedGalleryId === null) return null;
     const formData = new FormData();
     formData.append('file', file);
     formData.append('password', 'loupgarou');
