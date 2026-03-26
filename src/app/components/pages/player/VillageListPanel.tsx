@@ -371,7 +371,7 @@ export function VillageListPanel({
               onPointerUp={cancelLongPress}
               onPointerCancel={cancelLongPress}
               onPointerLeave={cancelLongPress}
-              onContextMenu={(e) => { if (isWolf && !isSelf) e.preventDefault(); }}
+              onContextMenu={(e) => e.preventDefault()}
               className="flex flex-col items-center gap-1 cursor-pointer"
               style={{ overflow: 'visible', opacity: isAway ? 0.4 : 1 }}
             >

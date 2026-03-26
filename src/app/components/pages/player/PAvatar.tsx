@@ -24,8 +24,9 @@ export const PAvatar = React.memo(function PAvatar({ player, size = 'text-lg', c
       <img
         src={resolvedUrl}
         alt={player.name}
+        draggable={false}
         className={`w-full h-full rounded-full object-cover inline-block ${className}`}
-        style={{ filter: player.alive === false ? 'grayscale(1)' : 'none', ...style }}
+        style={{ filter: player.alive === false ? 'grayscale(1)' : 'none', WebkitTouchCallout: 'none', userSelect: 'none', ...style }}
         onError={() => setImgError(true)}
       />
     );
