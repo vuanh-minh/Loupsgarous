@@ -1,8 +1,12 @@
 export interface RoleDefinition {
   id: string;
   name: string;
-  /** French article: 'le' or 'la' (lowercase) — used by resolveHintText */
-  article: 'le' | 'la';
+  /** French article: 'le', 'la', 'un' (indefinite), or "l'" (elision before vowel) — used by resolveHintText */
+  article: 'le' | 'la' | 'un' | "l'";
+  /** Override full {role} display in hints (skips article+name logic entirely) */
+  hintDisplay?: string;
+  /** Override full {durole} display in hints (skips genitive logic entirely) */
+  hintGenitiveDisplay?: string;
   team: 'village' | 'werewolf' | 'solo';
   emoji: string;
   color: string;
@@ -17,7 +21,9 @@ export const ROLES: RoleDefinition[] = [
   {
     id: 'villageois',
     name: 'Villageois',
-    article: 'le',
+    article: 'un',
+    hintDisplay: 'un ou une Villageoise',
+    hintGenitiveDisplay: "d'un ou d'une Villageoise",
     team: 'village',
     emoji: '🧑‍🌾',
     color: '#6b8e5a',
@@ -160,7 +166,7 @@ export const ROLES: RoleDefinition[] = [
   {
     id: 'oracle',
     name: 'Oracle',
-    article: 'le' as const,
+    article: "l'" as const,
     team: 'village' as const,
     emoji: '🌙',
     color: '#7c3aed',
@@ -173,7 +179,7 @@ export const ROLES: RoleDefinition[] = [
   {
     id: 'empoisonneur',
     name: 'Empoisonneur',
-    article: 'le' as const,
+    article: "l'" as const,
     team: 'werewolf' as const,
     emoji: '🧪',
     color: '#65a30d',

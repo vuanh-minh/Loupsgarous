@@ -26,18 +26,32 @@ function corruptRoleInText(text: string): string {
   // 3. Replace any already-resolved role name in the text
   for (const role of ROLES) {
     if (role.id === 'loup-garou') continue;
-    // "du <Name>" / "de la <Name>"
-    const duPattern = role.article === 'le'
-      ? new RegExp(`\\b[Dd]u\\s+${escapeRegex(role.name)}\\b`, 'g')
-      : new RegExp(`\\b[Dd]e\\s+la\\s+${escapeRegex(role.name)}\\b`, 'g');
+    // "du/de la/d'un/de l' <Name>"
+    let duPattern: RegExp;
+    if (role.article === "l'") {
+      duPattern = new RegExp(`[Dd]e\\s+l'${escapeRegex(role.name)}`, 'g');
+    } else if (role.article === 'un') {
+      duPattern = new RegExp(`[Dd]'un\\s+${escapeRegex(role.name)}\\b`, 'g');
+    } else if (role.article === 'le') {
+      duPattern = new RegExp(`\\b[Dd]u\\s+${escapeRegex(role.name)}\\b`, 'g');
+    } else {
+      duPattern = new RegExp(`\\b[Dd]e\\s+la\\s+${escapeRegex(role.name)}\\b`, 'g');
+    }
     result = result.replace(duPattern, (m) => {
       return m.charAt(0) === m.charAt(0).toUpperCase() ? 'Du Loup-Garou' : 'du Loup-Garou';
     });
-    // "le/la <Name>"
-    const artPattern = new RegExp(
-      `\\b${escapeRegex(role.article.charAt(0).toUpperCase() + role.article.slice(1))}\\s+${escapeRegex(role.name)}\\b|\\b${escapeRegex(role.article)}\\s+${escapeRegex(role.name)}\\b`,
-      'g',
-    );
+    // "le/la/un/l' <Name>"
+    let artPattern: RegExp;
+    if (role.article === "l'") {
+      artPattern = new RegExp(`[Ll]'${escapeRegex(role.name)}`, 'g');
+    } else if (role.article === 'un') {
+      artPattern = new RegExp(`\\b[Uu]n\\s+${escapeRegex(role.name)}\\b`, 'g');
+    } else {
+      artPattern = new RegExp(
+        `\\b${escapeRegex(role.article.charAt(0).toUpperCase() + role.article.slice(1))}\\s+${escapeRegex(role.name)}\\b|\\b${escapeRegex(role.article)}\\s+${escapeRegex(role.name)}\\b`,
+        'g',
+      );
+    }
     result = result.replace(artPattern, (m) => {
       return m.charAt(0) === m.charAt(0).toUpperCase() ? 'Le Loup-Garou' : 'le Loup-Garou';
     });

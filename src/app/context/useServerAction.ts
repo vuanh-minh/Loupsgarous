@@ -3,6 +3,7 @@ import { API_BASE, publicAnonKey } from './apiConfig';
 import { useGame, type GameState } from './GameContext';
 import { getRoleById } from '../data/roles';
 import type { DynamicHint } from './gameTypes';
+import { resolveHintText } from '../components/pages/gm/gmPureHelpers';
 
 /**
  * Client-side dynamic hint reward: pick an unrevealed dynamic hint
@@ -94,7 +95,7 @@ function grantDynamicHintRewardClient(
   dynamicHints[pickedIdx] = picked;
 
   const target = players.find((p) => p.id === picked.targetPlayerId);
-  const resolvedText = target ? picked.text.replace(/\{role\}/gi, getRoleById(target.role)?.name ?? target.role) : picked.text;
+  const resolvedText = target ? resolveHintText(picked.text, target) : picked.text;
 
   const maxHintId = hints.length > 0 ? Math.max(...hints.map((h) => h.id)) : 0;
   const newHintId = maxHintId + 1;

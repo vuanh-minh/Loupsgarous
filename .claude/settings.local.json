@@ -59,7 +59,13 @@
       "Bash(npx --package=typescript tsc --noEmit)",
       "Bash(npx --package=typescript tsc --noEmit --project tsconfig.json)",
       "Bash(find /Users/anh-minhvu/Desktop/loups-garous/src/app/components -type f -name \"*.tsx\" -exec grep -l \"hint\\\\|Hint\\\\|indice\\\\|Indice\" {})",
-      "Bash(curl -s http://localhost:5173)"
+      "Bash(curl -s http://localhost:5173)",
+      "Skill(update-config)",
+      "Skill(update-config:*)",
+      "Bash(find ~/.claude/plugins -name *.json)",
+      "Bash(find ~/.claude/plugins -name *.json -path */preview*)",
+      "Bash(find ~/.claude/plugins -path *preview* -o -path *Preview*)"
     ]
-  }
+  },
+  "disableAllHooks": true
 }

@@ -683,20 +683,45 @@ export function distributeQuestRound(s: GameState): { state: GameState; distribu
 export function resolveHintText(text: string, player: Player): string {
   const role = getRoleById(player.role);
   if (!role) return text.replace(/\{role\}/gi, player.role).replace(/\{durole\}/gi, player.role);
+
+  // {role} → "le/la/un/l' <Name>" (or hintDisplay override)
   let result = text.replace(/\{role\}/gi, (_match, offset: number) => {
+    if (role.hintDisplay) {
+      return offset === 0
+        ? role.hintDisplay.charAt(0).toUpperCase() + role.hintDisplay.slice(1)
+        : role.hintDisplay;
+    }
     const capitalize = offset === 0;
+    if (role.article === "l'") {
+      const prefix = capitalize ? "L'" : "l'";
+      return `${prefix}${role.name}`;
+    }
     const art = capitalize
       ? role.article.charAt(0).toUpperCase() + role.article.slice(1)
       : role.article;
     return `${art} ${role.name}`;
   });
+
+  // {durole} → "du/de la/d'un/de l' <Name>" (or hintGenitiveDisplay override)
   result = result.replace(/\{durole\}/gi, (_match, offset: number) => {
+    if (role.hintGenitiveDisplay) {
+      return offset === 0
+        ? role.hintGenitiveDisplay.charAt(0).toUpperCase() + role.hintGenitiveDisplay.slice(1)
+        : role.hintGenitiveDisplay;
+    }
     const capitalize = offset === 0;
+    if (role.article === "l'") {
+      return capitalize ? `De l'${role.name}` : `de l'${role.name}`;
+    }
+    if (role.article === 'un') {
+      return capitalize ? `D'un ${role.name}` : `d'un ${role.name}`;
+    }
     if (role.article === 'le') {
       return capitalize ? `Du ${role.name}` : `du ${role.name}`;
     }
     return capitalize ? `De la ${role.name}` : `de la ${role.name}`;
   });
+
   return result;
 }
 
