@@ -213,13 +213,6 @@ export function useInAppNotifications({
               title: 'Vous êtes nominé !',
               message: `🫵 Vous avez été nominé par ${nominatorName}`,
             });
-          } else {
-            const targetName = targetPlayer?.name || `Joueur #${targetId}`;
-            addToast({
-              type: 'nomination',
-              title: 'Nouvelle nomination',
-              message: `${nominatorName} a nominé ${targetName}`,
-            });
           }
         }
       }

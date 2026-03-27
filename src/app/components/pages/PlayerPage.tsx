@@ -1143,7 +1143,7 @@ export function PlayerPage() {
                       if (state.gameId && !duringDiscovery) {
                         const playerName = state.players.find((p) => p.id === playerId)?.name || 'Un joueur';
                         const targets = state.players.filter((p) => p.alive).map((p) => p.shortCode);
-                        sendPushNotifications(state.gameId, targets, 'Loup-Garou', `${playerName} s'est porté candidat en tant que Maire !`, 'maire-candidacy');
+                        sendPushNotifications(state.gameId, targets, 'Loup-Garou', `${playerName} a posé sa candidature pour le poste de maire.`, 'maire-candidacy');
                       }
                     }}
                     onWithdrawCandidacy={(playerId) => {
