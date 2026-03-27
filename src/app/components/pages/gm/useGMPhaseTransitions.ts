@@ -95,11 +95,12 @@ export function useGMPhaseTransitions(deps: GMPhaseTransitionDeps) {
   const handleStartNight1 = useCallback(() => {
     setRoleRevealDone(true);
 
-    // Initialize villagePresentIds as empty — seeing your role during the reveal
-    // phase does NOT make you present. Players must explicitly join the village
-    // during the election phase or later (via JoinVillageScreen).
+    // Initialize villagePresentIds with players who already revealed their role —
+    // they were on the app during the transition and are considered present.
+    // Players who haven't revealed yet must still join via JoinVillageScreen.
     updateState((s) => {
-      return { ...s, villagePresentIds: [] };
+      const alreadyPresent = Array.isArray(s.roleRevealedBy) ? s.roleRevealedBy : [];
+      return { ...s, villagePresentIds: alreadyPresent };
     });
 
     // If maire election not done, transition to election phase instead of night
