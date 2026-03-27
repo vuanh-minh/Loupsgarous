@@ -245,7 +245,15 @@ export function useDeathAnnouncement(
       ? allDeaths.filter((d) => d.player.id !== playerId)
       : allDeaths;
 
-    const allNewPlayerJoinIds = [...new Set(phases.flatMap((p) => p.newPlayerJoinIds ?? []))];
+    // Exclude join IDs already shown in previously-seen phase records
+    const alreadyShownJoinIds = new Set(
+      history
+        .filter((r) => phaseOrder(r.phaseKey) <= lastSeenOrder)
+        .flatMap((r) => r.newPlayerJoinIds ?? [])
+    );
+    const allNewPlayerJoinIds = [...new Set(
+      phases.flatMap((p) => p.newPlayerJoinIds ?? []).filter((id) => !alreadyShownJoinIds.has(id))
+    )];
     // Detect revived players from events containing "ressuscite"
     const allRevivedPlayerIds: number[] = [];
     for (const record of unseen) {
