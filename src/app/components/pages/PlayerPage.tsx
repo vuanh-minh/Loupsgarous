@@ -33,6 +33,7 @@ import { PlayerHeader } from './player/PlayerHeader';
 import { useSwipeNavigation, type PanelId } from './player/useSwipeNavigation';
 import { usePlayerSync } from './player/usePlayerSync';
 import { LastWillSection } from './player/LastWillSection';
+import { PlayerHintSection } from '../HintComponents';
 import { MaireElectionSuccessScreen } from './player/MaireElectionSuccessScreen';
 import { PlayerQuestsPanel } from './player/PlayerQuestsPanel';
 import { PlayerQuestTasksPage } from './player/PlayerQuestTasksPage';
@@ -1410,6 +1411,26 @@ export function PlayerPage() {
                       onNavigateToVillage={() => setActivePanel('village')}
                       t={t}
                     />
+                  )}
+                  {/* Hint section for dead players */}
+                  {!(currentPlayer?.alive ?? false) && currentPlayerId !== null && (
+                    <div className="relative px-4" style={{ zIndex: 20, paddingTop: '16px', paddingBottom: '16px' }}>
+                      <PlayerHintSection
+                        hints={state.hints ?? []}
+                        playerHints={state.playerHints ?? []}
+                        playerId={currentPlayerId}
+                        t={t}
+                        onReveal={(hintId) => {
+                          serverRevealHint(currentPlayerId, hintId).then(handlePostAction);
+                        }}
+                        compact
+                        players={state.players}
+                        onSetHypothesis={(targetPlayerId, roleId) => {
+                          setHypothesis(currentPlayerId, targetPlayerId, roleId);
+                        }}
+                        gameId={state.gameId || undefined}
+                      />
+                    </div>
                   )}
           </div>
 
