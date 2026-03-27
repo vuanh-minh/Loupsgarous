@@ -1416,7 +1416,7 @@ export function PlayerPage() {
                   )}
                   {/* Hint section for dead players — pinned above bottom nav */}
                   {!(currentPlayer?.alive ?? false) && currentPlayerId !== null && (
-                    <div className="flex-shrink-0 px-4 py-3 -mt-6" style={{ zIndex: 20 }}>
+                    <div className="flex-shrink-0 px-4 pt-3 pb-4 -mt-6" style={{ zIndex: 20 }}>
                       <PlayerHintSection
                         hints={state.hints ?? []}
                         playerHints={state.playerHints ?? []}
