@@ -75,9 +75,9 @@ export function LastWillSection({
     : null;
 
   return (
-    <div className="flex flex-col min-h-full px-4 py-4 pb-6">
+    <div className="flex flex-col px-4 py-4">
       {/* Death banner */}
-      <div className="flex flex-col items-center justify-center text-center mb-5">
+      <div className="flex flex-col items-center justify-center text-center mb-4">
         <span className="text-2xl block mb-2" style={{ filter: 'grayscale(1)' }}>💀</span>
         <h2
           style={{
@@ -92,33 +92,84 @@ export function LastWillSection({
         <p style={{ color: 'rgba(255,255,255,0.3)', fontSize: '0.65rem', marginTop: '0.5rem', lineHeight: 1.5 }}>
           Il vous reste une derniere volonte.{'\n'}Vous pouvez continuer a enqueter.
         </p>
+      </div>
 
-        {/* Night: "Enqueter" tertiary button */}
+      {/* Buttons group */}
+      <div className="flex flex-col gap-2">
+        {/* Night: "Enqueter" full-width button */}
         {isNight && (
           <motion.button
             initial={{ opacity: 0, y: 4 }}
             animate={{ opacity: 1, y: 0 }}
             whileTap={{ scale: 0.95 }}
             onClick={onNavigateToVillage}
-            className="mt-3 flex items-center gap-2 px-4 py-2 rounded-lg"
+            className="w-full flex items-center justify-center gap-2 py-3.5 rounded-xl"
             style={{
               background: `rgba(${t.overlayChannel}, 0.06)`,
               border: `1px solid rgba(${t.overlayChannel}, 0.12)`,
               color: t.textMuted,
-              fontSize: '0.65rem',
+              fontSize: '0.75rem',
               fontFamily: '"Cinzel", serif',
               fontWeight: 600,
             }}
           >
-            <Users size={13} />
+            <Users size={15} />
             Enqueter
           </motion.button>
+        )}
+
+        {/* "Derniere volonte" button or used confirmation */}
+        {!lastWillUsed ? (
+          <motion.button
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            whileTap={{ scale: 0.96 }}
+            onClick={() => {
+              setSearch('');
+              setPendingTarget(null);
+              setShowModal(true);
+            }}
+            className="w-full flex items-center justify-center gap-2.5 py-3.5 rounded-xl"
+            style={{
+              background: 'linear-gradient(135deg, rgba(139,92,246,0.2), rgba(168,85,247,0.12))',
+              border: '1.5px solid rgba(139,92,246,0.35)',
+              color: '#c4b5fd',
+              fontSize: '0.75rem',
+              fontFamily: '"Cinzel", serif',
+              fontWeight: 700,
+              letterSpacing: '0.04em',
+              boxShadow: '0 4px 20px rgba(139,92,246,0.2), 0 0 40px rgba(139,92,246,0.08)',
+            }}
+          >
+            <Scroll size={16} />
+            Derniere volonte
+          </motion.button>
+        ) : (
+          <motion.div
+            initial={{ opacity: 0, y: 6 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="rounded-xl p-3.5 text-center"
+            style={{
+              background: 'rgba(107,142,90,0.08)',
+              border: '1px solid rgba(107,142,90,0.2)',
+            }}
+          >
+            <div className="flex items-center justify-center gap-2 mb-1">
+              <CircleCheck size={13} style={{ color: '#6b8e5a' }} />
+              <span style={{ color: '#6b8e5a', fontSize: '0.65rem', fontFamily: '"Cinzel", serif', fontWeight: 700 }}>
+                Derniere volonte utilisee
+              </span>
+            </div>
+            <p style={{ color: t.textMuted, fontSize: '0.5rem', lineHeight: 1.4 }}>
+              Votre vote posthume contre {alivePlayers.find((p) => p.id === votes[currentPlayerId])?.name ?? 'ce joueur'} a ete enregistre.
+            </p>
+          </motion.div>
         )}
       </div>
 
       {/* Day vote phase: show voted players */}
       {isVotePhase && votedPlayers.length > 0 && (
-        <div className="mb-4">
+        <div className="mt-4">
           <div className="flex items-center gap-2 mb-2.5">
             <Vote size={13} style={{ color: '#c41e3a' }} />
             <span style={{ fontFamily: '"Cinzel", serif', color: '#c41e3a', fontSize: '0.7rem' }}>
@@ -188,65 +239,6 @@ export function LastWillSection({
           </div>
         </div>
       )}
-
-      {/* Spacer to push sticky button to bottom (night) or center it (day) */}
-      <div className="flex-1" />
-
-      {/* Last will used confirmation */}
-      {lastWillUsed && (
-        <motion.div
-          initial={{ opacity: 0, y: 6 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="rounded-xl p-3.5 text-center mb-4"
-          style={{
-            background: 'rgba(107,142,90,0.08)',
-            border: '1px solid rgba(107,142,90,0.2)',
-          }}
-        >
-          <div className="flex items-center justify-center gap-2 mb-1">
-            <CircleCheck size={13} style={{ color: '#6b8e5a' }} />
-            <span style={{ color: '#6b8e5a', fontSize: '0.65rem', fontFamily: '"Cinzel", serif', fontWeight: 700 }}>
-              Derniere volonte utilisee
-            </span>
-          </div>
-          <p style={{ color: t.textMuted, fontSize: '0.5rem', lineHeight: 1.4 }}>
-            Votre vote posthume contre {alivePlayers.find((p) => p.id === votes[currentPlayerId])?.name ?? 'ce joueur'} a ete enregistre.
-          </p>
-        </motion.div>
-      )}
-
-      {/* Sticky "Derniere volonte" button */}
-      {!lastWillUsed && (
-        <div className="flex justify-center z-30">
-          <motion.button
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            whileTap={{ scale: 0.96 }}
-            onClick={() => {
-              setSearch('');
-              setPendingTarget(null);
-              setShowModal(true);
-            }}
-            className="flex items-center justify-center gap-2.5 py-3.5 px-8 rounded-xl"
-            style={{
-              background: 'linear-gradient(135deg, rgba(139,92,246,0.2), rgba(168,85,247,0.12))',
-              border: '1.5px solid rgba(139,92,246,0.35)',
-              color: '#c4b5fd',
-              fontSize: '0.75rem',
-              fontFamily: '"Cinzel", serif',
-              fontWeight: 700,
-              letterSpacing: '0.04em',
-              boxShadow: '0 4px 20px rgba(139,92,246,0.2), 0 0 40px rgba(139,92,246,0.08)',
-            }}
-          >
-            <Scroll size={16} />
-            Derniere volonte
-          </motion.button>
-        </div>
-      )}
-
-      {/* Bottom spacer for centering */}
-      {!lastWillUsed && <div className="flex-1" />}
 
       {/* Modal (portalled) */}
       {createPortal(

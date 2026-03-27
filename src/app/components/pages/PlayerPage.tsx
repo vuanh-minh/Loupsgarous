@@ -1088,7 +1088,7 @@ export function PlayerPage() {
           style={{ width: containerWidth > 0 ? panelCount * containerWidth : `${panelCount * 100}%` }}
         >
           {/* Panel 1 — Game (card flip is inside GamePanel) */}
-          <div style={{ width: containerWidth > 0 ? containerWidth : `${100 / panelCount}%`, WebkitOverflowScrolling: 'touch', overscrollBehaviorY: 'contain' }} className="h-full overflow-y-auto">
+          <div style={{ width: containerWidth > 0 ? containerWidth : `${100 / panelCount}%`, WebkitOverflowScrolling: 'touch', overscrollBehaviorY: 'contain' }} className={`h-full ${isCurrentPlayerDead ? 'flex flex-col overflow-hidden' : 'overflow-y-auto'}`}>
                   {(currentPlayer?.alive ?? false) && <GamePanel
                     alivePlayers={presentAlivePlayers}
                     phase={isPracticeMode ? 'night' : state.phase}
@@ -1377,44 +1377,46 @@ export function PlayerPage() {
                     }
                   />}
                   {!(currentPlayer?.alive ?? false) && (
-                    <LastWillSection
-                      phase={state.phase as 'night' | 'day'}
-                      dayStep={state.dayStep}
-                      alivePlayers={presentAlivePlayers}
-                      currentPlayerId={currentPlayerId!}
-                      votes={state.votes}
-                      maireId={state.maireId ?? null}
-                      hypotheses={currentPlayerId !== null ? state.hypotheses[currentPlayerId] || {} : {}}
-                      lastWillUsed={!!(state.lastWillUsed ?? {})[currentPlayerId!]}
-                      allLastWillUsed={state.lastWillUsed ?? {}}
-                      onLastWillVote={(targetId) => {
-                        const isNightNow = state.phase === 'night';
-                        markActionSent();
-                        if (isNightNow) {
-                          updateState((s) => ({
-                            ...s,
-                            earlyVotes: { ...(s.earlyVotes || {}), [currentPlayerId!]: targetId },
-                            lastWillUsed: { ...(s.lastWillUsed || {}), [currentPlayerId!]: true },
-                          }));
-                          serverSetEarlyVote(currentPlayerId!, targetId).then(handlePostAction);
-                          serverSetLastWillUsed(currentPlayerId!);
-                        } else {
-                          castVote(currentPlayerId!, targetId);
-                          serverCastVote(currentPlayerId!, targetId).then(handlePostAction);
-                          updateState((s) => ({
-                            ...s,
-                            lastWillUsed: { ...(s.lastWillUsed || {}), [currentPlayerId!]: true },
-                          }));
-                          serverSetLastWillUsed(currentPlayerId!);
-                        }
-                      }}
-                      onNavigateToVillage={() => setActivePanel('village')}
-                      t={t}
-                    />
+                    <div className="flex-1 overflow-y-auto">
+                      <LastWillSection
+                        phase={state.phase as 'night' | 'day'}
+                        dayStep={state.dayStep}
+                        alivePlayers={presentAlivePlayers}
+                        currentPlayerId={currentPlayerId!}
+                        votes={state.votes}
+                        maireId={state.maireId ?? null}
+                        hypotheses={currentPlayerId !== null ? state.hypotheses[currentPlayerId] || {} : {}}
+                        lastWillUsed={!!(state.lastWillUsed ?? {})[currentPlayerId!]}
+                        allLastWillUsed={state.lastWillUsed ?? {}}
+                        onLastWillVote={(targetId) => {
+                          const isNightNow = state.phase === 'night';
+                          markActionSent();
+                          if (isNightNow) {
+                            updateState((s) => ({
+                              ...s,
+                              earlyVotes: { ...(s.earlyVotes || {}), [currentPlayerId!]: targetId },
+                              lastWillUsed: { ...(s.lastWillUsed || {}), [currentPlayerId!]: true },
+                            }));
+                            serverSetEarlyVote(currentPlayerId!, targetId).then(handlePostAction);
+                            serverSetLastWillUsed(currentPlayerId!);
+                          } else {
+                            castVote(currentPlayerId!, targetId);
+                            serverCastVote(currentPlayerId!, targetId).then(handlePostAction);
+                            updateState((s) => ({
+                              ...s,
+                              lastWillUsed: { ...(s.lastWillUsed || {}), [currentPlayerId!]: true },
+                            }));
+                            serverSetLastWillUsed(currentPlayerId!);
+                          }
+                        }}
+                        onNavigateToVillage={() => setActivePanel('village')}
+                        t={t}
+                      />
+                    </div>
                   )}
-                  {/* Hint section for dead players */}
+                  {/* Hint section for dead players — pinned above bottom nav */}
                   {!(currentPlayer?.alive ?? false) && currentPlayerId !== null && (
-                    <div className="relative px-4" style={{ zIndex: 20, paddingTop: '16px', paddingBottom: '16px' }}>
+                    <div className="flex-shrink-0 px-4 py-3" style={{ zIndex: 20 }}>
                       <PlayerHintSection
                         hints={state.hints ?? []}
                         playerHints={state.playerHints ?? []}
