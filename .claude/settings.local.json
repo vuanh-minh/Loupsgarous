@@ -64,8 +64,61 @@
       "Skill(update-config:*)",
       "Bash(find ~/.claude/plugins -name *.json)",
       "Bash(find ~/.claude/plugins -name *.json -path */preview*)",
-      "Bash(find ~/.claude/plugins -path *preview* -o -path *Preview*)"
+      "Bash(find ~/.claude/plugins -path *preview* -o -path *Preview*)",
+      "Bash(git clone:*)",
+      "Bash(mkdir -p /Users/anh-minhvu/Desktop/loups-garous/.claude/rules /Users/anh-minhvu/Desktop/loups-garous/.claude/commands)",
+      "Bash(cp /Users/anh-minhvu/Desktop/loups-garous/.claude/skills/.claude/rules/*.md /Users/anh-minhvu/Desktop/loups-garous/.claude/rules/)",
+      "Bash(cp /Users/anh-minhvu/Desktop/loups-garous/.claude/skills/.claude/commands/*.md /Users/anh-minhvu/Desktop/loups-garous/.claude/commands/)",
+      "Bash(python3 .claude/skills/db/memstack-db.py init)",
+      "Bash(python3 .claude/skills/db/memstack-db.py set-context '{\"\"project\"\":\"\"loups-garous\"\",\"\"architecture_decisions\"\":\"\"Werewolf \\(Loups-Garous\\) multiplayer card game. Stack: React 18 + TypeScript, Vite, Tailwind CSS v4, Supabase Realtime, React Router v7. GM is source of truth — broadcasts authoritative state via gm:state. Three roles: GM \\(/master\\), Player \\(/player/:shortCode\\), Spectator \\(/spectator/:gameId\\). Phases: night/day. State in GameContext.tsx delegating to useGameActions, useGameSync, useRealtimeSync. Backend: Supabase Edge Functions + Realtime. Falls back to localStorage when server unreachable.\"\",\"\"status\"\":\"\"active\"\"}')"
     ]
   },
-  "disableAllHooks": true
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash -c 'echo \"$CLAUDE_TOOL_INPUT\" | grep -q \"git push\" && bash \"${CLAUDE_PROJECT_DIR}/.claude/skills/.claude/hooks/pre-push.sh\" || exit 0'",
+            "timeout": 60000
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash -c 'echo \"$CLAUDE_TOOL_INPUT\" | grep -q \"git commit\" && bash \"${CLAUDE_PROJECT_DIR}/.claude/skills/.claude/hooks/post-commit.sh\" || exit 0'",
+            "timeout": 10000
+          }
+        ]
+      }
+    ],
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"${CLAUDE_PROJECT_DIR}/.claude/skills/.claude/hooks/session-start.sh\"",
+            "timeout": 15000
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"${CLAUDE_PROJECT_DIR}/.claude/skills/.claude/hooks/session-end.sh\"",
+            "timeout": 10000
+          }
+        ]
+      }
+    ]
+  }
 }
