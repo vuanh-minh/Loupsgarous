@@ -8,7 +8,7 @@
 import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'motion/react';
-import { Crown, X } from 'lucide-react';
+import { Crown, X, SendHorizonal } from 'lucide-react';
 import type { GameThemeTokens } from '../../../context/gameTheme';
 
 interface MaireCandidacySectionProps {
@@ -36,6 +36,7 @@ export const MaireCandidacySection = React.memo(function MaireCandidacySection({
 }: MaireCandidacySectionProps) {
   const [showCandidacyModal, setShowCandidacyModal] = useState(false);
   const [campaignMessage, setCampaignMessage] = useState('');
+  const [isInputFocused, setIsInputFocused] = useState(false);
 
   // Track virtual keyboard height via visualViewport so the bottom-sheet
   // elevates above the native keyboard on mobile.
@@ -179,19 +180,34 @@ export const MaireCandidacySection = React.memo(function MaireCandidacySection({
                 onClick={(e) => e.stopPropagation()}
               >
                 <div className="w-10 h-1 rounded-full mx-auto mb-4" style={{ background: 'rgba(160,120,8,0.25)' }} />
-                <div className="flex items-center gap-2.5 mb-4">
-                  <div className="w-10 h-10 rounded-full flex items-center justify-center" style={{ background: 'linear-gradient(135deg, #d4a843, #b8960a)' }}>
-                    <Crown size={18} style={{ color: '#0a0e1a' }} />
-                  </div>
-                  <div>
-                    <h3 style={{ fontFamily: '"Cinzel", serif', color: '#3a2518', fontSize: '1rem', fontWeight: 700 }}>
-                      Candidature au poste de Maire
-                    </h3>
-                    <p style={{ color: '#7a6a4a', fontSize: '0.65rem', marginTop: 2 }}>
-                      Convainquez les villageois de voter pour vous !
-                    </p>
-                  </div>
-                </div>
+
+                {/* Header — hidden when input is focused */}
+                <AnimatePresence initial={false}>
+                  {!isInputFocused && (
+                    <motion.div
+                      key="header"
+                      initial={{ opacity: 0, height: 0, marginBottom: 0 }}
+                      animate={{ opacity: 1, height: 'auto', marginBottom: 16 }}
+                      exit={{ opacity: 0, height: 0, marginBottom: 0 }}
+                      transition={{ duration: 0.18 }}
+                      style={{ overflow: 'hidden' }}
+                    >
+                      <div className="flex items-center gap-2.5">
+                        <div className="w-10 h-10 rounded-full flex items-center justify-center" style={{ background: 'linear-gradient(135deg, #d4a843, #b8960a)' }}>
+                          <Crown size={18} style={{ color: '#0a0e1a' }} />
+                        </div>
+                        <div>
+                          <h3 style={{ fontFamily: '"Cinzel", serif', color: '#3a2518', fontSize: '1rem', fontWeight: 700 }}>
+                            Candidature au poste de Maire
+                          </h3>
+                          <p style={{ color: '#7a6a4a', fontSize: '0.65rem', marginTop: 2 }}>
+                            Convainquez les villageois de voter pour vous !
+                          </p>
+                        </div>
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
 
                 <label style={{ fontFamily: '"Cinzel", serif', color: '#7a6a4a', fontSize: '0.7rem', fontWeight: 600, display: 'block', marginBottom: 6 }}>
                   Message de campagne <span style={{ color: '#c41e3a' }}>*</span>
@@ -203,6 +219,8 @@ export const MaireCandidacySection = React.memo(function MaireCandidacySection({
                     onChange={(e) => {
                       if (e.target.value.length <= MAX_CHARS) setCampaignMessage(e.target.value);
                     }}
+                    onFocus={() => setIsInputFocused(true)}
+                    onBlur={() => setIsInputFocused(false)}
                     placeholder="Pourquoi devriez-vous etre elu maire ?"
                     rows={3}
                     className="w-full rounded-xl px-3.5 py-3 outline-none resize-none"
@@ -214,64 +232,116 @@ export const MaireCandidacySection = React.memo(function MaireCandidacySection({
                       lineHeight: 1.5,
                       fontFamily: 'inherit',
                       boxShadow: 'inset 0 1px 3px rgba(0,0,0,0.06)',
+                      paddingBottom: isInputFocused ? '2.4rem' : '1.75rem',
                     }}
                   />
+                  {/* Char count — bottom left when focused, bottom right otherwise */}
                   <span
-                    className="absolute bottom-2 right-3"
+                    className="absolute bottom-2"
                     style={{
+                      left: isInputFocused ? 12 : undefined,
+                      right: isInputFocused ? undefined : 12,
                       color: campaignMessage.length >= (MAX_CHARS - 20) ? '#c41e3a' : '#a07808',
                       fontSize: '0.55rem',
                       fontFamily: '"Cinzel", serif',
                       opacity: 0.7,
+                      transition: 'left 0.15s, right 0.15s',
                     }}
                   >
                     {campaignMessage.length}/{MAX_CHARS}
                   </span>
+                  {/* Send button — appears inside textarea when focused */}
+                  <AnimatePresence>
+                    {isInputFocused && (
+                      <motion.button
+                        key="send-btn"
+                        initial={{ opacity: 0, scale: 0.7 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        exit={{ opacity: 0, scale: 0.7 }}
+                        transition={{ duration: 0.15 }}
+                        onMouseDown={(e) => {
+                          // Use onMouseDown to fire before onBlur
+                          e.preventDefault();
+                          if (campaignMessage.trim() && currentPlayerId !== null) {
+                            onDeclareCandidacy?.(currentPlayerId, campaignMessage.trim());
+                            setShowCandidacyModal(false);
+                            setCampaignMessage('');
+                          }
+                        }}
+                        className="absolute bottom-1.5 right-1.5 w-8 h-8 flex items-center justify-center rounded-lg"
+                        style={{
+                          background: campaignMessage.trim()
+                            ? 'linear-gradient(135deg, #d4a843, #b8960a)'
+                            : 'rgba(160,120,8,0.12)',
+                          color: campaignMessage.trim() ? '#0a0e1a' : 'rgba(160,120,8,0.4)',
+                          boxShadow: campaignMessage.trim() ? '0 2px 8px rgba(212,168,67,0.4)' : 'none',
+                          cursor: campaignMessage.trim() ? 'pointer' : 'not-allowed',
+                          transition: 'background 0.15s, box-shadow 0.15s',
+                        }}
+                        disabled={!campaignMessage.trim()}
+                      >
+                        <SendHorizonal size={15} />
+                      </motion.button>
+                    )}
+                  </AnimatePresence>
                 </div>
 
-                <div className="flex gap-2.5 mt-4">
-                  <motion.button
-                    whileTap={{ scale: 0.95 }}
-                    onClick={() => setShowCandidacyModal(false)}
-                    className="flex-1 flex items-center justify-center gap-2 py-3 rounded-xl"
-                    style={{
-                      background: 'rgba(160,120,8,0.08)',
-                      border: '1px solid rgba(160,120,8,0.2)',
-                      color: '#a07808',
-                      fontFamily: '"Cinzel", serif',
-                      fontSize: '0.75rem',
-                    }}
-                  >
-                    <X size={14} />
-                    Annuler
-                  </motion.button>
-                  <motion.button
-                    whileTap={{ scale: 0.95 }}
-                    onClick={() => {
-                      if (campaignMessage.trim() && currentPlayerId !== null) {
-                        onDeclareCandidacy?.(currentPlayerId, campaignMessage.trim());
-                        setShowCandidacyModal(false);
-                        setCampaignMessage('');
-                      }
-                    }}
-                    className="flex-1 flex items-center justify-center gap-2 py-3 rounded-xl"
-                    style={{
-                      background: campaignMessage.trim()
-                        ? 'linear-gradient(135deg, #d4a843, #b8960a)'
-                        : 'rgba(160,120,8,0.08)',
-                      color: campaignMessage.trim() ? '#0a0e1a' : '#a0780880',
-                      fontFamily: '"Cinzel", serif',
-                      fontSize: '0.75rem',
-                      fontWeight: 700,
-                      boxShadow: campaignMessage.trim() ? '0 4px 16px rgba(212,168,67,0.3)' : 'none',
-                      cursor: campaignMessage.trim() ? 'pointer' : 'not-allowed',
-                    }}
-                    disabled={!campaignMessage.trim()}
-                  >
-                    <Crown size={14} />
-                    Candidater
-                  </motion.button>
-                </div>
+                {/* Bottom buttons — hidden when input is focused */}
+                <AnimatePresence initial={false}>
+                  {!isInputFocused && (
+                    <motion.div
+                      key="buttons"
+                      initial={{ opacity: 0, height: 0, marginTop: 0 }}
+                      animate={{ opacity: 1, height: 'auto', marginTop: 16 }}
+                      exit={{ opacity: 0, height: 0, marginTop: 0 }}
+                      transition={{ duration: 0.18 }}
+                      style={{ overflow: 'hidden' }}
+                      className="flex gap-2.5"
+                    >
+                      <motion.button
+                        whileTap={{ scale: 0.95 }}
+                        onClick={() => setShowCandidacyModal(false)}
+                        className="flex-1 flex items-center justify-center gap-2 py-3 rounded-xl"
+                        style={{
+                          background: 'rgba(160,120,8,0.08)',
+                          border: '1px solid rgba(160,120,8,0.2)',
+                          color: '#a07808',
+                          fontFamily: '"Cinzel", serif',
+                          fontSize: '0.75rem',
+                        }}
+                      >
+                        <X size={14} />
+                        Annuler
+                      </motion.button>
+                      <motion.button
+                        whileTap={{ scale: 0.95 }}
+                        onClick={() => {
+                          if (campaignMessage.trim() && currentPlayerId !== null) {
+                            onDeclareCandidacy?.(currentPlayerId, campaignMessage.trim());
+                            setShowCandidacyModal(false);
+                            setCampaignMessage('');
+                          }
+                        }}
+                        className="flex-1 flex items-center justify-center gap-2 py-3 rounded-xl"
+                        style={{
+                          background: campaignMessage.trim()
+                            ? 'linear-gradient(135deg, #d4a843, #b8960a)'
+                            : 'rgba(160,120,8,0.08)',
+                          color: campaignMessage.trim() ? '#0a0e1a' : '#a0780880',
+                          fontFamily: '"Cinzel", serif',
+                          fontSize: '0.75rem',
+                          fontWeight: 700,
+                          boxShadow: campaignMessage.trim() ? '0 4px 16px rgba(212,168,67,0.3)' : 'none',
+                          cursor: campaignMessage.trim() ? 'pointer' : 'not-allowed',
+                        }}
+                        disabled={!campaignMessage.trim()}
+                      >
+                        <Crown size={14} />
+                        Candidater
+                      </motion.button>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
               </motion.div>
             </motion.div>
           )}
