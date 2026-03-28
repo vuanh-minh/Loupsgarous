@@ -155,7 +155,27 @@ export const MaireCandidacySection = React.memo(function MaireCandidacySection({
       {/* ── Candidacy Modal (portalled) ── */}
       {createPortal(
         <AnimatePresence>
-          {showCandidacyModal && (
+          {showCandidacyModal && (() => {
+            // Theme tokens — dark for discovery phase, light for election
+            const dk = isDiscoveryPhase;
+            const sh = {
+              bg:           dk ? '#0d0b09'                          : '#f5f0e8',
+              shadow:       dk ? '0 -8px 40px rgba(0,0,0,0.7)'     : '0 -8px 40px rgba(0,0,0,0.3)',
+              handle:       dk ? 'rgba(212,168,67,0.25)'            : 'rgba(160,120,8,0.25)',
+              heading:      dk ? '#e8c560'                           : '#3a2518',
+              subtitle:     dk ? 'rgba(212,168,67,0.55)'            : '#7a6a4a',
+              label:        dk ? 'rgba(212,168,67,0.7)'             : '#7a6a4a',
+              inputBg:      dk ? 'rgba(255,255,255,0.06)'           : '#fff',
+              inputBorder:  campaignMessage.trim()
+                              ? (dk ? 'rgba(212,168,67,0.5)' : 'rgba(212,168,67,0.4)')
+                              : (dk ? 'rgba(212,168,67,0.18)' : 'rgba(160,120,8,0.15)'),
+              inputText:    dk ? 'rgba(255,255,255,0.88)'           : '#3a2518',
+              charColor:    campaignMessage.length >= MAX_CHARS - 20 ? '#e05555' : (dk ? 'rgba(212,168,67,0.65)' : '#a07808'),
+              cancelBg:     dk ? 'rgba(255,255,255,0.07)'           : 'rgba(160,120,8,0.08)',
+              cancelBorder: dk ? '1px solid rgba(255,255,255,0.12)' : '1px solid rgba(160,120,8,0.2)',
+              cancelColor:  dk ? 'rgba(255,255,255,0.55)'           : '#a07808',
+            };
+            return (
             <motion.div
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
@@ -171,15 +191,15 @@ export const MaireCandidacySection = React.memo(function MaireCandidacySection({
                 transition={{ type: 'spring', damping: 28, stiffness: 300 }}
                 className="w-full max-w-lg rounded-t-3xl p-5 pb-8"
                 style={{
-                  background: '#f5f0e8',
-                  boxShadow: '0 -8px 40px rgba(0,0,0,0.3)',
+                  background: sh.bg,
+                  boxShadow: sh.shadow,
                   bottom: kbOffset > 0 ? kbOffset : 0,
                   position: 'relative',
                   transition: 'bottom 0.25s ease-out',
                 }}
                 onClick={(e) => e.stopPropagation()}
               >
-                <div className="w-10 h-1 rounded-full mx-auto mb-4" style={{ background: 'rgba(160,120,8,0.25)' }} />
+                <div className="w-10 h-1 rounded-full mx-auto mb-4" style={{ background: sh.handle }} />
 
                 {/* Header — hidden when input is focused */}
                 <AnimatePresence initial={false}>
@@ -197,10 +217,10 @@ export const MaireCandidacySection = React.memo(function MaireCandidacySection({
                           <Crown size={18} style={{ color: '#0a0e1a' }} />
                         </div>
                         <div>
-                          <h3 style={{ fontFamily: '"Cinzel", serif', color: '#3a2518', fontSize: '1rem', fontWeight: 700 }}>
+                          <h3 style={{ fontFamily: '"Cinzel", serif', color: sh.heading, fontSize: '1rem', fontWeight: 700 }}>
                             Candidature au poste de Maire
                           </h3>
-                          <p style={{ color: '#7a6a4a', fontSize: '0.65rem', marginTop: 2 }}>
+                          <p style={{ color: sh.subtitle, fontSize: '0.65rem', marginTop: 2 }}>
                             Convainquez les villageois de voter pour vous !
                           </p>
                         </div>
@@ -209,7 +229,7 @@ export const MaireCandidacySection = React.memo(function MaireCandidacySection({
                   )}
                 </AnimatePresence>
 
-                <label style={{ fontFamily: '"Cinzel", serif', color: '#7a6a4a', fontSize: '0.7rem', fontWeight: 600, display: 'block', marginBottom: 6 }}>
+                <label style={{ fontFamily: '"Cinzel", serif', color: sh.label, fontSize: '0.7rem', fontWeight: 600, display: 'block', marginBottom: 6 }}>
                   Message de campagne <span style={{ color: '#c41e3a' }}>*</span>
                 </label>
                 <div className="relative mb-2">
@@ -225,13 +245,13 @@ export const MaireCandidacySection = React.memo(function MaireCandidacySection({
                     rows={3}
                     className="w-full rounded-xl px-3.5 py-3 outline-none resize-none"
                     style={{
-                      background: '#fff',
-                      border: `1.5px solid ${campaignMessage.trim() ? 'rgba(212,168,67,0.4)' : 'rgba(160,120,8,0.15)'}`,
-                      color: '#3a2518',
+                      background: sh.inputBg,
+                      border: `1.5px solid ${sh.inputBorder}`,
+                      color: sh.inputText,
                       fontSize: '0.8rem',
                       lineHeight: 1.5,
                       fontFamily: 'inherit',
-                      boxShadow: 'inset 0 1px 3px rgba(0,0,0,0.06)',
+                      boxShadow: dk ? 'inset 0 1px 3px rgba(0,0,0,0.3)' : 'inset 0 1px 3px rgba(0,0,0,0.06)',
                       paddingBottom: isInputFocused ? '2.4rem' : '1.75rem',
                     }}
                   />
@@ -241,7 +261,7 @@ export const MaireCandidacySection = React.memo(function MaireCandidacySection({
                     style={{
                       left: isInputFocused ? 12 : undefined,
                       right: isInputFocused ? undefined : 12,
-                      color: campaignMessage.length >= (MAX_CHARS - 20) ? '#c41e3a' : '#a07808',
+                      color: sh.charColor,
                       fontSize: '0.55rem',
                       fontFamily: '"Cinzel", serif',
                       opacity: 0.7,
@@ -260,7 +280,6 @@ export const MaireCandidacySection = React.memo(function MaireCandidacySection({
                         exit={{ opacity: 0, scale: 0.7 }}
                         transition={{ duration: 0.15 }}
                         onMouseDown={(e) => {
-                          // Use onMouseDown to fire before onBlur
                           e.preventDefault();
                           if (campaignMessage.trim() && currentPlayerId !== null) {
                             onDeclareCandidacy?.(currentPlayerId, campaignMessage.trim());
@@ -272,8 +291,8 @@ export const MaireCandidacySection = React.memo(function MaireCandidacySection({
                         style={{
                           background: campaignMessage.trim()
                             ? 'linear-gradient(135deg, #d4a843, #b8960a)'
-                            : 'rgba(160,120,8,0.12)',
-                          color: campaignMessage.trim() ? '#0a0e1a' : 'rgba(160,120,8,0.4)',
+                            : (dk ? 'rgba(212,168,67,0.1)' : 'rgba(160,120,8,0.12)'),
+                          color: campaignMessage.trim() ? '#0a0e1a' : (dk ? 'rgba(212,168,67,0.3)' : 'rgba(160,120,8,0.4)'),
                           boxShadow: campaignMessage.trim() ? '0 2px 8px rgba(212,168,67,0.4)' : 'none',
                           cursor: campaignMessage.trim() ? 'pointer' : 'not-allowed',
                           transition: 'background 0.15s, box-shadow 0.15s',
@@ -303,9 +322,9 @@ export const MaireCandidacySection = React.memo(function MaireCandidacySection({
                         onClick={() => setShowCandidacyModal(false)}
                         className="flex-1 flex items-center justify-center gap-2 py-3 rounded-xl"
                         style={{
-                          background: 'rgba(160,120,8,0.08)',
-                          border: '1px solid rgba(160,120,8,0.2)',
-                          color: '#a07808',
+                          background: sh.cancelBg,
+                          border: sh.cancelBorder,
+                          color: sh.cancelColor,
                           fontFamily: '"Cinzel", serif',
                           fontSize: '0.75rem',
                         }}
@@ -326,8 +345,8 @@ export const MaireCandidacySection = React.memo(function MaireCandidacySection({
                         style={{
                           background: campaignMessage.trim()
                             ? 'linear-gradient(135deg, #d4a843, #b8960a)'
-                            : 'rgba(160,120,8,0.08)',
-                          color: campaignMessage.trim() ? '#0a0e1a' : '#a0780880',
+                            : (dk ? 'rgba(212,168,67,0.08)' : 'rgba(160,120,8,0.08)'),
+                          color: campaignMessage.trim() ? '#0a0e1a' : (dk ? 'rgba(212,168,67,0.3)' : '#a0780880'),
                           fontFamily: '"Cinzel", serif',
                           fontSize: '0.75rem',
                           fontWeight: 700,
@@ -344,7 +363,8 @@ export const MaireCandidacySection = React.memo(function MaireCandidacySection({
                 </AnimatePresence>
               </motion.div>
             </motion.div>
-          )}
+            );
+          })()}
         </AnimatePresence>
       , document.body)}
     </>
