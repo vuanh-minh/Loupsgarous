@@ -371,7 +371,13 @@ export function SetupMidGameView({
           <div className="mt-4 mb-2">
             <motion.button
               whileTap={{ scale: 0.97 }}
-              onClick={() => { setSelectedWinner(null); setShowEndGameConfirm(true); }}
+              onClick={() => {
+                const aliveWolves = state.players.filter(
+                  (p) => p.alive && getRoleById(p.role)?.team === 'werewolf',
+                );
+                setSelectedWinner(aliveWolves.length > 0 ? 'werewolf' : 'village');
+                setShowEndGameConfirm(true);
+              }}
               className="w-full flex items-center justify-center gap-2.5 py-3 rounded-xl transition-colors"
               style={{
                 background: 'rgba(212,168,67,0.08)',
@@ -527,7 +533,7 @@ export function SetupMidGameView({
                 </h3>
               </div>
               <p style={{ color: 'rgba(255,255,255,0.6)', fontSize: '0.75rem', lineHeight: 1.6, marginBottom: '1.25rem' }}>
-                Quelle équipe remporte la victoire ?
+                Équipe gagnante détectée automatiquement. Vous pouvez modifier si nécessaire.
               </p>
 
               {/* Winner selection */}
