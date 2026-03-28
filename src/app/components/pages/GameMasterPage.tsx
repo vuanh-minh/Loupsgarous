@@ -1649,6 +1649,7 @@ export function GameMasterPage() {
                   t={t}
                   updateState={updateState}
                   onResetGame={relaunchGame}
+                  onEndGame={endGame}
                 />
               ) : (
                 <GameLobbyPanel

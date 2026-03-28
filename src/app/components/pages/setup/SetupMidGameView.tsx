@@ -3,7 +3,7 @@ import { AnimatePresence, motion } from 'motion/react';
 import {
   Swords, Eye, Camera, ClipboardPaste, Copy, CheckCheck,
   UserPlus, Check, X, Sparkles, ChevronDown, RotateCcw, AlertTriangle,
-  HeartPulse,
+  HeartPulse, Flag,
 } from 'lucide-react';
 import { type Player } from '../../../context/GameContext';
 import { type GameState } from '../../../context/gameTypes';
@@ -31,6 +31,7 @@ export function SetupMidGameView({
   state,
   updateState,
   onResetGame,
+  onEndGame,
 }: {
   gamePlayers: Player[];
   playerHeartbeats: HeartbeatMap;
@@ -45,6 +46,7 @@ export function SetupMidGameView({
   state: GameState;
   updateState: (fn: (s: GameState) => GameState) => void;
   onResetGame?: () => void;
+  onEndGame?: (winner: 'village' | 'werewolf' | 'lovers') => void;
 }) {
   const [newMidGameName, setNewMidGameName] = useState('');
   const [showMidGameInput, setShowMidGameInput] = useState(false);
@@ -52,6 +54,8 @@ export function SetupMidGameView({
   const [copiedId, setCopiedId] = useState<number | null>(null);
   const [showPlayerDropdown, setShowPlayerDropdown] = useState(false);
   const [showResetConfirm, setShowResetConfirm] = useState(false);
+  const [showEndGameConfirm, setShowEndGameConfirm] = useState(false);
+  const [selectedWinner, setSelectedWinner] = useState<'village' | 'werewolf' | 'lovers' | null>(null);
 
   const midGameFormRef = useRef<HTMLDivElement>(null);
 
@@ -362,9 +366,32 @@ export function SetupMidGameView({
           </div>
         )}
 
+        {/* End game button */}
+        {onEndGame && (
+          <div className="mt-4 mb-2">
+            <motion.button
+              whileTap={{ scale: 0.97 }}
+              onClick={() => { setSelectedWinner(null); setShowEndGameConfirm(true); }}
+              className="w-full flex items-center justify-center gap-2.5 py-3 rounded-xl transition-colors"
+              style={{
+                background: 'rgba(212,168,67,0.08)',
+                border: '1px solid rgba(212,168,67,0.25)',
+                color: '#d4a843',
+                fontFamily: '"Cinzel", serif',
+                fontSize: '0.75rem',
+                fontWeight: 600,
+                cursor: 'pointer',
+              }}
+            >
+              <Flag size={15} />
+              Terminer la partie
+            </motion.button>
+          </div>
+        )}
+
         {/* Reset game button */}
         {onResetGame && (
-          <div className="mt-6 mb-2">
+          <div className="mt-2 mb-2">
             <motion.button
               whileTap={{ scale: 0.97 }}
               onClick={() => setShowResetConfirm(true)}
@@ -459,6 +486,119 @@ export function SetupMidGameView({
                   }}
                 >
                   <RotateCcw size={13} />
+                  Confirmer
+                </motion.button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+        {/* End game confirmation modal */}
+        {showEndGameConfirm && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[9999] flex items-center justify-center"
+            style={{ background: 'rgba(0,0,0,0.75)', backdropFilter: 'blur(6px)' }}
+            onClick={() => setShowEndGameConfirm(false)}
+          >
+            <motion.div
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.9, opacity: 0 }}
+              transition={{ type: 'spring', damping: 25, stiffness: 300 }}
+              className="w-[90%] max-w-sm rounded-2xl p-6"
+              style={{
+                background: 'linear-gradient(180deg, #1a1520 0%, #0f0e1e 100%)',
+                border: '1px solid rgba(212,168,67,0.25)',
+                boxShadow: '0 20px 60px rgba(0,0,0,0.6)',
+              }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="flex items-center gap-3 mb-4">
+                <div
+                  className="w-10 h-10 rounded-full flex items-center justify-center shrink-0"
+                  style={{ background: 'rgba(212,168,67,0.12)', border: '2px solid rgba(212,168,67,0.3)' }}
+                >
+                  <Flag size={18} style={{ color: '#d4a843' }} />
+                </div>
+                <h3 style={{ fontFamily: '"Cinzel", serif', color: '#d4a843', fontSize: '1rem', fontWeight: 700 }}>
+                  Terminer la partie
+                </h3>
+              </div>
+              <p style={{ color: 'rgba(255,255,255,0.6)', fontSize: '0.75rem', lineHeight: 1.6, marginBottom: '1.25rem' }}>
+                Quelle équipe remporte la victoire ?
+              </p>
+
+              {/* Winner selection */}
+              <div className="flex flex-col gap-2 mb-5">
+                {[
+                  { value: 'village' as const, label: 'Le Village', emoji: '🏡' },
+                  { value: 'werewolf' as const, label: 'Les Loups-Garous', emoji: '🐺' },
+                  ...(state.loverPairs && state.loverPairs.length > 0
+                    ? [{ value: 'lovers' as const, label: 'Les Amoureux', emoji: '💘' }]
+                    : []),
+                ].map(({ value, label, emoji }) => (
+                  <button
+                    key={value}
+                    onClick={() => setSelectedWinner(value)}
+                    className="w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all"
+                    style={{
+                      background: selectedWinner === value ? 'rgba(212,168,67,0.15)' : 'rgba(255,255,255,0.03)',
+                      border: `1.5px solid ${selectedWinner === value ? 'rgba(212,168,67,0.5)' : 'rgba(255,255,255,0.08)'}`,
+                      cursor: 'pointer',
+                    }}
+                  >
+                    <span style={{ fontSize: '1.25rem' }}>{emoji}</span>
+                    <span style={{ fontFamily: '"Cinzel", serif', color: selectedWinner === value ? '#d4a843' : 'rgba(255,255,255,0.7)', fontSize: '0.75rem', fontWeight: 600 }}>
+                      {label}
+                    </span>
+                    {selectedWinner === value && (
+                      <Check size={14} style={{ color: '#d4a843', marginLeft: 'auto' }} />
+                    )}
+                  </button>
+                ))}
+              </div>
+
+              <div className="flex gap-3">
+                <button
+                  onClick={() => setShowEndGameConfirm(false)}
+                  className="flex-1 py-2.5 rounded-xl transition-colors"
+                  style={{
+                    background: 'rgba(255,255,255,0.05)',
+                    border: '1px solid rgba(255,255,255,0.1)',
+                    color: 'rgba(255,255,255,0.6)',
+                    fontFamily: '"Cinzel", serif',
+                    fontSize: '0.7rem',
+                    fontWeight: 600,
+                    cursor: 'pointer',
+                  }}
+                >
+                  Annuler
+                </button>
+                <motion.button
+                  whileTap={{ scale: 0.95 }}
+                  disabled={!selectedWinner}
+                  onClick={() => {
+                    if (!selectedWinner) return;
+                    setShowEndGameConfirm(false);
+                    onEndGame?.(selectedWinner);
+                  }}
+                  className="flex-1 py-2.5 rounded-xl flex items-center justify-center gap-2 transition-all"
+                  style={{
+                    background: selectedWinner
+                      ? 'linear-gradient(135deg, rgba(212,168,67,0.9), rgba(184,150,10,0.9))'
+                      : 'rgba(212,168,67,0.15)',
+                    border: `1px solid ${selectedWinner ? 'rgba(212,168,67,0.6)' : 'rgba(212,168,67,0.2)'}`,
+                    color: selectedWinner ? '#0a0e1a' : 'rgba(212,168,67,0.4)',
+                    fontFamily: '"Cinzel", serif',
+                    fontSize: '0.7rem',
+                    fontWeight: 700,
+                    cursor: selectedWinner ? 'pointer' : 'not-allowed',
+                    boxShadow: selectedWinner ? '0 4px 16px rgba(212,168,67,0.3)' : 'none',
+                  }}
+                >
+                  <Flag size={13} />
                   Confirmer
                 </motion.button>
               </div>

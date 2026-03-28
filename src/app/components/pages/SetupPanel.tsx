@@ -39,6 +39,7 @@ export function SetupPanel({
   t,
   updateState,
   onResetGame,
+  onEndGame,
 }: {
   state: GameState;
   playerEntries: PlayerEntry[];
@@ -59,6 +60,7 @@ export function SetupPanel({
   t: GameThemeTokens;
   updateState: (fn: (s: GameState) => GameState) => void;
   onResetGame?: () => void;
+  onEndGame?: (winner: 'village' | 'werewolf' | 'lovers') => void;
 }) {
   const MAX_PLAYERS = 60;
   const MIN_PLAYERS = 6;
@@ -237,6 +239,7 @@ export function SetupPanel({
         state={state}
         updateState={updateState}
         onResetGame={onResetGame}
+        onEndGame={onEndGame}
       />
     );
   }
