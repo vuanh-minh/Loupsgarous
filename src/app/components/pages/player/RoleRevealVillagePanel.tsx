@@ -171,21 +171,18 @@ export const RoleRevealVillagePanel = React.memo(function RoleRevealVillagePanel
       if (tags) tags.forEach((tag) => allTags.add(tag));
     });
 
-    // Assign each player to their FIRST tag (avoid duplicates across groups)
-    const assigned = new Set<number>();
+    // Include player in every group they belong to (multi-tag support)
+    const taggedPlayerIds = new Set<number>();
     const groups: { tag: string; players: Player[] }[] = [];
     for (const tag of allTags) {
-      const tagPlayers = players.filter((p) => {
-        if (assigned.has(p.id)) return false;
-        return (playerTags[p.id] || []).includes(tag);
-      });
+      const tagPlayers = players.filter((p) => (playerTags[p.id] || []).includes(tag));
       if (tagPlayers.length > 0) {
-        tagPlayers.forEach((p) => assigned.add(p.id));
+        tagPlayers.forEach((p) => taggedPlayerIds.add(p.id));
         groups.push({ tag, players: tagPlayers });
       }
     }
 
-    const untagged = players.filter((p) => !assigned.has(p.id));
+    const untagged = players.filter((p) => !taggedPlayerIds.has(p.id));
     return { tagGroups: groups, untaggedPlayers: untagged };
   }, [players, playerTags]);
 
