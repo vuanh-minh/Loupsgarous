@@ -269,7 +269,7 @@ export const MaireCandidacySection = React.memo(function MaireCandidacySection({
                     disabled={!campaignMessage.trim()}
                   >
                     <Crown size={14} />
-                    Confirmer la candidature
+                    Candidater
                   </motion.button>
                 </div>
               </motion.div>
