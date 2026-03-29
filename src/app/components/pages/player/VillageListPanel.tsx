@@ -395,14 +395,6 @@ export function VillageListPanel({
                 }}
               >
                 <PAvatar player={p} size="text-2xl" style={isAway ? { filter: 'grayscale(0.6)' } : undefined} />
-                {isSelf && (
-                  <div
-                    className="absolute -bottom-1 -right-1 w-4 h-4 rounded-full flex items-center justify-center"
-                    style={{ background: t.gold, border: `2px solid ${t.dotBorderColor}` }}
-                  >
-                    <CircleCheck size={8} style={{ color: t.pageBgSolid }} />
-                  </div>
-                )}
                 {/* Hypothesis badge */}
                 {hypothesisRole && !isSelf && (
                   <motion.div
