@@ -1375,6 +1375,7 @@ export function PlayerPage() {
                         />
                       )
                     }
+                    earlyVotes={state.earlyVotes ?? {}}
                   />}
                   {!(currentPlayer?.alive ?? false) && (
                     <div className="flex-1 overflow-y-auto">

@@ -58,6 +58,7 @@ export function GamePanel({
   roleBackContent,
   onSetHypothesis,
   gameId,
+  earlyVotes = {},
 }: GamePanelProps) {
   const voteSectionRef = useRef<VoteSectionHandle>(null);
 
@@ -67,6 +68,14 @@ export function GamePanel({
   const isVotePhase = !isNight && dayStep === 'vote';
   const myVote = currentPlayerId !== null ? votes[currentPlayerId] : undefined;
   const isCandidate = currentPlayerId !== null && maireCandidates.includes(currentPlayerId);
+
+  // Early votes: who voted for current player for next elimination
+  const votedForMeIds = currentPlayerId !== null
+    ? Object.entries(earlyVotes || {})
+      .filter(([_, targetId]) => targetId === currentPlayerId)
+      .map(([voterId]) => parseInt(voterId))
+    : [];
+  const votersForMe = allPlayers.filter((p) => votedForMeIds.includes(p.id));
 
   // Vote counts (Maire's vote = 2 during regular votes, not during Maire election)
   // Dernière volonté (dead players who used last will) included in tally
@@ -106,6 +115,32 @@ export function GamePanel({
         />
 
         {/* Hero banner removed — maire election now uses immersive timer */}
+
+        {/* Early vote notification — show who voted for current player */}
+        {votersForMe.length > 0 && !isNight && (
+          <motion.div
+            initial={{ opacity: 0, y: -8 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -8 }}
+            className="mb-3 rounded-xl px-4 py-3 flex items-start gap-3"
+            style={{
+              background: 'rgba(101, 37, 41, 0.12)',
+              border: '1px solid rgba(230, 160, 160, 0.3)',
+            }}
+          >
+            <div className="flex-shrink-0 pt-0.5">
+              <CircleCheck size={16} style={{ color: '#e8a0a0' }} />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p style={{ fontSize: '0.7rem', fontWeight: 600, color: '#e8a0a0', marginBottom: '0.4rem', fontFamily: '"Cinzel", serif' }}>
+                Vous êtes voté pour le prochain tour
+              </p>
+              <p style={{ fontSize: '0.65rem', color: 'rgba(255,255,255,0.7)', lineHeight: 1.4 }}>
+                {votersForMe.map((v) => v.name).join(', ')}
+              </p>
+            </div>
+          </motion.div>
+        )}
 
         {/* Phase status card — 3D flip during night */}
         <div
