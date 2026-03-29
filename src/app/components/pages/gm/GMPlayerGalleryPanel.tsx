@@ -97,6 +97,7 @@ export function GMPlayerGalleryPanel({
   const [selectedGalleryId, setSelectedGalleryId] = useState<number | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [sortMode, setSortMode] = useState<'default' | 'hints' | 'tasks'>('default');
+  const [sortDir, setSortDir] = useState<'desc' | 'asc'>('desc');
   const [newHintText, setNewHintText] = useState('');
   const [newHintPriority, setNewHintPriority] = useState<1 | 2 | 3>(1);
   const hintInputRef = useRef<HTMLInputElement | null>(null);
@@ -308,13 +309,17 @@ export function GMPlayerGalleryPanel({
       ? base.filter((a) => a.name.toLowerCase().includes(searchQuery.toLowerCase()))
       : base;
     if (sortMode === 'hints') {
-      return [...filtered].sort((a, b) => (galleryHints[b.id]?.length ?? 0) - (galleryHints[a.id]?.length ?? 0));
+      return [...filtered].sort((a, b) => sortDir === 'desc'
+        ? (galleryHints[b.id]?.length ?? 0) - (galleryHints[a.id]?.length ?? 0)
+        : (galleryHints[a.id]?.length ?? 0) - (galleryHints[b.id]?.length ?? 0));
     }
     if (sortMode === 'tasks') {
-      return [...filtered].sort((a, b) => (galleryTasks[b.id]?.length ?? 0) - (galleryTasks[a.id]?.length ?? 0));
+      return [...filtered].sort((a, b) => sortDir === 'desc'
+        ? (galleryTasks[b.id]?.length ?? 0) - (galleryTasks[a.id]?.length ?? 0)
+        : (galleryTasks[a.id]?.length ?? 0) - (galleryTasks[b.id]?.length ?? 0));
     }
     return filtered;
-  }, [searchQuery, deletedAvatarIds, sortMode, galleryHints, galleryTasks]);
+  }, [searchQuery, deletedAvatarIds, sortMode, sortDir, galleryHints, galleryTasks]);
 
   const selectedAvatar = useMemo(
     () => (selectedGalleryId !== null ? AVATAR_GALLERY.find((a) => a.id === selectedGalleryId) ?? null : null),
@@ -1061,26 +1066,38 @@ export function GMPlayerGalleryPanel({
         { id: 'default' as const, label: 'Par défaut' },
         { id: 'hints' as const, label: 'Indices pré-configurés' },
         { id: 'tasks' as const, label: 'Tâches pré-configurées' },
-      ]).map(({ id, label }) => (
-        <button
-          key={id}
-          onClick={() => setSortMode(id)}
-          className="flex items-center gap-1 px-2 py-1 rounded-lg transition-all"
-          style={{
-            background: sortMode === id ? `${t.gold}20` : `rgba(255,255,255,0.03)`,
-            border: `1px solid ${sortMode === id ? `${t.gold}50` : 'rgba(255,255,255,0.08)'}`,
-            color: sortMode === id ? t.gold : t.textDim,
-            fontSize: '0.55rem',
-            fontFamily: '"Cinzel", serif',
-            fontWeight: sortMode === id ? 700 : 400,
-            cursor: 'pointer',
-          }}
-        >
-          {id === 'hints' && <Lightbulb size={9} />}
-          {id === 'tasks' && <ClipboardList size={9} />}
-          {label}
-        </button>
-      ))}
+      ]).map(({ id, label }) => {
+        const isActive = sortMode === id && id !== 'default';
+        return (
+          <button
+            key={id}
+            onClick={() => {
+              if (id === 'default') { setSortMode('default'); return; }
+              if (sortMode === id) { setSortDir((d) => d === 'desc' ? 'asc' : 'desc'); }
+              else { setSortMode(id); setSortDir('desc'); }
+            }}
+            className="flex items-center gap-1 px-2 py-1 rounded-lg transition-all"
+            style={{
+              background: sortMode === id ? `${t.gold}20` : `rgba(255,255,255,0.03)`,
+              border: `1px solid ${sortMode === id ? `${t.gold}50` : 'rgba(255,255,255,0.08)'}`,
+              color: sortMode === id ? t.gold : t.textDim,
+              fontSize: '0.55rem',
+              fontFamily: '"Cinzel", serif',
+              fontWeight: sortMode === id ? 700 : 400,
+              cursor: 'pointer',
+            }}
+          >
+            {id === 'hints' && <Lightbulb size={9} />}
+            {id === 'tasks' && <ClipboardList size={9} />}
+            {label}
+            {isActive && (
+              <span style={{ fontSize: '0.6rem', lineHeight: 1 }}>
+                {sortDir === 'desc' ? '↓' : '↑'}
+              </span>
+            )}
+          </button>
+        );
+      })}
     </div>
   );
 
