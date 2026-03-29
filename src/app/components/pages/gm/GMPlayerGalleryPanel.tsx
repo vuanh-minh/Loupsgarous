@@ -96,6 +96,7 @@ export function GMPlayerGalleryPanel({
   // ── Local state ──
   const [selectedGalleryId, setSelectedGalleryId] = useState<number | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
+  const [sortMode, setSortMode] = useState<'default' | 'hints' | 'tasks'>('default');
   const [newHintText, setNewHintText] = useState('');
   const [newHintPriority, setNewHintPriority] = useState<1 | 2 | 3>(1);
   const hintInputRef = useRef<HTMLInputElement | null>(null);
@@ -300,13 +301,20 @@ export function GMPlayerGalleryPanel({
     }
   }, []);
 
-  // ── Filtered gallery avatars ──
+  // ── Filtered + sorted gallery avatars ──
   const filteredAvatars = useMemo(() => {
     const base = AVATAR_GALLERY.filter((a) => !deletedAvatarIds.has(a.id));
-    if (!searchQuery.trim()) return base;
-    const q = searchQuery.toLowerCase();
-    return base.filter((a) => a.name.toLowerCase().includes(q));
-  }, [searchQuery, deletedAvatarIds]);
+    const filtered = searchQuery.trim()
+      ? base.filter((a) => a.name.toLowerCase().includes(searchQuery.toLowerCase()))
+      : base;
+    if (sortMode === 'hints') {
+      return [...filtered].sort((a, b) => (galleryHints[b.id]?.length ?? 0) - (galleryHints[a.id]?.length ?? 0));
+    }
+    if (sortMode === 'tasks') {
+      return [...filtered].sort((a, b) => (galleryTasks[b.id]?.length ?? 0) - (galleryTasks[a.id]?.length ?? 0));
+    }
+    return filtered;
+  }, [searchQuery, deletedAvatarIds, sortMode, galleryHints, galleryTasks]);
 
   const selectedAvatar = useMemo(
     () => (selectedGalleryId !== null ? AVATAR_GALLERY.find((a) => a.id === selectedGalleryId) ?? null : null),
@@ -1046,6 +1054,36 @@ export function GMPlayerGalleryPanel({
     </div>
   );
 
+  /* ── Sort chips ── */
+  const sortChips = (
+    <div className="flex items-center gap-1.5 flex-wrap">
+      {([
+        { id: 'default' as const, label: 'Par défaut' },
+        { id: 'hints' as const, label: 'Indices pré-configurés' },
+        { id: 'tasks' as const, label: 'Tâches pré-configurées' },
+      ]).map(({ id, label }) => (
+        <button
+          key={id}
+          onClick={() => setSortMode(id)}
+          className="flex items-center gap-1 px-2 py-1 rounded-lg transition-all"
+          style={{
+            background: sortMode === id ? `${t.gold}20` : `rgba(255,255,255,0.03)`,
+            border: `1px solid ${sortMode === id ? `${t.gold}50` : 'rgba(255,255,255,0.08)'}`,
+            color: sortMode === id ? t.gold : t.textDim,
+            fontSize: '0.55rem',
+            fontFamily: '"Cinzel", serif',
+            fontWeight: sortMode === id ? 700 : 400,
+            cursor: 'pointer',
+          }}
+        >
+          {id === 'hints' && <Lightbulb size={9} />}
+          {id === 'tasks' && <ClipboardList size={9} />}
+          {label}
+        </button>
+      ))}
+    </div>
+  );
+
   /* ── Import bar ── */
   const importBar = selectedForImport.size > 0 ? (
     <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }}>
@@ -1126,7 +1164,8 @@ export function GMPlayerGalleryPanel({
               <span className="px-2 py-0.5 rounded-md" style={{ background: `${t.gold}15`, color: t.gold, fontSize: '0.65rem', fontWeight: 700, fontFamily: '"Cinzel", serif' }}>{AVATAR_GALLERY.length} joueurs</span>
             </div>
           </div>
-          <div className="mb-4">{searchBar}</div>
+          <div className="mb-2">{searchBar}</div>
+          <div className="mb-4">{sortChips}</div>
           {importBar && <div className="mb-4">{importBar}</div>}
           {loadingHints ? loadingState : (
             <>
@@ -1172,7 +1211,8 @@ export function GMPlayerGalleryPanel({
                 <span className="px-1.5 py-0.5 rounded-md" style={{ background: `${t.gold}15`, color: t.gold, fontSize: '0.55rem', fontWeight: 700, fontFamily: '"Cinzel", serif' }}>{AVATAR_GALLERY.length - deletedAvatarIds.size}</span>
               </div>
             </div>
-            <div className="mb-3">{searchBar}</div>
+            <div className="mb-2">{searchBar}</div>
+            <div className="mb-3">{sortChips}</div>
             {importBar && <div className="mb-3">{importBar}</div>}
           </div>
 
