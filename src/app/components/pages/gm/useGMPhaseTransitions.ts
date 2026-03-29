@@ -367,6 +367,7 @@ export function useGMPhaseTransitions(deps: GMPhaseTransitionDeps) {
       if (Object.keys(ev).length === 0) return s;
       const aliveIds = new Set(s.players.filter((p) => p.alive).map((p) => p.id));
       const appliedVotes: Record<number, number> = { ...s.votes };
+      const newNominations: Record<number, number> = { ...s.nominations };
       const lastWillUsed = s.lastWillUsed ?? {};
       for (const [voterId, targetId] of Object.entries(ev)) {
         const vid = Number(voterId);
@@ -376,9 +377,13 @@ export function useGMPhaseTransitions(deps: GMPhaseTransitionDeps) {
         // Target must still be alive
         if (aliveIds.has(targetId)) {
           appliedVotes[vid] = targetId;
+          // Track nominator: first early voter to target this player becomes the nominator
+          if (!(targetId in newNominations)) {
+            newNominations[targetId] = vid;
+          }
         }
       }
-      return { ...s, votes: appliedVotes, earlyVotes: {} };
+      return { ...s, votes: appliedVotes, earlyVotes: {}, nominations: newNominations };
     });
 
     // Start phase timer for day
