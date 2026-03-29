@@ -340,6 +340,7 @@ export function VillageListPanel({
           const hypothesisRole = hypothesisRoleId ? getRoleById(hypothesisRoleId) : null;
           const isHighlighted = highlightedPlayerId === p.id;
           const isAway = villagePresentIds && !villagePresentIds.includes(p.id);
+          const isVotedNextTurn = Object.values(earlyVotes || {}).includes(p.id);
           const isCurrentPlayerAlive = currentPlayerId !== null && alivePlayers.some((p) => p.id === currentPlayerId);
           const startLongPress = (e: React.PointerEvent) => {
             if (!isWolf || isSelf || !onSetWolfTarget || !isCurrentPlayerAlive) return;
@@ -382,19 +383,31 @@ export function VillageListPanel({
                     ? `${t.gold}2e`
                     : isSelf
                       ? t.goldBg
-                      : `rgba(${t.overlayChannel}, 0.04)`,
+                      : isVotedNextTurn
+                        ? 'rgba(101, 37, 41, 0.08)'
+                        : `rgba(${t.overlayChannel}, 0.04)`,
                   border: `2px solid ${
                     isHighlighted
                       ? t.gold
                       : isSelf
                         ? t.gold
-                        : `rgba(${t.overlayChannel}, 0.1)`
+                        : isVotedNextTurn
+                          ? '#652529'
+                          : `rgba(${t.overlayChannel}, 0.1)`
                   }`,
                   overflow: 'visible',
                   boxShadow: isHighlighted ? `0 0 12px ${t.gold}80, 0 0 24px ${t.gold}33` : 'none',
                 }}
               >
                 <PAvatar player={p} size="text-2xl" style={isAway ? { filter: 'grayscale(0.6)' } : undefined} />
+                {isVotedNextTurn && (
+                  <div
+                    className="absolute -bottom-1 -right-1 w-4 h-4 rounded-full flex items-center justify-center"
+                    style={{ background: '#652529', border: '2px solid rgba(101, 37, 41, 0.6)' }}
+                  >
+                    <CircleCheck size={8} style={{ color: '#e8a0a0' }} />
+                  </div>
+                )}
                 {/* Hypothesis badge */}
                 {hypothesisRole && !isSelf && (
                   <motion.div
