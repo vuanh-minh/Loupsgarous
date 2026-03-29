@@ -49,5 +49,4 @@ export interface GamePanelProps {
   roleBackContent?: React.ReactNode;
   onSetHypothesis?: (targetPlayerId: number, roleId: string) => void;
   gameId?: string;
-  earlyVotes?: Record<number, number>;
 }
