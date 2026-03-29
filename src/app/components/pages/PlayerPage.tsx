@@ -44,6 +44,7 @@ import { RoleRevealVillagePanel } from './player/RoleRevealVillagePanel';
 import { JoinVillageScreen } from './player/JoinVillageScreen';
 const nightVillageBg = '/assets/backgrounds/night-village-player.png';
 const dayVoteBg = '/assets/backgrounds/day-village-player.png';
+const dayVillageMobBg = '/assets/backgrounds/day-village-mob.png';
 
 export function PlayerPage() {
   const { shortCode: shortCodeParam } = useParams();
@@ -645,6 +646,25 @@ export function PlayerPage() {
 
   const isNight = state.phase === 'night';
 
+  // ── Detect night victims (killed last night) to select day background ──
+  const hadNightVictimsThisTurn = React.useMemo(() => {
+    if (isNight) return false;
+    return deadPlayers.some((p) =>
+      state.events.some(
+        (e) =>
+          e.turn === state.turn &&
+          e.phase === 'night' &&
+          e.message.includes(p.name) &&
+          (e.message.includes('devore') ||
+            e.message.includes('empoisonne') ||
+            e.message.includes('meurt de chagrin') ||
+            e.message.includes('Chasseur tire')),
+      ),
+    );
+  }, [isNight, deadPlayers, state.events, state.turn]);
+
+  const dayBg = hadNightVictimsThisTurn ? dayVillageMobBg : dayVoteBg;
+
   // Dynamically tint the browser chrome (address bar + toolbar) based on phase & tab
   // NOTE: must be placed after isNight, isPracticeMode, and activePanel are declared
   useEffect(() => {
@@ -959,7 +979,7 @@ export function PlayerPage() {
             key={isNight || isPracticeMode ? 'night' : 'day'}
             alt=""
             className="absolute w-full h-full object-cover"
-            src={isNight || isPracticeMode ? nightVillageBg : dayVoteBg}
+            src={isNight || isPracticeMode ? nightVillageBg : dayBg}
             style={{ objectPosition: 'center top' }}
           />
           <div
@@ -997,7 +1017,7 @@ export function PlayerPage() {
             key={isNight || isPracticeMode ? 'night' : 'day'}
             alt=""
             className="absolute w-full h-full object-cover"
-            src={isNight || isPracticeMode ? nightVillageBg : dayVoteBg}
+            src={isNight || isPracticeMode ? nightVillageBg : dayBg}
             style={{ objectPosition: 'center top' }}
           />
           <div className="absolute inset-0" style={{ backgroundImage: 'none' }} />
