@@ -832,7 +832,7 @@ export function PlayerPage() {
               if (!joinIds.includes(currentPlayer.id)) joinIds.push(currentPlayer.id);
               return { ...s, villagePresentIds: existing, midGameJoinIds: joinIds };
             });
-            serverJoinVillage(currentPlayer.id);
+            serverJoinVillage(currentPlayer.id).then(handlePostAction);
           }
         }}
         particlePositions={particlePositions}
