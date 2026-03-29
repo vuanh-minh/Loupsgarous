@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { useNavigate } from 'react-router';
 import {
   Moon, Sun, ChevronDown, Users, Sparkles,
-  CircleCheck, ScrollText, LogOut, Eye,
+  CircleCheck, ScrollText, LogOut, Eye, RefreshCw,
 } from 'lucide-react';
 import { type Player, type GameState } from '../../../context/GameContext';
 import { getRoleById, type RoleDefinition } from '../../../data/roles';
@@ -106,18 +106,26 @@ export const PlayerHeader = React.memo(function PlayerHeader({
         <div className="flex items-center gap-2 min-w-0">
           {gmBackButton}
 
-          {/* Phase + alive chip */}
-          <div
-            className="inline-flex items-center gap-2.5 px-3.5 py-1.5 rounded-full"
+          {/* Phase + alive chip — tap to resync */}
+          <button
+            onClick={onResync}
+            disabled={isResyncing}
+            className="inline-flex items-center gap-2.5 px-3.5 py-1.5 rounded-full active:scale-95 transition-transform"
             style={{
               background: chipColors.bg,
               border: `1px solid ${chipColors.border}`,
               backdropFilter: isCleanChip ? undefined : 'blur(16px)',
               boxShadow: isCleanChip ? 'none' : '0 2px 8px rgba(0,0,0,0.3)',
               transition: 'background 0.3s, border-color 0.3s, box-shadow 0.3s',
+              cursor: isResyncing ? 'default' : 'pointer',
             }}
+            title="Resynchroniser"
           >
-            <PhaseIcon size={13} style={{ color: isLightHeader ? '#D4A030' : phaseColor }} />
+            {isResyncing ? (
+              <RefreshCw size={13} className="animate-spin" style={{ color: isLightHeader ? '#D4A030' : phaseColor }} />
+            ) : (
+              <PhaseIcon size={13} style={{ color: isLightHeader ? '#D4A030' : phaseColor }} />
+            )}
             <span style={{
               fontFamily: '"Cinzel", serif',
               color: isLightHeader ? '#D4A030' : phaseColor,
@@ -141,7 +149,7 @@ export const PlayerHeader = React.memo(function PlayerHeader({
             }}>
               {alivePlayers.length}/{state.players.length}
             </span>
-          </div>
+          </button>
 
           {/* Simulation / Discovery badge */}
           {isSimulationMode && (
