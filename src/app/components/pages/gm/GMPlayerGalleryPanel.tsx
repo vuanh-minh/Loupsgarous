@@ -4,7 +4,7 @@ import {
   Users, Search, Plus, Trash2, Lightbulb,
   Check, X, UserPlus, Download, ClipboardList,
   Type, Hash, List as ListIcon, ImagePlus, Loader2,
-  Shield, ChevronDown, Map as MapIcon,
+  Shield, ChevronDown, Map as MapIcon, Pencil,
 } from 'lucide-react';
 import type { GameState, DynamicHint, TaskTemplate, QuestTaskInputType } from '../../../context/gameTypes';
 import type { GameThemeTokens } from '../../../context/gameTheme';
@@ -133,6 +133,20 @@ export function GMPlayerGalleryPanel({
   const [confirmDeleteId, setConfirmDeleteId] = useState<number | null>(null);
   const [deletingPlayer, setDeletingPlayer] = useState(false);
   const [deletedAvatarIds, setDeletedAvatarIds] = useState<Set<number>>(new Set());
+
+  // ── Inline edit state — hints ──
+  const [editingHintId, setEditingHintId] = useState<number | null>(null);
+  const [editHintText, setEditHintText] = useState('');
+  const [editHintPriority, setEditHintPriority] = useState<1 | 2 | 3>(1);
+  const [editHintImageUrl, setEditHintImageUrl] = useState<string | undefined>();
+
+  // ── Inline edit state — tasks ──
+  const [editingTaskId, setEditingTaskId] = useState<number | null>(null);
+  const [editTaskQuestion, setEditTaskQuestion] = useState('');
+  const [editTaskInputType, setEditTaskInputType] = useState<QuestTaskInputType>('text');
+  const [editTaskCorrectAnswer, setEditTaskCorrectAnswer] = useState('');
+  const [editTaskChoices, setEditTaskChoices] = useState<string[]>(['', '', '', '']);
+  const [editTaskImageUrl, setEditTaskImageUrl] = useState<string | undefined>();
 
   // Track which gallery IDs are already in the current game
   const usedGalleryIds = useMemo(() => {
@@ -454,6 +468,45 @@ export function GMPlayerGalleryPanel({
     };
     saveGalleryTasks(newTasks);
   }, [selectedGalleryId, galleryTasks, saveGalleryTasks]);
+
+  // ── Update hint template (inline edit) ──
+  const updateHint = useCallback(() => {
+    if (selectedGalleryId === null || editingHintId === null) return;
+    const current = galleryHints[selectedGalleryId] ?? [];
+    const newHints = {
+      ...galleryHints,
+      [selectedGalleryId]: current.map((h) =>
+        h.id === editingHintId
+          ? { ...h, text: editHintText.trim(), priority: editHintPriority, imageUrl: editHintImageUrl }
+          : h
+      ),
+    };
+    saveGalleryHints(newHints);
+    setEditingHintId(null);
+  }, [selectedGalleryId, editingHintId, editHintText, editHintPriority, editHintImageUrl, galleryHints, saveGalleryHints]);
+
+  // ── Update task template (inline edit) ──
+  const updateTask = useCallback(() => {
+    if (selectedGalleryId === null || editingTaskId === null) return;
+    const current = galleryTasks[selectedGalleryId] ?? [];
+    const newTasks = {
+      ...galleryTasks,
+      [selectedGalleryId]: current.map((t) =>
+        t.id === editingTaskId
+          ? {
+              ...t,
+              question: editTaskQuestion.trim(),
+              inputType: editTaskInputType,
+              correctAnswer: editTaskCorrectAnswer.trim(),
+              choices: editTaskInputType === 'multiple-choice' ? editTaskChoices.filter((c) => c.trim()) : undefined,
+              imageUrl: editTaskImageUrl,
+            }
+          : t
+      ),
+    };
+    saveGalleryTasks(newTasks);
+    setEditingTaskId(null);
+  }, [selectedGalleryId, editingTaskId, editTaskQuestion, editTaskInputType, editTaskCorrectAnswer, editTaskChoices, editTaskImageUrl, galleryTasks, saveGalleryTasks]);
 
   // ── Import single player into current game ──
   const importPlayer = useCallback((avatar: GalleryAvatar) => {
@@ -853,15 +906,54 @@ export function GMPlayerGalleryPanel({
         </div>
         <div className="space-y-2">
           {selectedHints.map((hint) => {
-            const pc = PRIORITY_COLORS[hint.priority ?? 1];
+            const isEditing = editingHintId === hint.id;
+            const pc = PRIORITY_COLORS[isEditing ? editHintPriority : (hint.priority ?? 1)];
             return (
-              <div key={hint.id} className="flex items-start gap-3 px-3 py-2.5 rounded-lg" style={{ background: cardBg, border: `1px solid ${cardBorder}` }}>
-                <span className="px-1.5 py-0.5 rounded-md shrink-0 mt-0.5" style={{ background: pc.bg, border: `1px solid ${pc.border}`, color: pc.text, fontSize: '0.5rem', fontWeight: 700, fontFamily: '"Cinzel", serif' }}>P{hint.priority ?? 1}</span>
-                <div className="flex-1 min-w-0">
-                  {hint.imageUrl && <img src={hint.imageUrl} alt="Hint" className="w-12 h-12 rounded-lg object-cover mb-1" />}
-                  <p className="text-sm" style={{ color: t.text, fontSize: '0.7rem', lineHeight: 1.5 }}>{hint.text || <span style={{ opacity: 0.5, fontStyle: 'italic' }}>Image seule</span>}</p>
-                </div>
-                <button onClick={() => deleteHint(hint.id)} className="p-1.5 rounded-md hover:bg-white/5 transition-colors shrink-0" title="Supprimer"><Trash2 size={12} style={{ color: '#c41e3a' }} /></button>
+              <div key={hint.id} className="flex items-start gap-3 px-3 py-2.5 rounded-lg" style={{ background: cardBg, border: `1px solid ${isEditing ? 'rgba(139,92,246,0.4)' : cardBorder}` }}>
+                {isEditing ? (
+                  <div className="flex-1 min-w-0 space-y-2">
+                    <div className="flex items-center gap-2">
+                      <input
+                        autoFocus
+                        type="text"
+                        value={editHintText}
+                        onChange={(e) => setEditHintText(e.target.value)}
+                        onKeyDown={(e) => { if (e.key === 'Enter') updateHint(); if (e.key === 'Escape') setEditingHintId(null); }}
+                        className="flex-1 px-3 py-1.5 rounded-lg outline-none"
+                        style={{ background: inputBg, border: `1px solid ${inputBorder}`, color: t.text, fontSize: '0.7rem' }}
+                      />
+                      <div className="flex items-center gap-0.5 shrink-0">
+                        {([1, 2, 3] as const).map((p) => (
+                          <button key={p} onClick={() => setEditHintPriority(p)} className="px-1.5 py-1 rounded-md transition-colors" style={{ background: editHintPriority === p ? PRIORITY_COLORS[p].bg : 'transparent', border: `1px solid ${editHintPriority === p ? PRIORITY_COLORS[p].border : 'transparent'}`, color: editHintPriority === p ? PRIORITY_COLORS[p].text : t.textDim, fontSize: '0.55rem', fontWeight: 700, fontFamily: '"Cinzel", serif' }}>P{p}</button>
+                        ))}
+                      </div>
+                    </div>
+                    {editHintImageUrl && (
+                      <div className="flex items-center gap-2 px-1">
+                        <img src={editHintImageUrl} alt="Preview" className="w-12 h-12 rounded-lg object-cover" style={{ border: '1px solid rgba(139,92,246,0.25)' }} />
+                        <button onClick={() => setEditHintImageUrl(undefined)} className="p-1 rounded-md hover:bg-white/5 transition-colors"><X size={11} style={{ color: '#c41e3a' }} /></button>
+                      </div>
+                    )}
+                    <div className="flex items-center gap-2">
+                      <button onClick={updateHint} className="flex items-center gap-1 px-3 py-1 rounded-lg transition-colors" style={{ background: 'rgba(139,92,246,0.15)', border: '1px solid rgba(139,92,246,0.3)', color: '#8b5cf6', fontSize: '0.65rem', fontFamily: '"Cinzel", serif' }}>
+                        <Check size={11} /> Enregistrer
+                      </button>
+                      <button onClick={() => setEditingHintId(null)} className="flex items-center gap-1 px-3 py-1 rounded-lg transition-colors" style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.06)', color: t.textDim, fontSize: '0.65rem', fontFamily: '"Cinzel", serif' }}>
+                        <X size={11} /> Annuler
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <>
+                    <span className="px-1.5 py-0.5 rounded-md shrink-0 mt-0.5" style={{ background: pc.bg, border: `1px solid ${pc.border}`, color: pc.text, fontSize: '0.5rem', fontWeight: 700, fontFamily: '"Cinzel", serif' }}>P{hint.priority ?? 1}</span>
+                    <div className="flex-1 min-w-0">
+                      {hint.imageUrl && <img src={hint.imageUrl} alt="Hint" className="w-12 h-12 rounded-lg object-cover mb-1" />}
+                      <p className="text-sm" style={{ color: t.text, fontSize: '0.7rem', lineHeight: 1.5 }}>{hint.text || <span style={{ opacity: 0.5, fontStyle: 'italic' }}>Image seule</span>}</p>
+                    </div>
+                    <button onClick={() => { setEditingHintId(hint.id); setEditHintText(hint.text); setEditHintPriority(hint.priority ?? 1); setEditHintImageUrl(hint.imageUrl); }} className="p-1.5 rounded-md hover:bg-white/5 transition-colors shrink-0" title="Modifier"><Pencil size={12} style={{ color: '#8b5cf6' }} /></button>
+                    <button onClick={() => deleteHint(hint.id)} className="p-1.5 rounded-md hover:bg-white/5 transition-colors shrink-0" title="Supprimer"><Trash2 size={12} style={{ color: '#c41e3a' }} /></button>
+                  </>
+                )}
               </div>
             );
           })}
@@ -917,15 +1009,70 @@ export function GMPlayerGalleryPanel({
         </div>
         <div className="space-y-2">
           {selectedTasks.map((task) => {
-            const itl = INPUT_TYPE_LABELS[task.inputType];
+            const isEditing = editingTaskId === task.id;
+            const itl = INPUT_TYPE_LABELS[isEditing ? editTaskInputType : task.inputType];
             return (
-              <div key={task.id} className="flex items-start gap-3 px-3 py-2.5 rounded-lg" style={{ background: cardBg, border: `1px solid ${cardBorder}` }}>
-                <span className="px-1.5 py-0.5 rounded-md shrink-0 mt-0.5" style={{ background: 'rgba(139,92,246,0.12)', border: '1px solid rgba(139,92,246,0.25)', color: '#8b5cf6', fontSize: '0.5rem', fontWeight: 700, fontFamily: '"Cinzel", serif' }}>{itl.icon}</span>
-                <div className="flex-1 min-w-0">
-                  {task.imageUrl && <img src={task.imageUrl} alt="Task" className="w-12 h-12 rounded-lg object-cover mb-1" />}
-                  <p className="text-sm" style={{ color: t.text, fontSize: '0.7rem', lineHeight: 1.5 }}>{task.question || <span style={{ opacity: 0.5, fontStyle: 'italic' }}>Image seule</span>}</p>
-                </div>
-                <button onClick={() => deleteTask(task.id)} className="p-1.5 rounded-md hover:bg-white/5 transition-colors shrink-0" title="Supprimer"><Trash2 size={12} style={{ color: '#c41e3a' }} /></button>
+              <div key={task.id} className="flex items-start gap-3 px-3 py-2.5 rounded-lg" style={{ background: cardBg, border: `1px solid ${isEditing ? 'rgba(139,92,246,0.4)' : cardBorder}` }}>
+                {isEditing ? (
+                  <div className="flex-1 min-w-0 space-y-2">
+                    <div className="flex items-center gap-2">
+                      <input
+                        autoFocus
+                        type="text"
+                        value={editTaskQuestion}
+                        onChange={(e) => setEditTaskQuestion(e.target.value)}
+                        onKeyDown={(e) => { if (e.key === 'Escape') setEditingTaskId(null); }}
+                        placeholder="Question..."
+                        className="flex-1 px-3 py-1.5 rounded-lg outline-none"
+                        style={{ background: inputBg, border: `1px solid ${inputBorder}`, color: t.text, fontSize: '0.7rem' }}
+                      />
+                      <div className="flex items-center gap-0.5 shrink-0">
+                        {Object.keys(INPUT_TYPE_LABELS).map((it) => (
+                          <button key={it} onClick={() => setEditTaskInputType(it as QuestTaskInputType)} className="px-1.5 py-1 rounded-md transition-colors" style={{ background: editTaskInputType === it ? 'rgba(139,92,246,0.12)' : 'transparent', border: `1px solid ${editTaskInputType === it ? 'rgba(139,92,246,0.25)' : 'transparent'}`, color: editTaskInputType === it ? '#8b5cf6' : t.textDim, fontSize: '0.55rem', fontWeight: 700, fontFamily: '"Cinzel", serif' }}>{INPUT_TYPE_LABELS[it as QuestTaskInputType].icon}</button>
+                        ))}
+                      </div>
+                    </div>
+                    <input
+                      type="text"
+                      value={editTaskCorrectAnswer}
+                      onChange={(e) => setEditTaskCorrectAnswer(e.target.value)}
+                      placeholder="Réponse correcte..."
+                      className="w-full px-3 py-1.5 rounded-lg outline-none"
+                      style={{ background: inputBg, border: `1px solid ${inputBorder}`, color: t.text, fontSize: '0.7rem' }}
+                    />
+                    {editTaskInputType === 'multiple-choice' && (
+                      <div className="grid grid-cols-2 gap-1">
+                        {editTaskChoices.map((c, i) => (
+                          <input key={i} type="text" value={c} onChange={(e) => { const nc = [...editTaskChoices]; nc[i] = e.target.value; setEditTaskChoices(nc); }} placeholder={`Choix ${i + 1}...`} className="px-3 py-1.5 rounded-lg outline-none" style={{ background: inputBg, border: `1px solid ${inputBorder}`, color: t.text, fontSize: '0.65rem' }} />
+                        ))}
+                      </div>
+                    )}
+                    {editTaskImageUrl && (
+                      <div className="flex items-center gap-2 px-1">
+                        <img src={editTaskImageUrl} alt="Preview" className="w-12 h-12 rounded-lg object-cover" style={{ border: '1px solid rgba(139,92,246,0.25)' }} />
+                        <button onClick={() => setEditTaskImageUrl(undefined)} className="p-1 rounded-md hover:bg-white/5 transition-colors"><X size={11} style={{ color: '#c41e3a' }} /></button>
+                      </div>
+                    )}
+                    <div className="flex items-center gap-2">
+                      <button onClick={updateTask} disabled={!editTaskQuestion.trim() || !editTaskCorrectAnswer.trim()} className="flex items-center gap-1 px-3 py-1 rounded-lg transition-colors" style={{ background: 'rgba(139,92,246,0.15)', border: '1px solid rgba(139,92,246,0.3)', color: '#8b5cf6', fontSize: '0.65rem', fontFamily: '"Cinzel", serif' }}>
+                        <Check size={11} /> Enregistrer
+                      </button>
+                      <button onClick={() => setEditingTaskId(null)} className="flex items-center gap-1 px-3 py-1 rounded-lg transition-colors" style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.06)', color: t.textDim, fontSize: '0.65rem', fontFamily: '"Cinzel", serif' }}>
+                        <X size={11} /> Annuler
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <>
+                    <span className="px-1.5 py-0.5 rounded-md shrink-0 mt-0.5" style={{ background: 'rgba(139,92,246,0.12)', border: '1px solid rgba(139,92,246,0.25)', color: '#8b5cf6', fontSize: '0.5rem', fontWeight: 700, fontFamily: '"Cinzel", serif' }}>{itl.icon}</span>
+                    <div className="flex-1 min-w-0">
+                      {task.imageUrl && <img src={task.imageUrl} alt="Task" className="w-12 h-12 rounded-lg object-cover mb-1" />}
+                      <p className="text-sm" style={{ color: t.text, fontSize: '0.7rem', lineHeight: 1.5 }}>{task.question || <span style={{ opacity: 0.5, fontStyle: 'italic' }}>Image seule</span>}</p>
+                    </div>
+                    <button onClick={() => { setEditingTaskId(task.id); setEditTaskQuestion(task.question); setEditTaskInputType(task.inputType); setEditTaskCorrectAnswer(task.correctAnswer); setEditTaskChoices(task.choices?.length ? [...task.choices, ...Array(4).fill('')].slice(0, 4) : ['', '', '', '']); setEditTaskImageUrl(task.imageUrl); }} className="p-1.5 rounded-md hover:bg-white/5 transition-colors shrink-0" title="Modifier"><Pencil size={12} style={{ color: '#8b5cf6' }} /></button>
+                    <button onClick={() => deleteTask(task.id)} className="p-1.5 rounded-md hover:bg-white/5 transition-colors shrink-0" title="Supprimer"><Trash2 size={12} style={{ color: '#c41e3a' }} /></button>
+                  </>
+                )}
               </div>
             );
           })}
