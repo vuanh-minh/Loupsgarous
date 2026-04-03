@@ -24,7 +24,13 @@ export const ImportFromGalleryModal = React.memo(function ImportFromGalleryModal
 }: ImportFromGalleryModalProps) {
   const [search, setSearch] = useState('');
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
-  const [deletedAvatarIds, setDeletedAvatarIds] = useState<Set<number>>(new Set());
+  const [deletedAvatarIds, setDeletedAvatarIds] = useState<Set<number>>(() => {
+    try {
+      const stored = localStorage.getItem('gallery:deleted-ids');
+      if (stored) return new Set(JSON.parse(stored) as number[]);
+    } catch { /* ignore */ }
+    return new Set();
+  });
   const searchRef = useRef<HTMLInputElement>(null);
 
   // Track which gallery avatar IDs are already used by existing players
@@ -43,16 +49,21 @@ export const ImportFromGalleryModal = React.memo(function ImportFromGalleryModal
       setSearch('');
       setSelectedIds(new Set());
       setTimeout(() => searchRef.current?.focus(), 200);
+      // Lecture locale immédiate
+      try {
+        const stored = localStorage.getItem('gallery:deleted-ids');
+        if (stored) setDeletedAvatarIds(new Set(JSON.parse(stored) as number[]));
+      } catch { /* ignore */ }
+      // Refresh serveur (met aussi à jour le localStorage pour les prochaines sessions)
       (async () => {
         try {
           const res = await fetch(`${API_BASE}/gallery/deleted`, { headers: jsonAuthHeaders() });
           const data = await res.json();
           if (data.deleted && Array.isArray(data.deleted)) {
             setDeletedAvatarIds(new Set(data.deleted));
+            localStorage.setItem('gallery:deleted-ids', JSON.stringify(data.deleted));
           }
-        } catch {
-          // Si le fetch échoue, on affiche tout
-        }
+        } catch { /* ignore */ }
       })();
     }
   }, [open]);

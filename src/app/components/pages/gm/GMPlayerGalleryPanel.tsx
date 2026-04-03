@@ -168,6 +168,7 @@ export function GMPlayerGalleryPanel({
         const data = await res.json();
         if (data.deleted && Array.isArray(data.deleted)) {
           setDeletedAvatarIds(new Set(data.deleted));
+          localStorage.setItem('gallery:deleted-ids', JSON.stringify(data.deleted));
         }
       } catch (err) {
         console.error('Failed to load deleted avatar IDs:', err);
@@ -292,7 +293,11 @@ export function GMPlayerGalleryPanel({
       setGalleryHints((prev) => { const n = { ...prev }; delete n[galleryId]; return n; });
       setGalleryTasks((prev) => { const n = { ...prev }; delete n[galleryId]; return n; });
       setGalleryRoles((prev) => { const n = { ...prev }; delete n[galleryId]; return n; });
-      setDeletedAvatarIds((prev) => new Set([...prev, galleryId]));
+      setDeletedAvatarIds((prev) => {
+        const next = new Set([...prev, galleryId]);
+        localStorage.setItem('gallery:deleted-ids', JSON.stringify([...next]));
+        return next;
+      });
       setSelectedGalleryId(null);
       setConfirmDeleteId(null);
     } catch (err) {
