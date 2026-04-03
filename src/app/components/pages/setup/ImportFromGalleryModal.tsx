@@ -5,6 +5,7 @@ import { AVATAR_GALLERY, type GalleryAvatar } from '../../../data/avatarGallery'
 import { galleryRef, getGalleryId } from '../../../data/avatarResolver';
 import { type GameThemeTokens } from '../../../context/gameTheme';
 import { type PlayerEntry } from './setupConstants';
+import { API_BASE, jsonAuthHeaders } from '../../../context/apiConfig';
 
 interface ImportFromGalleryModalProps {
   open: boolean;
@@ -23,6 +24,7 @@ export const ImportFromGalleryModal = React.memo(function ImportFromGalleryModal
 }: ImportFromGalleryModalProps) {
   const [search, setSearch] = useState('');
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
+  const [deletedAvatarIds, setDeletedAvatarIds] = useState<Set<number>>(new Set());
   const searchRef = useRef<HTMLInputElement>(null);
 
   // Track which gallery avatar IDs are already used by existing players
@@ -35,12 +37,23 @@ export const ImportFromGalleryModal = React.memo(function ImportFromGalleryModal
     return ids;
   }, [existingEntries]);
 
-  // Reset on open
+  // Reset on open + charger les IDs supprimés
   useEffect(() => {
     if (open) {
       setSearch('');
       setSelectedIds(new Set());
       setTimeout(() => searchRef.current?.focus(), 200);
+      (async () => {
+        try {
+          const res = await fetch(`${API_BASE}/gallery/deleted`, { headers: jsonAuthHeaders() });
+          const data = await res.json();
+          if (data.deleted && Array.isArray(data.deleted)) {
+            setDeletedAvatarIds(new Set(data.deleted));
+          }
+        } catch {
+          // Si le fetch échoue, on affiche tout
+        }
+      })();
     }
   }, [open]);
 
@@ -54,9 +67,9 @@ export const ImportFromGalleryModal = React.memo(function ImportFromGalleryModal
     return () => window.removeEventListener('keydown', handleKey);
   }, [open, onClose]);
 
-  const filtered = search
-    ? AVATAR_GALLERY.filter((a) => a.name.toLowerCase().includes(search.toLowerCase()))
-    : AVATAR_GALLERY;
+  const filtered = AVATAR_GALLERY
+    .filter((a) => !deletedAvatarIds.has(a.id))
+    .filter((a) => !search || a.name.toLowerCase().includes(search.toLowerCase()));
 
   const toggleAvatar = useCallback((id: number) => {
     setSelectedIds((prev) => {
@@ -281,7 +294,7 @@ export const ImportFromGalleryModal = React.memo(function ImportFromGalleryModal
             {/* Footer */}
             <div className="px-5 py-3 flex items-center justify-between shrink-0" style={{ borderTop: '1px solid rgba(255,255,255,0.06)' }}>
               <span style={{ color: '#4a5568', fontSize: '0.6rem' }}>
-                {AVATAR_GALLERY.length - usedGalleryIds.size} disponible{AVATAR_GALLERY.length - usedGalleryIds.size > 1 ? 's' : ''} sur {AVATAR_GALLERY.length}
+                {AVATAR_GALLERY.filter(a => !deletedAvatarIds.has(a.id)).length - usedGalleryIds.size} disponible{AVATAR_GALLERY.filter(a => !deletedAvatarIds.has(a.id)).length - usedGalleryIds.size > 1 ? 's' : ''} sur {AVATAR_GALLERY.filter(a => !deletedAvatarIds.has(a.id)).length}
               </span>
               <div className="flex items-center gap-2">
                 <button
