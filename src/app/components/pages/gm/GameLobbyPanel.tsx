@@ -282,13 +282,14 @@ export const GameLobbyPanel = React.memo(function GameLobbyPanel({
     setBulkText('');
   };
 
-  const handleGalleryImport = (entries: Array<{ name: string; avatarUrl: string }>) => {
+  const handleGalleryImport = (entries: Array<{ name: string; avatarUrl: string; assignedRole?: string }>) => {
     const clamped = entries.slice(0, MAX_PLAYERS);
     const newEntries: PlayerEntry[] = clamped.map((e, i) => ({
       id: i,
       name: e.name,
       avatar: PLAYER_AVATARS[i % PLAYER_AVATARS.length],
       avatarUrl: e.avatarUrl,
+      assignedRole: e.assignedRole,
     }));
     setPlayerEntries(newEntries);
   };

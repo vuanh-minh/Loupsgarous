@@ -10,7 +10,7 @@ import { API_BASE, jsonAuthHeaders } from '../../../context/apiConfig';
 interface ImportFromGalleryModalProps {
   open: boolean;
   onClose: () => void;
-  onImport: (entries: Array<{ name: string; avatarUrl: string }>) => void;
+  onImport: (entries: Array<{ name: string; avatarUrl: string; assignedRole?: string }>) => void;
   existingEntries: PlayerEntry[];
   t: GameThemeTokens;
 }
@@ -24,6 +24,7 @@ export const ImportFromGalleryModal = React.memo(function ImportFromGalleryModal
 }: ImportFromGalleryModalProps) {
   const [search, setSearch] = useState('');
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
+  const [galleryRoles, setGalleryRoles] = useState<Record<number, string>>({});
   const [deletedAvatarIds, setDeletedAvatarIds] = useState<Set<number>>(() => {
     try {
       const stored = localStorage.getItem('gallery:deleted-ids');
@@ -66,6 +67,18 @@ export const ImportFromGalleryModal = React.memo(function ImportFromGalleryModal
         } catch { /* ignore */ }
       })();
     }
+  }, [open]);
+
+  // Charger les rôles par défaut de la galerie
+  useEffect(() => {
+    if (!open) return;
+    (async () => {
+      try {
+        const res = await fetch(`${API_BASE}/gallery/roles`, { headers: jsonAuthHeaders() });
+        const data = await res.json();
+        if (data.roles) setGalleryRoles(data.roles);
+      } catch { /* ignore */ }
+    })();
   }, [open]);
 
   // Close on Escape
@@ -111,10 +124,10 @@ export const ImportFromGalleryModal = React.memo(function ImportFromGalleryModal
     if (selectedIds.size === 0) return;
     const entries = AVATAR_GALLERY
       .filter((a) => selectedIds.has(a.id))
-      .map((a) => ({ name: a.name, avatarUrl: galleryRef(a.id) }));
+      .map((a) => ({ name: a.name, avatarUrl: galleryRef(a.id), assignedRole: galleryRoles[a.id] }));
     onImport(entries);
     onClose();
-  }, [selectedIds, onImport, onClose]);
+  }, [selectedIds, galleryRoles, onImport, onClose]);
 
   const availableFiltered = filtered.filter((a) => !usedGalleryIds.has(a.id));
   const allFilteredSelected = availableFiltered.length > 0 && availableFiltered.every((a) => selectedIds.has(a.id));
