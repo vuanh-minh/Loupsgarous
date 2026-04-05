@@ -727,13 +727,25 @@ export function HomePage() {
         </div>
 
         {/* Main buttons */}
-        <div className="w-full max-w-2xl px-4 flex flex-col gap-3">
+        <motion.div
+          className="w-full max-w-2xl px-4 flex flex-col gap-3"
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.6, delay: 1.7 }}
+        >
           {galleryGrid.hasGroups ? (
             <>
-              {galleryGrid.tagGroups.map(group => {
+              {galleryGrid.tagGroups.map((group, i) => {
                 const tc = TAG_COLORS[group.tag] ?? DEFAULT_TAG_COLOR;
                 return (
-                  <div key={group.tag} className="w-full rounded-xl p-3" style={{ background: tc.bg, border: `1px solid ${tc.border}` }}>
+                  <motion.div
+                    key={group.tag}
+                    className="w-full rounded-xl p-3"
+                    style={{ background: tc.bg, border: `1px solid ${tc.border}` }}
+                    initial={{ opacity: 0, y: 16 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.45, delay: 1.8 + i * 0.08 }}
+                  >
                     <div className="flex items-center gap-2 mb-2.5">
                       <Users size={12} style={{ color: tc.text, opacity: 0.7 }} />
                       <span className="text-xs font-semibold tracking-wider uppercase" style={{ color: tc.text, fontFamily: '"Cinzel", serif' }}>{group.tag}</span>
@@ -749,11 +761,17 @@ export function HomePage() {
                         </div>
                       ))}
                     </div>
-                  </div>
+                  </motion.div>
                 );
               })}
               {galleryGrid.untagged.length > 0 && (
-                <div className="w-full rounded-xl p-3" style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.06)' }}>
+                <motion.div
+                  className="w-full rounded-xl p-3"
+                  style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.06)' }}
+                  initial={{ opacity: 0, y: 16 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.45, delay: 1.8 + galleryGrid.tagGroups.length * 0.08 }}
+                >
                   <div className="flex items-center gap-2 mb-2.5">
                     <Users size={12} style={{ color: 'rgba(255,255,255,0.4)', opacity: 0.7 }} />
                     <span className="text-xs font-semibold tracking-wider uppercase" style={{ color: 'rgba(255,255,255,0.4)', fontFamily: '"Cinzel", serif' }}>Autres</span>
@@ -768,11 +786,17 @@ export function HomePage() {
                       </div>
                     ))}
                   </div>
-                </div>
+                </motion.div>
               )}
             </>
           ) : (
-            <div className="w-full rounded-xl p-3" style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.06)' }}>
+            <motion.div
+              className="w-full rounded-xl p-3"
+              style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.06)' }}
+              initial={{ opacity: 0, y: 16 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.45, delay: 1.8 }}
+            >
               <div className="grid grid-cols-4 gap-2.5">
                 {[...galleryGrid.tagGroups.flatMap(g => g.players), ...galleryGrid.untagged].map(p => (
                   <div key={p.id} className="flex flex-col items-center gap-1">
@@ -783,9 +807,9 @@ export function HomePage() {
                   </div>
                 ))}
               </div>
-            </div>
+            </motion.div>
           )}
-        </div>
+        </motion.div>
 
         {/* Download App + Règles blocs */}
         <div className="w-full max-w-2xl px-4 flex flex-col gap-3 mt-3">

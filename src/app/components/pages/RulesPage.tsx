@@ -1,8 +1,9 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import {
   ArrowLeft, Moon, Sun, Skull, Users, Shield, ChevronDown,
   ChevronUp, Swords, Heart, Eye, Sparkles, BookOpen, HelpCircle,
+  Target, Lightbulb, Brain, Trophy,
 } from 'lucide-react';
 import { useNavigate } from 'react-router';
 import { ROLES, type RoleDefinition } from '../../data/roles';
@@ -14,52 +15,66 @@ const TEAM_META: Record<string, { label: string; color: string; bgColor: string;
   solo: { label: 'Solitaire', color: '#d4a843', bgColor: 'rgba(212,168,67,0.1)', borderColor: 'rgba(212,168,67,0.25)', icon: Eye },
 };
 
-/* ── Role Card ── */
-function RoleCard({ role, index }: { role: RoleDefinition; index: number }) {
-  const [expanded, setExpanded] = useState(false);
-  const team = TEAM_META[role.team] || TEAM_META.village;
-
+/* ── Role Grid Card ── */
+function RoleGridCard({ role, selected, onSelect }: { role: RoleDefinition; selected: boolean; onSelect: () => void }) {
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 16 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ delay: 0.05 * Math.min(index, 12), duration: 0.35 }}
+    <motion.button
+      onClick={onSelect}
+      whileTap={{ scale: 0.94 }}
+      className="flex flex-col items-center gap-1.5 py-3 px-1 rounded-xl transition-all"
+      style={{
+        background: selected ? `${role.color}18` : 'rgba(255,255,255,0.03)',
+        borderWidth: 1.5,
+        borderStyle: 'solid',
+        borderColor: selected ? `${role.color}60` : 'rgba(255,255,255,0.06)',
+      }}
     >
-      <button
-        onClick={() => setExpanded((v) => !v)}
-        className="w-full text-left rounded-xl transition-all"
+      <span style={{ fontSize: '1.7rem', lineHeight: 1 }}>{role.emoji}</span>
+      <span
         style={{
-          background: expanded
-            ? `linear-gradient(135deg, ${role.color}12, ${role.color}06)`
-            : 'rgba(255,255,255,0.03)',
-          borderWidth: 1,
-          borderStyle: 'solid',
-          borderColor: expanded ? `${role.color}40` : 'rgba(255,255,255,0.06)',
+          fontFamily: '"Cinzel", serif',
+          color: selected ? role.color : '#c0c8d8',
+          fontSize: '0.48rem',
+          fontWeight: 700,
+          textAlign: 'center',
+          lineHeight: 1.3,
+          wordBreak: 'break-word',
         }}
       >
-        {/* Header row */}
-        <div className="flex items-center gap-3 px-4 py-3">
+        {role.name}
+      </span>
+    </motion.button>
+  );
+}
+
+/* ── Role Detail Panel ── */
+function RoleDetailPanel({ role }: { role: RoleDefinition }) {
+  const team = TEAM_META[role.team] || TEAM_META.village;
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: -8 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, y: -8 }}
+      transition={{ duration: 0.25 }}
+      className="rounded-xl overflow-hidden"
+      style={{
+        background: `linear-gradient(135deg, ${role.color}10, ${role.color}05)`,
+        borderWidth: 1,
+        borderStyle: 'solid',
+        borderColor: `${role.color}35`,
+      }}
+    >
+      <div className="px-4 py-3.5">
+        {/* Header */}
+        <div className="flex items-center gap-3 mb-3">
           <div
-            className="w-10 h-10 rounded-full flex items-center justify-center shrink-0"
-            style={{
-              background: `${role.color}20`,
-              borderWidth: 2,
-              borderStyle: 'solid',
-              borderColor: `${role.color}50`,
-            }}
+            className="w-11 h-11 rounded-full flex items-center justify-center shrink-0"
+            style={{ background: `${role.color}20`, border: `2px solid ${role.color}50` }}
           >
-            <span className="text-xl leading-none">{role.emoji}</span>
+            <span style={{ fontSize: '1.4rem', lineHeight: 1 }}>{role.emoji}</span>
           </div>
-          <div className="flex-1 min-w-0">
-            <p
-              className="truncate"
-              style={{
-                fontFamily: '"Cinzel", serif',
-                color: expanded ? role.color : '#c0c8d8',
-                fontSize: '0.85rem',
-                fontWeight: 700,
-              }}
-            >
+          <div>
+            <p style={{ fontFamily: '"Cinzel", serif', color: role.color, fontSize: '0.85rem', fontWeight: 700 }}>
               {role.name}
             </p>
             <span
@@ -70,62 +85,30 @@ function RoleCard({ role, index }: { role: RoleDefinition; index: number }) {
                 fontWeight: 600,
                 background: team.bgColor,
                 color: team.color,
-                borderWidth: 1,
-                borderStyle: 'solid',
-                borderColor: team.borderColor,
+                border: `1px solid ${team.borderColor}`,
               }}
             >
               {team.label}
             </span>
           </div>
-          {expanded ? (
-            <ChevronUp size={16} style={{ color: role.color, flexShrink: 0 }} />
-          ) : (
-            <ChevronDown size={16} style={{ color: 'rgba(192,200,216,0.4)', flexShrink: 0 }} />
-          )}
         </div>
 
-        {/* Expanded content */}
-        <AnimatePresence>
-          {expanded && (
-            <motion.div
-              initial={{ height: 0, opacity: 0 }}
-              animate={{ height: 'auto', opacity: 1 }}
-              exit={{ height: 0, opacity: 0 }}
-              transition={{ duration: 0.25 }}
-              className="overflow-hidden"
-            >
-              <div
-                className="px-4 pb-4 pt-0"
-                style={{ borderTop: `1px solid ${role.color}20` }}
-              >
-                <p
-                  className="mt-3"
-                  style={{ color: 'rgba(192,200,216,0.7)', fontSize: '0.72rem', lineHeight: 1.6 }}
-                >
-                  {role.description}
-                </p>
-                <div
-                  className="mt-3 rounded-lg px-3 py-2.5"
-                  style={{
-                    background: `${role.color}0a`,
-                    borderWidth: 1,
-                    borderStyle: 'solid',
-                    borderColor: `${role.color}20`,
-                  }}
-                >
-                  <div className="flex items-start gap-2">
-                    <Sparkles size={13} style={{ color: role.color, marginTop: 2, flexShrink: 0 }} />
-                    <p style={{ color: '#e8dcc8', fontSize: '0.68rem', lineHeight: 1.6 }}>
-                      {role.power}
-                    </p>
-                  </div>
-                </div>
-              </div>
-            </motion.div>
-          )}
-        </AnimatePresence>
-      </button>
+        {/* Description */}
+        <p style={{ color: 'rgba(192,200,216,0.7)', fontSize: '0.7rem', lineHeight: 1.6 }}>
+          {role.description}
+        </p>
+
+        {/* Power */}
+        <div
+          className="mt-3 rounded-lg px-3 py-2.5 flex items-start gap-2"
+          style={{ background: `${role.color}0a`, border: `1px solid ${role.color}20` }}
+        >
+          <Sparkles size={12} style={{ color: role.color, marginTop: 2, flexShrink: 0 }} />
+          <p style={{ color: '#e8dcc8', fontSize: '0.67rem', lineHeight: 1.6 }}>
+            {role.power}
+          </p>
+        </div>
+      </div>
     </motion.div>
   );
 }
@@ -199,6 +182,11 @@ function RuleSection({
 export function RulesPage() {
   const navigate = useNavigate();
   const [teamFilter, setTeamFilter] = useState<'all' | 'village' | 'werewolf' | 'solo'>('all');
+  const [selectedRoleId, setSelectedRoleId] = useState<string | null>(null);
+
+  useEffect(() => {
+    window.scrollTo(0, 0);
+  }, []);
 
   const filteredRoles = useMemo(
     () => (teamFilter === 'all' ? ROLES : ROLES.filter((r) => r.team === teamFilter)),
@@ -521,6 +509,192 @@ export function RulesPage() {
           </div>
         </RuleSection>
 
+        {/* ── Quêtes ── */}
+        <RuleSection icon={Target} title="Quetes" accentColor="#10b981">
+          <div className="flex flex-col gap-3">
+            <p style={{ color: 'rgba(192,200,216,0.7)', fontSize: '0.72rem', lineHeight: 1.7 }}>
+              En parallele de la partie, chaque joueur recoit des <strong style={{ color: '#10b981' }}>quetes secretes</strong> a accomplir.
+              Elles rapportent des points en fin de partie, independamment de la victoire de l'equipe.
+            </p>
+
+            {/* Quest types */}
+            <div className="flex flex-col gap-2">
+              {[
+                {
+                  emoji: '👤',
+                  title: 'Quetes individuelles',
+                  desc: 'Accomplies seul, en secret. Exemples : voter contre un loup, survivre jusqu\'au tour 3, utiliser son pouvoir une nuit donnee.',
+                  color: '#10b981',
+                },
+                {
+                  emoji: '👥',
+                  title: 'Quetes collaboratives',
+                  desc: 'Plusieurs joueurs doivent agir en coordination. Tous les participants recoivent les points si la quete reussit.',
+                  color: '#3b82f6',
+                },
+              ].map((q) => (
+                <div
+                  key={q.title}
+                  className="flex items-start gap-3 rounded-lg px-3 py-2.5"
+                  style={{
+                    background: `${q.color}08`,
+                    borderWidth: 1,
+                    borderStyle: 'solid',
+                    borderColor: `${q.color}20`,
+                  }}
+                >
+                  <span className="text-lg shrink-0">{q.emoji}</span>
+                  <div>
+                    <p style={{ fontFamily: '"Cinzel", serif', color: q.color, fontSize: '0.7rem', fontWeight: 700 }}>
+                      {q.title}
+                    </p>
+                    <p style={{ color: 'rgba(192,200,216,0.55)', fontSize: '0.62rem', lineHeight: 1.5, marginTop: 2 }}>
+                      {q.desc}
+                    </p>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* Rewards */}
+            <div
+              className="rounded-lg px-3 py-2.5"
+              style={{
+                background: 'rgba(212,168,67,0.06)',
+                borderWidth: 1,
+                borderStyle: 'solid',
+                borderColor: 'rgba(212,168,67,0.18)',
+              }}
+            >
+              <p style={{ fontFamily: '"Cinzel", serif', color: '#d4a843', fontSize: '0.7rem', fontWeight: 700, marginBottom: 6 }}>
+                🎯 Recompenses
+              </p>
+              <p style={{ color: 'rgba(192,200,216,0.6)', fontSize: '0.62rem', lineHeight: 1.6 }}>
+                Chaque quete reussie rapporte <strong style={{ color: '#d4a843' }}>+3 points</strong> au score final.
+                Les quetes sont evaluees automatiquement a la fin de la partie.
+              </p>
+            </div>
+
+            {/* Dead can still do quests */}
+            <div
+              className="flex items-start gap-3 rounded-lg px-3 py-2.5"
+              style={{
+                background: 'rgba(156,163,175,0.06)',
+                borderWidth: 1,
+                borderStyle: 'solid',
+                borderColor: 'rgba(156,163,175,0.15)',
+              }}
+            >
+              <span className="text-lg shrink-0">💀</span>
+              <div>
+                <p style={{ fontFamily: '"Cinzel", serif', color: '#9ca3af', fontSize: '0.7rem', fontWeight: 700 }}>
+                  Les morts jouent encore
+                </p>
+                <p style={{ color: 'rgba(192,200,216,0.55)', fontSize: '0.62rem', lineHeight: 1.5, marginTop: 2 }}>
+                  Etre elimine n'empeche pas de completer des quetes. Les joueurs morts peuvent toujours
+                  participer et marquer des points — la mort n'est pas une fin !
+                </p>
+              </div>
+            </div>
+          </div>
+        </RuleSection>
+
+        {/* ── Indices & Hypothèses ── */}
+        <RuleSection icon={Lightbulb} title="Indices & Hypotheses" accentColor="#8b5cf6">
+          <div className="flex flex-col gap-3">
+            {/* How hints work */}
+            <div
+              className="rounded-lg px-3 py-2.5"
+              style={{
+                background: 'rgba(139,92,246,0.07)',
+                borderWidth: 1,
+                borderStyle: 'solid',
+                borderColor: 'rgba(139,92,246,0.2)',
+              }}
+            >
+              <p style={{ fontFamily: '"Cinzel", serif', color: '#8b5cf6', fontSize: '0.7rem', fontWeight: 700, marginBottom: 6 }}>
+                💡 Comment obtenir des indices
+              </p>
+              <p style={{ color: 'rgba(192,200,216,0.6)', fontSize: '0.62rem', lineHeight: 1.6 }}>
+                Des <strong style={{ color: '#c0c8d8' }}>indices dynamiques</strong> sont distribues automatiquement
+                au fil de la partie : a la fin de chaque nuit, apres certaines actions de roles,
+                ou via les recompenses de quetes. Chaque indice donne un element sur le role
+                ou les actions d'un autre joueur.
+              </p>
+            </div>
+
+            {/* Warning: Corbeau */}
+            <div
+              className="flex items-start gap-3 rounded-lg px-3 py-2.5"
+              style={{
+                background: 'rgba(74,54,96,0.15)',
+                borderWidth: 1,
+                borderStyle: 'solid',
+                borderColor: 'rgba(74,54,96,0.35)',
+              }}
+            >
+              <span className="text-lg shrink-0">🐦‍⬛</span>
+              <div>
+                <p style={{ fontFamily: '"Cinzel", serif', color: '#a78bfa', fontSize: '0.7rem', fontWeight: 700 }}>
+                  Attention au Corbeau
+                </p>
+                <p style={{ color: 'rgba(192,200,216,0.55)', fontSize: '0.62rem', lineHeight: 1.5, marginTop: 2 }}>
+                  Le Corbeau peut intercepter et <strong style={{ color: '#a78bfa' }}>falsifier</strong> les indices.
+                  Un indice recoit peut etre une fausse piste intentionnellement semee par les loups-garous.
+                  Croisez vos informations avec d'autres joueurs !
+                </p>
+              </div>
+            </div>
+
+            {/* Hypotheses */}
+            <div
+              className="rounded-lg px-3 py-2.5"
+              style={{
+                background: 'rgba(139,92,246,0.06)',
+                borderWidth: 1,
+                borderStyle: 'solid',
+                borderColor: 'rgba(139,92,246,0.15)',
+              }}
+            >
+              <div className="flex items-center gap-2 mb-2">
+                <Brain size={14} style={{ color: '#8b5cf6' }} />
+                <p style={{ fontFamily: '"Cinzel", serif', color: '#8b5cf6', fontSize: '0.7rem', fontWeight: 700 }}>
+                  Hypotheses sur les roles
+                </p>
+              </div>
+              <p style={{ color: 'rgba(192,200,216,0.6)', fontSize: '0.62rem', lineHeight: 1.6 }}>
+                Au cours de la partie, chaque joueur peut soumettre ses <strong style={{ color: '#c0c8d8' }}>hypotheses</strong> sur
+                le role des autres joueurs. A la fin, chaque hypothese correcte rapporte{' '}
+                <strong style={{ color: '#d4a843' }}>+2 points</strong>{' '}
+                (ou <strong style={{ color: '#d4a843' }}>+3 points</strong> pour les loups-garous qui identifient des roles speciaux).
+              </p>
+            </div>
+
+            {/* Scoreboard */}
+            <div
+              className="flex items-start gap-3 rounded-lg px-3 py-2.5"
+              style={{
+                background: 'rgba(212,168,67,0.06)',
+                borderWidth: 1,
+                borderStyle: 'solid',
+                borderColor: 'rgba(212,168,67,0.18)',
+              }}
+            >
+              <Trophy size={18} style={{ color: '#d4a843', marginTop: 1, flexShrink: 0 }} />
+              <div>
+                <p style={{ fontFamily: '"Cinzel", serif', color: '#d4a843', fontSize: '0.7rem', fontWeight: 700 }}>
+                  Tableau des scores
+                </p>
+                <p style={{ color: 'rgba(192,200,216,0.55)', fontSize: '0.62rem', lineHeight: 1.5, marginTop: 2 }}>
+                  A la fin de la partie, un classement complet est affiche avec le detail des points :
+                  victoire d'equipe, survie, jours passes, quetes, bons votes, hypotheses et bonus speciaux.
+                  Le meilleur joueur est couronne meme si son equipe a perdu.
+                </p>
+              </div>
+            </div>
+          </div>
+        </RuleSection>
+
         {/* ── Roles Catalog ── */}
         <div className="mt-4">
           <div className="flex items-center gap-2 mb-3 px-1">
@@ -561,7 +735,7 @@ export function RulesPage() {
               return (
                 <button
                   key={f.key}
-                  onClick={() => setTeamFilter(f.key)}
+                  onClick={() => { setTeamFilter(f.key); setSelectedRoleId(null); }}
                   className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg whitespace-nowrap transition-all"
                   style={{
                     background: isActive ? `${f.color}1a` : 'rgba(255,255,255,0.03)',
@@ -592,13 +766,26 @@ export function RulesPage() {
             })}
           </div>
 
-          {/* Role cards */}
-          <div className="flex flex-col gap-2">
-            {filteredRoles.map((role, i) => (
-              <RoleCard key={role.id} role={role} index={i} />
+          {/* Role grid */}
+          <div className="grid grid-cols-4 gap-2">
+            {filteredRoles.map((role) => (
+              <RoleGridCard
+                key={role.id}
+                role={role}
+                selected={selectedRoleId === role.id}
+                onSelect={() => setSelectedRoleId(selectedRoleId === role.id ? null : role.id)}
+              />
             ))}
           </div>
 
+          {/* Detail panel */}
+          <AnimatePresence>
+            {selectedRoleId && (
+              <RoleDetailPanel
+                role={filteredRoles.find((r) => r.id === selectedRoleId) ?? filteredRoles[0]}
+              />
+            )}
+          </AnimatePresence>
 
         </div>
 
