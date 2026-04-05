@@ -435,18 +435,6 @@ export function RulesPage() {
                   borderColor: 'rgba(124,141,181,0.08)',
                 }}
               >
-                <span
-                  className="shrink-0 w-6 h-6 rounded-full flex items-center justify-center"
-                  style={{
-                    background: 'rgba(124,141,181,0.15)',
-                    color: '#7c8db5',
-                    fontSize: '0.6rem',
-                    fontFamily: '"Cinzel", serif',
-                    fontWeight: 700,
-                  }}
-                >
-                  {item.step}
-                </span>
                 <div className="flex-1 min-w-0">
                   <p style={{ color: '#c0c8d8', fontSize: '0.72rem', fontWeight: 600 }}>
                     {item.emoji} {item.title}
