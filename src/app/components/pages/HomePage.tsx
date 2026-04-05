@@ -516,23 +516,6 @@ export function HomePage() {
       className="relative min-h-screen flex flex-col items-center justify-center overflow-hidden"
       style={{ background: 'linear-gradient(180deg, #070b1a 0%, #0f1629 30%, #1a1040 60%, #0d0f20 100%)', paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 12px)' }}
     >
-      {/* Stars */}
-      <div className="absolute inset-0 overflow-hidden pointer-events-none">
-        {Array.from({ length: 60 }).map((_, i) => (
-          <div
-            key={i}
-            className="absolute rounded-full bg-white"
-            style={{
-              width: Math.random() * 3 + 1,
-              height: Math.random() * 3 + 1,
-              top: `${Math.random() * 70}%`,
-              left: `${Math.random() * 100}%`,
-              opacity: Math.random() * 0.7 + 0.3,
-            }}
-          />
-        ))}
-      </div>
-
       {/* Moon */}
       <motion.div
         className="absolute top-12 right-8 lg:right-24"
