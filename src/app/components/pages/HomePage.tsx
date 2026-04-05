@@ -519,7 +519,7 @@ export function HomePage() {
       {/* Stars */}
       <div className="absolute inset-0 overflow-hidden pointer-events-none">
         {Array.from({ length: 60 }).map((_, i) => (
-          <motion.div
+          <div
             key={i}
             className="absolute rounded-full bg-white"
             style={{
@@ -528,12 +528,6 @@ export function HomePage() {
               top: `${Math.random() * 70}%`,
               left: `${Math.random() * 100}%`,
               opacity: Math.random() * 0.7 + 0.3,
-            }}
-            animate={{ opacity: [0.3, 0.9, 0.3] }}
-            transition={{
-              duration: Math.random() * 3 + 2,
-              repeat: Infinity,
-              delay: Math.random() * 3,
             }}
           />
         ))}
