@@ -1,12 +1,12 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Moon, Crown, Eye, Lock, X, AlertCircle, LogIn, Sparkles, UserCircle, ArrowRight, Users, Download } from 'lucide-react';
+import { Moon, Crown, Eye, Lock, X, AlertCircle, LogIn, Sparkles, UserCircle, ArrowRight, Users, Download, BookOpen, Smartphone } from 'lucide-react';
 import { useNavigate } from 'react-router';
 import { useGame } from '../../context/GameContext';
 import { API_BASE, publicAnonKey } from '../../context/apiConfig';
 import { localLoadGamesList } from '../../context/gameContextConstants';
 import { usePWAContext } from '../layout/RootLayout';
-import { PWAInstallBanner } from '../PWAInstallBanner';
+import { PWAInstallBanner, IOSSteps, AndroidSteps, DesktopSteps, detectPlatformPublic } from '../PWAInstallBanner';
 import { resolveAvatarUrl } from '../../data/avatarResolver';
 import { AVATAR_GALLERY } from '../../data/avatarGallery';
 import { AVATAR_DEFAULT_TAGS } from '../../data/avatarDefaultTags';
@@ -127,6 +127,17 @@ export function HomePage() {
   const [newGameName, setNewGameName] = useState('');
   const [creating, setCreating] = useState(false);
   const [createError, setCreateError] = useState('');
+
+  // Install guide state
+  const [showInstallGuide, setShowInstallGuide] = useState(false);
+  const installPlatform = useMemo(detectPlatformPublic, []);
+  const handleDownloadClick = async () => {
+    if (pwa.canInstall) {
+      await pwa.promptInstall();
+    } else {
+      setShowInstallGuide(true);
+    }
+  };
 
   // Gallery grid state
   const TAG_COLORS: Record<string, { bg: string; border: string; text: string }> = {
@@ -775,6 +786,69 @@ export function HomePage() {
             </div>
           )}
         </div>
+
+        {/* Download App + Règles blocs */}
+        <div className="w-full max-w-2xl px-4 flex flex-col gap-3 mt-3">
+          {/* Download App */}
+          <button
+            onClick={handleDownloadClick}
+            className="w-full p-4 rounded-xl text-left transition-all active:scale-95"
+            style={{
+              background: 'rgba(255,255,255,0.03)',
+              border: '1px solid rgba(212,168,67,0.2)',
+            }}
+          >
+            <div className="flex items-center justify-between gap-3">
+              <div className="flex items-center gap-3">
+                <div
+                  className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0"
+                  style={{ background: 'rgba(212,168,67,0.1)', border: '1px solid rgba(212,168,67,0.2)' }}
+                >
+                  <Smartphone size={16} style={{ color: '#d4a843' }} />
+                </div>
+                <div>
+                  <p style={{ color: '#c0c8d8', fontSize: '0.85rem', fontFamily: '"Cinzel", serif', fontWeight: 600, margin: 0 }}>
+                    Télécharger l'app
+                  </p>
+                  <p style={{ color: '#6b7b9b', fontSize: '0.72rem', marginTop: 2 }}>
+                    Pour une meilleure expérience
+                  </p>
+                </div>
+              </div>
+              <Download size={16} style={{ color: '#d4a843' }} />
+            </div>
+          </button>
+
+          {/* Règles */}
+          <button
+            onClick={() => navigate('/rules')}
+            className="w-full p-4 rounded-xl text-left transition-all active:scale-95"
+            style={{
+              background: 'rgba(255,255,255,0.03)',
+              border: '1px solid rgba(255,255,255,0.08)',
+            }}
+          >
+            <div className="flex items-center justify-between gap-3">
+              <div className="flex items-center gap-3">
+                <div
+                  className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0"
+                  style={{ background: 'rgba(139,92,246,0.1)', border: '1px solid rgba(139,92,246,0.2)' }}
+                >
+                  <BookOpen size={16} style={{ color: '#a78bfa' }} />
+                </div>
+                <div>
+                  <p style={{ color: '#c0c8d8', fontSize: '0.85rem', fontFamily: '"Cinzel", serif', fontWeight: 600, margin: 0 }}>
+                    Règles du jeu
+                  </p>
+                  <p style={{ color: '#6b7b9b', fontSize: '0.72rem', marginTop: 2 }}>
+                    Rôles, phases et déroulement
+                  </p>
+                </div>
+              </div>
+              <ArrowRight size={16} style={{ color: '#6b7b9b' }} />
+            </div>
+          </button>
+        </div>
       </div>
 
       {/* Fixed countdown timer - appears when original fades out */}
@@ -1081,39 +1155,62 @@ export function HomePage() {
       {/* PWA Install Banner */}
       <PWAInstallBanner pwa={pwa} variant="dark" />
 
-      {/* Download App Block */}
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.8, delay: 0.5 }}
-        className="fixed bottom-6 left-6 right-6 z-20"
-      >
-        <button
-          onClick={() => navigate('/rules')}
-          className="w-full p-4 rounded-xl transition-all hover:scale-105 active:scale-95"
-          style={{
-            background: 'linear-gradient(135deg, rgba(212,168,67,0.15) 0%, rgba(212,168,67,0.08) 100%)',
-            border: '1.5px solid rgba(212,168,67,0.3)',
-            backdropFilter: 'blur(10px)',
-            boxShadow: '0 4px 20px rgba(0,0,0,0.3)',
-          }}
-        >
-          <div className="flex items-center justify-between gap-3">
-            <div className="flex items-center gap-3 flex-1">
-              <Download size={20} style={{ color: '#d4a843' }} />
-              <div className="text-left">
-                <p style={{ color: '#d4a843', fontSize: '0.95rem', fontFamily: '"Cinzel", serif', fontWeight: 600, margin: 0 }}>
-                  Instructions
-                </p>
-                <p style={{ color: '#6b7b9b', fontSize: '0.75rem', margin: '2px 0 0 0' }}>
-                  Pour une meilleure expérience
-                </p>
+      {/* Install Guide Modal */}
+      <AnimatePresence>
+        {showInstallGuide && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[10000] flex items-end justify-center"
+            style={{ background: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(8px)' }}
+            onClick={() => setShowInstallGuide(false)}
+          >
+            <motion.div
+              initial={{ opacity: 0, y: 100 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: 100 }}
+              transition={{ type: 'spring', stiffness: 300, damping: 30 }}
+              className="w-full max-w-md rounded-t-3xl overflow-hidden"
+              style={{
+                background: 'linear-gradient(180deg, #0f1629 0%, #1a1040 100%)',
+                border: '1px solid rgba(212,168,67,0.2)',
+                borderBottomWidth: 0,
+                paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 24px)',
+              }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="flex items-center justify-between px-5 pt-5 pb-3">
+                <h3 style={{ fontFamily: '"Cinzel", serif', color: '#d4a843', fontSize: '1rem' }}>
+                  {installPlatform === 'ios' ? 'Installer sur iPhone' : installPlatform === 'android' ? 'Installer sur Android' : 'Installer sur ordinateur'}
+                </h3>
+                <button
+                  onClick={() => setShowInstallGuide(false)}
+                  className="w-8 h-8 rounded-full flex items-center justify-center"
+                  style={{ background: 'rgba(255,255,255,0.06)' }}
+                >
+                  <X size={16} style={{ color: '#6b7b9b' }} />
+                </button>
               </div>
-            </div>
-            <ArrowRight size={18} style={{ color: '#d4a843' }} />
-          </div>
-        </button>
-      </motion.div>
+              <div className="mx-5 h-px" style={{ background: 'rgba(212,168,67,0.1)' }} />
+              <div className="px-5 py-4 flex flex-col gap-5">
+                {installPlatform === 'ios' && <IOSSteps gold="#d4a843" />}
+                {installPlatform === 'android' && <AndroidSteps gold="#d4a843" />}
+                {installPlatform === 'desktop' && <DesktopSteps gold="#d4a843" />}
+              </div>
+              <div className="px-5 pb-2">
+                <button
+                  onClick={() => setShowInstallGuide(false)}
+                  className="w-full py-3 rounded-xl"
+                  style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', color: '#6b7b9b', fontSize: '0.8rem', fontFamily: '"Cinzel", serif' }}
+                >
+                  J'ai compris
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

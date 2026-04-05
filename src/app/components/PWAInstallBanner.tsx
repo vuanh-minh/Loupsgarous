@@ -252,7 +252,9 @@ export function PWAInstallBanner({ pwa, variant = 'dark' }: PWAInstallBannerProp
 
 /* ── Step components ── */
 
-function StepRow({ icon, title, description }: { icon: React.ReactNode; title: string; description: React.ReactNode }) {
+export function detectPlatformPublic() { return detectPlatform(); }
+
+export function StepRow({ icon, title, description }: { icon: React.ReactNode; title: string; description: React.ReactNode }) {
   return (
     <div className="flex items-start gap-4">
       <div
@@ -276,7 +278,7 @@ function StepRow({ icon, title, description }: { icon: React.ReactNode; title: s
   );
 }
 
-function IOSSteps({ gold }: { gold: string }) {
+export function IOSSteps({ gold }: { gold: string }) {
   return (
     <>
       <StepRow
@@ -300,7 +302,7 @@ function IOSSteps({ gold }: { gold: string }) {
   );
 }
 
-function AndroidSteps({ gold }: { gold: string }) {
+export function AndroidSteps({ gold }: { gold: string }) {
   return (
     <>
       <StepRow
@@ -324,7 +326,7 @@ function AndroidSteps({ gold }: { gold: string }) {
   );
 }
 
-function DesktopSteps({ gold }: { gold: string }) {
+export function DesktopSteps({ gold }: { gold: string }) {
   return (
     <>
       <StepRow
