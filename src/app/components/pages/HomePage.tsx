@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Moon, Crown, Eye, Lock, X, AlertCircle, LogIn, Sparkles, UserCircle, ArrowRight, Users } from 'lucide-react';
+import { Moon, Crown, Eye, Lock, X, AlertCircle, LogIn, Sparkles, UserCircle, ArrowRight, Users, Download } from 'lucide-react';
 import { useNavigate } from 'react-router';
 import { useGame } from '../../context/GameContext';
 import { API_BASE, publicAnonKey } from '../../context/apiConfig';
@@ -1080,6 +1080,40 @@ export function HomePage() {
 
       {/* PWA Install Banner */}
       <PWAInstallBanner pwa={pwa} variant="dark" />
+
+      {/* Download App Block */}
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.8, delay: 0.5 }}
+        className="fixed bottom-6 left-6 right-6 z-20"
+      >
+        <button
+          onClick={() => navigate('/rules')}
+          className="w-full p-4 rounded-xl transition-all hover:scale-105 active:scale-95"
+          style={{
+            background: 'linear-gradient(135deg, rgba(212,168,67,0.15) 0%, rgba(212,168,67,0.08) 100%)',
+            border: '1.5px solid rgba(212,168,67,0.3)',
+            backdropFilter: 'blur(10px)',
+            boxShadow: '0 4px 20px rgba(0,0,0,0.3)',
+          }}
+        >
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex items-center gap-3 flex-1">
+              <Download size={20} style={{ color: '#d4a843' }} />
+              <div className="text-left">
+                <p style={{ color: '#d4a843', fontSize: '0.95rem', fontFamily: '"Cinzel", serif', fontWeight: 600, margin: 0 }}>
+                  Instructions
+                </p>
+                <p style={{ color: '#6b7b9b', fontSize: '0.75rem', margin: '2px 0 0 0' }}>
+                  Pour une meilleure expérience
+                </p>
+              </div>
+            </div>
+            <ArrowRight size={18} style={{ color: '#d4a843' }} />
+          </div>
+        </button>
+      </motion.div>
     </div>
   );
 }
