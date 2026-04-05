@@ -419,11 +419,17 @@ export function RulesPage() {
           <div className="flex flex-col gap-2">
             {[
               { step: '1', title: 'Le village s\'endort', desc: 'Tous les joueurs ferment les yeux. Le Maitre du jeu orchestre la nuit.', emoji: '😴' },
-              { step: '2', title: 'La Voyante se reveille', desc: 'Elle designe un joueur pour decouvrir son role.', emoji: '🔮' },
-              { step: '3', title: 'Le Garde se reveille', desc: 'Il choisit un joueur a proteger contre les loups.', emoji: '🛡️' },
-              { step: '4', title: 'Les Loups-Garous se reveillent', desc: 'Ils choisissent ensemble une victime a devorer.', emoji: '🐺' },
-              { step: '5', title: 'La Sorciere se reveille', desc: 'Elle peut sauver la victime (potion de guerison) ou empoisonner un autre joueur.', emoji: '🧙‍♀️' },
-              { step: '6', title: 'Le village se reveille', desc: 'Le MJ annonce les victimes de la nuit. La phase de jour commence.', emoji: '☀️' },
+              { step: '2', title: 'Cupidon se reveille', desc: '(1ère nuit uniquement) Il designe deux joueurs qui deviennent Amoureux pour toute la partie.', emoji: '💘' },
+              { step: '3', title: 'La Voyante se reveille', desc: 'Elle designe un joueur pour decouvrir son role.', emoji: '🔮' },
+              { step: '4', title: 'Le Garde se reveille', desc: 'Il choisit un joueur a proteger contre les loups cette nuit.', emoji: '🛡️' },
+              { step: '5', title: 'Les Loups-Garous se reveillent', desc: 'Ils choisissent ensemble une victime a devorer.', emoji: '🐺' },
+              { step: '6', title: 'Le Corbeau se reveille', desc: 'Il intercepte un indice et le falsifie, puis choisit un joueur a qui envoyer cette fausse piste.', emoji: '🐦‍⬛' },
+              { step: '7', title: 'L\'Empoisonneur agit', desc: 'Il cible un joueur dont la prochaine quete sera automatiquement sabotee.', emoji: '🧪' },
+              { step: '8', title: 'La Sorciere se reveille', desc: 'Elle peut sauver la victime des loups ou empoisonner un autre joueur.', emoji: '🧙‍♀️' },
+              { step: '9', title: 'Le Renard enquete', desc: 'Il designe 3 joueurs et apprend si au moins un Loup-Garou se cache parmi eux.', emoji: '🦊' },
+              { step: '10', title: 'Le Concierge observe', desc: 'Il choisit un joueur et decouvre s\'il est sorti de chez lui et qui il a visite.', emoji: '🔑' },
+              { step: '11', title: 'L\'Oracle consulte les etoiles', desc: 'Il decouvre ce qui s\'est passe cette nuit : qui est devore, sauve ou empoisonne.', emoji: '🌙' },
+              { step: '12', title: 'Le village se reveille', desc: 'Le MJ annonce les victimes de la nuit. La phase de jour commence.', emoji: '☀️' },
             ].map((item) => (
               <div
                 key={item.step}
