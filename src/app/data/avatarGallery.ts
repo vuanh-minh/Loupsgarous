@@ -67,4 +67,7 @@ export const AVATAR_GALLERY: GalleryAvatar[] = [
   { id: 54, name: 'Tommy',           url: '/assets/avatars/Tommy.png' },
   { id: 55, name: 'Vincent Gabu',    url: '/assets/avatars/Gabu.png' },
   { id: 56, name: 'Yangui',          url: '/assets/avatars/Yangui.png' },
+  { id: 57, name: 'Kelly',           url: '/assets/avatars/Kelly.png' },
+  { id: 58, name: 'Victor',          url: '/assets/avatars/Victor.png' },
+  { id: 59, name: 'Yann',            url: '/assets/avatars/Yann.png' },
 ];

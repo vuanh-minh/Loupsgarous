@@ -208,6 +208,7 @@ export function GMQuestsPanel({ state, updateState, t, isMobile, onNavigateToPla
   const [editingTaskId, setEditingTaskId] = useState<number | null>(null);
   const [taskQuestion, setTaskQuestion] = useState('');
   const [taskInputType, setTaskInputType] = useState<QuestTaskInputType>('text');
+  const [taskCodeType, setTaskCodeType] = useState<'numeric' | 'alpha'>('numeric');
   const [taskCorrectAnswer, setTaskCorrectAnswer] = useState('');
   const [taskChoices, setTaskChoices] = useState<string[]>(['', '']);
   const [taskImageUrl, setTaskImageUrl] = useState('');
@@ -589,6 +590,7 @@ export function GMQuestsPanel({ state, updateState, t, isMobile, onNavigateToPla
   const resetTaskForm = useCallback(() => {
     setTaskQuestion('');
     setTaskInputType('text');
+    setTaskCodeType('numeric');
     setTaskCorrectAnswer('');
     setTaskChoices(['', '']);
     setTaskImageUrl('');
@@ -604,6 +606,7 @@ export function GMQuestsPanel({ state, updateState, t, isMobile, onNavigateToPla
       id,
       question: taskQuestion.trim(),
       inputType: taskInputType,
+      codeType: taskInputType === 'code' ? taskCodeType : undefined,
       correctAnswer: taskCorrectAnswer.trim(),
       choices: taskInputType === 'multiple-choice' ? taskChoices.filter(c => c.trim()) : undefined,
       imageUrl: taskImageUrl || undefined,
@@ -612,7 +615,7 @@ export function GMQuestsPanel({ state, updateState, t, isMobile, onNavigateToPla
     };
     updateState((s) => ({ ...s, taskLibrary: [...(s.taskLibrary || []), newTask] }));
     resetTaskForm();
-  }, [taskQuestion, taskInputType, taskCorrectAnswer, taskChoices, taskImageUrl, taskReferencedPlayerId, updateState, resetTaskForm]);
+  }, [taskQuestion, taskInputType, taskCodeType, taskCorrectAnswer, taskChoices, taskImageUrl, taskReferencedPlayerId, updateState, resetTaskForm]);
 
   const handleSaveTaskEdit = useCallback(() => {
     if (!editingTaskId || !taskQuestion.trim() || !taskCorrectAnswer.trim()) return;
@@ -624,6 +627,7 @@ export function GMQuestsPanel({ state, updateState, t, isMobile, onNavigateToPla
               ...t,
               question: taskQuestion.trim(),
               inputType: taskInputType,
+              codeType: taskInputType === 'code' ? taskCodeType : undefined,
               correctAnswer: taskCorrectAnswer.trim(),
               choices: taskInputType === 'multiple-choice' ? taskChoices.filter(c => c.trim()) : undefined,
               imageUrl: taskImageUrl || undefined,
@@ -633,12 +637,13 @@ export function GMQuestsPanel({ state, updateState, t, isMobile, onNavigateToPla
       ),
     }));
     resetTaskForm();
-  }, [editingTaskId, taskQuestion, taskInputType, taskCorrectAnswer, taskChoices, taskImageUrl, taskReferencedPlayerId, updateState, resetTaskForm]);
+  }, [editingTaskId, taskQuestion, taskInputType, taskCodeType, taskCorrectAnswer, taskChoices, taskImageUrl, taskReferencedPlayerId, updateState, resetTaskForm]);
 
   const handleStartTaskEdit = useCallback((task: TaskTemplate) => {
     setEditingTaskId(task.id);
     setTaskQuestion(task.question);
     setTaskInputType(task.inputType);
+    setTaskCodeType(task.codeType ?? 'numeric');
     setTaskCorrectAnswer(task.correctAnswer);
     setTaskChoices(task.choices ? [...task.choices] : ['', '']);
     setTaskImageUrl(task.imageUrl || '');
@@ -2720,6 +2725,28 @@ export function GMQuestsPanel({ state, updateState, t, isMobile, onNavigateToPla
                     </button>
                   ))}
                 </div>
+
+                {/* Code type selector (numeric / alpha) */}
+                {taskInputType === 'code' && (
+                  <div className="flex items-center gap-2 pl-2">
+                    <span style={{ color: t.textDim, fontSize: '0.65rem' }}>Type de code :</span>
+                    {(['numeric', 'alpha'] as const).map(ct => (
+                      <button
+                        key={ct}
+                        onClick={() => setTaskCodeType(ct)}
+                        className="flex items-center gap-1 px-2 py-1 rounded-md transition-colors"
+                        style={{
+                          background: taskCodeType === ct ? 'rgba(59,130,246,0.12)' : 'rgba(255,255,255,0.03)',
+                          border: `1px solid ${taskCodeType === ct ? 'rgba(59,130,246,0.35)' : 'rgba(255,255,255,0.06)'}`,
+                          color: taskCodeType === ct ? '#60a5fa' : t.textMuted,
+                          fontSize: '0.65rem',
+                        }}
+                      >
+                        {ct === 'numeric' ? '🔢 Numérique' : '🔤 Alphabétique'}
+                      </button>
+                    ))}
+                  </div>
+                )}
 
                 {/* Choices for multiple-choice */}
                 {taskInputType === 'multiple-choice' && (

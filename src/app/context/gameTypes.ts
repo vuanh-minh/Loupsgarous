@@ -58,6 +58,7 @@ export interface QuestTask {
   id: number;
   question: string;
   inputType: QuestTaskInputType;
+  codeType?: 'numeric' | 'alpha';          // for 'code' tasks: numeric keypad or alphabet input
   choices?: string[];                       // for multiple-choice
   correctAnswer: string;                    // GM-configured correct answer
   imageUrl?: string;                        // optional image displayed after the question
@@ -72,6 +73,7 @@ export interface TaskTemplate {
   id: number;
   question: string;
   inputType: QuestTaskInputType;
+  codeType?: 'numeric' | 'alpha';          // for 'code' tasks: numeric keypad or alphabet input
   choices?: string[];
   correctAnswer: string;
   imageUrl?: string;

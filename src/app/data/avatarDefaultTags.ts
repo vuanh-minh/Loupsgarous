@@ -60,8 +60,11 @@ export const AVATAR_DEFAULT_TAGS: Record<string, string[]> = {
   Tam: ["FAMILY & CO"],
   Thuong: ["COLLÈGE / LYCÉE"],
   Tommy: ["ESIEE"],
+  Kelly: ["COLLÈGE / LYCÉE"],
   "Vincent Gabu": ["ESIEE"],
   Yangui: ["ESIEE"],
+  Victor: ["ESIEE"],
+  Yann: ["ESIEE"],
 };
 
 /** All unique tags extracted from the mapping */
