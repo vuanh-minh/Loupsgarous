@@ -42,6 +42,7 @@ import { useInAppNotifications, InAppNotificationToasts } from './player/InAppNo
 import { PlayerEndGameOverlay } from './player/PlayerEndGameOverlay';
 import { RoleRevealVillagePanel } from './player/RoleRevealVillagePanel';
 import { JoinVillageScreen } from './player/JoinVillageScreen';
+import { assignAvailableQuestsToNewPlayer } from './gm/gmPureHelpers';
 const nightVillageBg = '/assets/backgrounds/night-village-player.png';
 const dayVoteBg = '/assets/backgrounds/day-village-player.png';
 const dayVillageMobBg = '/assets/backgrounds/day-village-mob.png';
@@ -859,7 +860,8 @@ export function PlayerPage() {
         if (!existing.includes(currentPlayer.id)) existing.push(currentPlayer.id);
         const joinIds = Array.isArray(s.midGameJoinIds) ? [...s.midGameJoinIds] : [];
         if (!joinIds.includes(currentPlayer.id)) joinIds.push(currentPlayer.id);
-        return { ...s, villagePresentIds: existing, midGameJoinIds: joinIds };
+        const questAssignments = assignAvailableQuestsToNewPlayer(s, currentPlayer.id);
+        return { ...s, villagePresentIds: existing, midGameJoinIds: joinIds, questAssignments };
       });
       serverJoinVillage(currentPlayer.id).then(handlePostAction);
     };

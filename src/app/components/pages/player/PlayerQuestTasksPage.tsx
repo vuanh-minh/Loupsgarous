@@ -555,7 +555,7 @@ export const PlayerQuestTasksPage = React.memo(function PlayerQuestTasksPage({
   }, [state.playerHints, state.hints, pid]);
 
   const deadAccent = isDead ? '#9b8bb8' : '#d4a843';
-  const deadSuccessColor = isDead ? '#8a7ba0' : '#7ac462';
+  const deadSuccessColor = '#7ac462';
   const deadFailColor = isDead ? '#8a7080' : '#e06060';
 
   return (
@@ -634,10 +634,10 @@ export const PlayerQuestTasksPage = React.memo(function PlayerQuestTasksPage({
               className="rounded-xl p-3.5 flex items-center gap-2.5"
               style={{
                 background: myStatus === 'success'
-                  ? (isDead ? 'rgba(140,120,170,0.12)' : 'rgba(90,150,70,0.12)')
+                  ? 'rgba(90,150,70,0.12)'
                   : (isDead ? 'rgba(140,100,130,0.1)' : 'rgba(200,60,60,0.1)'),
                 border: `1px solid ${myStatus === 'success'
-                  ? (isDead ? 'rgba(140,120,170,0.25)' : 'rgba(90,150,70,0.25)')
+                  ? 'rgba(90,150,70,0.25)'
                   : (isDead ? 'rgba(140,100,130,0.2)' : 'rgba(200,60,60,0.2)')}`,
               }}
             >

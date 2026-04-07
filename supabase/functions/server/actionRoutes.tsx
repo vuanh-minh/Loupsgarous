@@ -799,6 +799,23 @@ actionRoutes.post("/make-server-2c00868b/game/action/join-village", async (c) =>
           state.midGameJoinIds = [...joinIds, playerId];
         }
       }
+      // Assigner immédiatement les quêtes "Dispo. par défaut" au joueur qui rejoint
+      const availableQuests = (state.quests || []).filter((q: any) => q.distributionOrder === 'available');
+      if (availableQuests.length > 0) {
+        if (!state.questAssignments) state.questAssignments = {};
+        if (!state.questAssignments[playerId]) state.questAssignments[playerId] = [];
+        const player = (state.players || []).find((p: any) => p.id === playerId);
+        for (const quest of availableQuests) {
+          if (state.questAssignments[playerId].includes(quest.id)) continue;
+          const isCollab = (quest.questType || 'individual') === 'collaborative';
+          if (quest.targetTags && quest.targetTags.length > 0) {
+            const pidTags = (state.playerTags || {})[playerId] || [];
+            if (!pidTags.some((tag: string) => quest.targetTags.includes(tag))) continue;
+          }
+          if (isCollab && player && !player.alive) continue;
+          state.questAssignments[playerId].push(quest.id);
+        }
+      }
     });
     if (!res) return c.json({ error: "Aucune partie en cours" }, 404);
     return c.json({ success: true });
