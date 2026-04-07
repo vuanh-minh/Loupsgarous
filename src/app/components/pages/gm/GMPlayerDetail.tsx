@@ -12,6 +12,7 @@ import { getRoleById, ROLES } from '../../../data/roles';
 import type { RoleDefinition } from '../../../data/roles';
 import { API_BASE, publicAnonKey } from '../../../context/apiConfig';
 import { GMAvatar, SectionHeader, getConnectionStatus, buildQuests } from './GMShared';
+import { assignAvailableQuestsToNewPlayer } from './gmPureHelpers';
 import { useGamePanelContext } from './GamePanelContext';
 import { sendPushNotifications } from '../../../context/useNotifications';
 import { AvatarGalleryModal } from './AvatarGalleryModal';
@@ -857,12 +858,13 @@ export function GMPlayerDetail() {
                 updateState((s) => {
                   const current = s.villagePresentIds || s.players.filter((p: Player) => p.alive).map((p: Player) => p.id);
                   const away = !current.includes(selectedPlayerData.id);
-                  return {
-                    ...s,
-                    villagePresentIds: away
-                      ? [...current, selectedPlayerData.id]
-                      : current.filter((id: number) => id !== selectedPlayerData.id),
-                  };
+                  const newPresent = away
+                    ? [...current, selectedPlayerData.id]
+                    : current.filter((id: number) => id !== selectedPlayerData.id);
+                  const questAssignments = away
+                    ? assignAvailableQuestsToNewPlayer(s, selectedPlayerData.id)
+                    : s.questAssignments;
+                  return { ...s, villagePresentIds: newPresent, questAssignments };
                 });
               }}
               className="w-full flex items-center justify-between gap-3 group cursor-pointer"

@@ -12,6 +12,7 @@ import { type Quest, type Hint, type PlayerHint, type DynamicHint } from '../../
 import { API_BASE, publicAnonKey } from '../../../context/apiConfig';
 import { getRoleById } from '../../../data/roles';
 import { GMAvatar, SectionHeader, getConnectionStatus, buildQuests } from './GMShared';
+import { assignAvailableQuestsToNewPlayer } from './gmPureHelpers';
 import { GMSendHintButton } from '../../HintComponents';
 import { sendPushNotifications } from '../../../context/useNotifications';
 import { useGamePanelContext } from './GamePanelContext';
@@ -1448,12 +1449,13 @@ export function GMPlayerList() {
                       updateState((s: any) => {
                         const current = s.villagePresentIds || s.players.filter((p: Player) => p.alive).map((p: Player) => p.id);
                         const away = !current.includes(selectedPlayerData.id);
-                        return {
-                          ...s,
-                          villagePresentIds: away
-                            ? [...current, selectedPlayerData.id]
-                            : current.filter((id: number) => id !== selectedPlayerData.id),
-                        };
+                        const newPresent = away
+                          ? [...current, selectedPlayerData.id]
+                          : current.filter((id: number) => id !== selectedPlayerData.id);
+                        const questAssignments = away
+                          ? assignAvailableQuestsToNewPlayer(s, selectedPlayerData.id)
+                          : s.questAssignments;
+                        return { ...s, villagePresentIds: newPresent, questAssignments };
                       });
                     }}
                     className="w-full flex items-center justify-between gap-2 px-2.5 py-2 rounded-lg transition-all"
