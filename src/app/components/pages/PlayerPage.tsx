@@ -1205,7 +1205,7 @@ export function PlayerPage() {
                           }}
                           t={t}
                         />
-                      ) : (isVillageois || roleHasActed) && !isSimulationMode && !isDiscoveryRealMode && !seerRevealing && !foxRevealing && !conciergeRevealing ? (
+                      ) : (isVillageois || currentPlayer?.role === 'enqueteur' || currentPlayer?.role === 'enqueteur-loup' || roleHasActed) && !isSimulationMode && !isDiscoveryRealMode && !seerRevealing && !foxRevealing && !conciergeRevealing ? (
                         guardHasActed ? (
                           <GuardSleepingPanel
                             guardTargetName={
