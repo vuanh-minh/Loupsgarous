@@ -459,6 +459,22 @@ export function useGameSync({ setState, state, stateRef }: SyncDeps) {
         }
       }
 
+      // Safety net: preserve questAssignments — a stale GM broadcast (before it has
+      // merged the join action) could wipe out quests that were just assigned locally
+      // or fetched from the server. Union-merge per player to prevent any loss.
+      if (prev.questAssignments && Object.keys(prev.questAssignments).length > 0) {
+        const mergedAssignments: Record<number, number[]> = { ...(next.questAssignments || {}) };
+        for (const [pidStr, prevIds] of Object.entries(prev.questAssignments)) {
+          const pid = Number(pidStr);
+          const nextIds = mergedAssignments[pid] || [];
+          const union = [...new Set([...nextIds, ...prevIds])];
+          if (union.length !== nextIds.length) {
+            mergedAssignments[pid] = union;
+          }
+        }
+        next.questAssignments = mergedAssignments;
+      }
+
       // Fast equality check: use _kvVersion if available (avoids full JSON.stringify on large state)
       const prevVersion = (prev as any)._kvVersion;
       const nextVersion = (next as any)._kvVersion;
