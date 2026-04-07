@@ -118,17 +118,17 @@ function RuleSection({
   icon: Icon,
   title,
   children,
-  defaultOpen = false,
+  open,
+  onToggle,
   accentColor = '#d4a843',
 }: {
   icon: typeof Moon;
   title: string;
   children: React.ReactNode;
-  defaultOpen?: boolean;
+  open: boolean;
+  onToggle: () => void;
   accentColor?: string;
 }) {
-  const [open, setOpen] = useState(defaultOpen);
-
   return (
     <div
       className="rounded-xl overflow-hidden"
@@ -140,7 +140,7 @@ function RuleSection({
       }}
     >
       <button
-        onClick={() => setOpen((v) => !v)}
+        onClick={onToggle}
         className="w-full flex items-center gap-3 px-4 py-3.5 text-left"
       >
         <Icon size={18} style={{ color: accentColor, flexShrink: 0 }} />
@@ -181,6 +181,8 @@ function RuleSection({
 /* ── Main Page ── */
 export function RulesPage() {
   const navigate = useNavigate();
+  const [openSection, setOpenSection] = useState<string>('comment-jouer');
+  const toggleSection = (id: string) => setOpenSection(prev => prev === id ? '' : id);
   const [teamFilter, setTeamFilter] = useState<'all' | 'village' | 'werewolf' | 'solo'>('all');
   const [selectedRoleId, setSelectedRoleId] = useState<string | null>(null);
 
@@ -290,7 +292,7 @@ export function RulesPage() {
         </motion.div>
 
         {/* ── Game Overview ── */}
-        <RuleSection icon={HelpCircle} title="Comment jouer ?" defaultOpen accentColor="#d4a843">
+        <RuleSection icon={HelpCircle} title="Comment jouer ?" open={openSection === 'comment-jouer'} onToggle={() => toggleSection('comment-jouer')} accentColor="#d4a843">
           <div className="flex flex-col gap-3">
             <p style={{ color: 'rgba(192,200,216,0.7)', fontSize: '0.72rem', lineHeight: 1.7 }}>
               Le Loup-Garou est un jeu en deux equipes : le <strong style={{ color: '#6b8e5a' }}>Village</strong> et
@@ -339,7 +341,7 @@ export function RulesPage() {
         </RuleSection>
 
         {/* ── Victory Conditions ── */}
-        <RuleSection icon={Swords} title="Conditions de victoire" accentColor="#c41e3a">
+        <RuleSection icon={Swords} title="Conditions de victoire" open={openSection === 'victoire'} onToggle={() => toggleSection('victoire')} accentColor="#c41e3a">
           <div className="flex flex-col gap-3">
             <div
               className="flex items-start gap-3 rounded-lg px-3 py-2.5"
@@ -403,7 +405,7 @@ export function RulesPage() {
         </RuleSection>
 
         {/* ── Night Phase Detail ── */}
-        <RuleSection icon={Moon} title="Deroulement de la nuit" accentColor="#7c8db5">
+        <RuleSection icon={Moon} title="Deroulement de la nuit" open={openSection === 'nuit'} onToggle={() => toggleSection('nuit')} accentColor="#7c8db5">
           <div className="flex flex-col gap-2">
             {[
               { step: '1', title: 'Le village s\'endort', desc: 'Tous les joueurs ferment les yeux. Le Maitre du jeu orchestre la nuit.', emoji: '😴' },
@@ -443,7 +445,7 @@ export function RulesPage() {
         </RuleSection>
 
         {/* ── Day Phase Detail ── */}
-        <RuleSection icon={Sun} title="Deroulement du jour" accentColor="#f0c55b">
+        <RuleSection icon={Sun} title="Deroulement du jour" open={openSection === 'jour'} onToggle={() => toggleSection('jour')} accentColor="#f0c55b">
           <div className="flex flex-col gap-2">
             {[
               { step: '1', title: 'Annonce des victimes', desc: 'Le MJ revele qui est mort pendant la nuit et leur role est devoile.', emoji: '💀' },
@@ -487,7 +489,7 @@ export function RulesPage() {
         </RuleSection>
 
         {/* ── Special Rules ── */}
-        <RuleSection icon={Shield} title="Regles speciales" accentColor="#3b82f6">
+        <RuleSection icon={Shield} title="Regles speciales" open={openSection === 'speciales'} onToggle={() => toggleSection('speciales')} accentColor="#3b82f6">
           <div className="flex flex-col gap-3">
             <p style={{ color: 'rgba(192,200,216,0.65)', fontSize: '0.72rem', lineHeight: 1.7 }}>
               <strong style={{ color: '#d4a843' }}>Le Maire</strong> &mdash; Elu par le village au debut ou en cours de partie.
@@ -510,7 +512,7 @@ export function RulesPage() {
         </RuleSection>
 
         {/* ── Quêtes ── */}
-        <RuleSection icon={Target} title="Quetes" accentColor="#10b981">
+        <RuleSection icon={Target} title="Quetes" open={openSection === 'quetes'} onToggle={() => toggleSection('quetes')} accentColor="#10b981">
           <div className="flex flex-col gap-3">
             <p style={{ color: 'rgba(192,200,216,0.7)', fontSize: '0.72rem', lineHeight: 1.7 }}>
               En parallele de la partie, chaque joueur recoit des <strong style={{ color: '#10b981' }}>quetes secretes</strong> a accomplir.
@@ -600,7 +602,7 @@ export function RulesPage() {
         </RuleSection>
 
         {/* ── Indices & Hypothèses ── */}
-        <RuleSection icon={Lightbulb} title="Indices & Hypotheses" accentColor="#8b5cf6">
+        <RuleSection icon={Lightbulb} title="Indices & Hypotheses" open={openSection === 'indices'} onToggle={() => toggleSection('indices')} accentColor="#8b5cf6">
           <div className="flex flex-col gap-3">
             {/* How hints work */}
             <div

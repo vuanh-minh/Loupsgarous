@@ -13,6 +13,7 @@ import {
   localSaveState,
 } from './gameContextConstants';
 import { API_BASE, publicAnonKey } from './apiConfig';
+import { assignAvailableQuestsToNewPlayer } from '../components/pages/gm/gmPureHelpers';
 
 type SetState = React.Dispatch<React.SetStateAction<GameState>>;
 
@@ -995,9 +996,12 @@ export function useGameActions({ setState, stateRef, localModeRef }: ActionsDeps
 
       const roleDef = getRoleById(finalRole);
 
+      const stateWithPlayer = { ...s, players: [...s.players, newPlayer] };
+      const updatedAssignments = assignAvailableQuestsToNewPlayer(stateWithPlayer, newId);
+
       return {
-        ...s,
-        players: [...s.players, newPlayer],
+        ...stateWithPlayer,
+        questAssignments: updatedAssignments,
         ...(s.roleRevealDone ? { midGameJoinIds: [...(s.midGameJoinIds || []), newId] } : {}),
         events: [
           ...s.events,

@@ -5,11 +5,11 @@ import {
   Type, Hash, Users, List as ListIcon,
   Handshake, Shuffle, Zap, Send,
   Tag, Pencil, Save, X, Loader2, BookOpen, Check,
-  Library, UserCircle,
+  Library, UserCircle, Image as ImageIcon,
 } from 'lucide-react';
 import type { QuestTaskInputType, QuestType } from '../../../context/gameTypes';
 import type { GameThemeTokens } from '../../../context/gameTheme';
-import { API_BASE, jsonAuthHeaders } from '../../../context/apiConfig';
+import { API_BASE, jsonAuthHeaders, authHeaders } from '../../../context/apiConfig';
 import { AVATAR_GALLERY } from '../../../data/avatarGallery';
 import type { GalleryTaskTemplate, GalleryTasksMap } from './GMPlayerGalleryPanel';
 
@@ -123,6 +123,9 @@ export function GalleryQuestsTab({ t, isMobile }: {
   const [ptInputType, setPtInputType] = useState<QuestTaskInputType>('text');
   const [ptCorrectAnswer, setPtCorrectAnswer] = useState('');
   const [ptChoices, setPtChoices] = useState<string[]>(['', '', '', '']);
+  const [ptImageUrl, setPtImageUrl] = useState('');
+  const [ptImageLoading, setPtImageLoading] = useState(false);
+  const ptFileInputRef = useRef<HTMLInputElement>(null);
   const [expandedPtPlayerId, setExpandedPtPlayerId] = useState<number | null>(null);
 
   // ── Load from server ──
@@ -304,6 +307,7 @@ export function GalleryQuestsTab({ t, isMobile }: {
     setPtInputType('text');
     setPtCorrectAnswer('');
     setPtChoices(['', '', '', '']);
+    setPtImageUrl('');
     setShowPreTaskForm(false);
     setEditingPreTaskId(null);
   }, []);
@@ -316,11 +320,12 @@ export function GalleryQuestsTab({ t, isMobile }: {
       inputType: ptInputType,
       correctAnswer: ptCorrectAnswer.trim(),
       choices: ptInputType === 'multiple-choice' ? ptChoices.filter(c => c.trim()) : undefined,
+      imageUrl: ptImageUrl.trim() || undefined,
       createdAt: new Date().toISOString(),
     };
     savePreTasks([...preTasks, newTask]);
     resetPreTaskForm();
-  }, [ptQuestion, ptInputType, ptCorrectAnswer, ptChoices, preTasks, savePreTasks, resetPreTaskForm]);
+  }, [ptQuestion, ptInputType, ptCorrectAnswer, ptChoices, ptImageUrl, preTasks, savePreTasks, resetPreTaskForm]);
 
   const handleStartEditPreTask = useCallback((task: GalleryPreTask) => {
     setEditingPreTaskId(task.id);
@@ -328,6 +333,7 @@ export function GalleryQuestsTab({ t, isMobile }: {
     setPtInputType(task.inputType);
     setPtCorrectAnswer(task.correctAnswer);
     setPtChoices(task.choices && task.choices.length > 0 ? [...task.choices, '', '', '', ''].slice(0, 4) : ['', '', '', '']);
+    setPtImageUrl(task.imageUrl ?? '');
     setShowPreTaskForm(true);
   }, []);
 
@@ -341,11 +347,12 @@ export function GalleryQuestsTab({ t, isMobile }: {
         inputType: ptInputType,
         correctAnswer: ptCorrectAnswer.trim(),
         choices: ptInputType === 'multiple-choice' ? ptChoices.filter(c => c.trim()) : undefined,
+        imageUrl: ptImageUrl.trim() || undefined,
       };
     });
     savePreTasks(updated);
     resetPreTaskForm();
-  }, [editingPreTaskId, ptQuestion, ptInputType, ptCorrectAnswer, ptChoices, preTasks, savePreTasks, resetPreTaskForm]);
+  }, [editingPreTaskId, ptQuestion, ptInputType, ptCorrectAnswer, ptChoices, ptImageUrl, preTasks, savePreTasks, resetPreTaskForm]);
 
   const handleDeletePreTask = useCallback((taskId: number) => {
     savePreTasks(preTasks.filter(pt => pt.id !== taskId));
@@ -727,6 +734,7 @@ export function GalleryQuestsTab({ t, isMobile }: {
                                                           inputType: gt.inputType,
                                                           correctAnswer: gt.correctAnswer,
                                                           choices: gt.choices ? [...gt.choices] : undefined,
+                                                          imageUrl: gt.imageUrl,
                                                         }]);
                                                       }}
                                                       className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-md transition-colors text-left"
@@ -1081,6 +1089,83 @@ export function GalleryQuestsTab({ t, isMobile }: {
                   </div>
                 )}
 
+                {/* Image upload */}
+                <div className="space-y-1.5">
+                  <div className="flex items-center gap-2">
+                    <ImageIcon size={11} style={{ color: t.textDim }} />
+                    <span style={{ color: t.textDim, fontSize: '0.55rem', fontFamily: '"Cinzel", serif' }}>Image (optionnel)</span>
+                  </div>
+                  <input
+                    ref={ptFileInputRef}
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={async e => {
+                      const file = e.target.files?.[0];
+                      if (!file) return;
+                      e.target.value = '';
+                      setPtImageLoading(true);
+                      try {
+                        const formData = new FormData();
+                        formData.append('file', file);
+                        formData.append('password', 'loupgarou');
+                        formData.append('galleryId', 'pretasks');
+                        formData.append('type', 'pretask');
+                        const res = await fetch(`${API_BASE}/gallery/image`, {
+                          method: 'POST',
+                          headers: authHeaders(),
+                          body: formData,
+                        });
+                        const data = await res.json();
+                        if (data.imageUrl) setPtImageUrl(data.imageUrl);
+                        else console.error('Pre-task image upload failed:', data.error);
+                      } catch (err) {
+                        console.error('Pre-task image upload error:', err);
+                      } finally {
+                        setPtImageLoading(false);
+                      }
+                    }}
+                  />
+                  {ptImageUrl ? (
+                    <div className="relative rounded-lg overflow-hidden" style={{ background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(255,255,255,0.06)' }}>
+                      <img
+                        src={ptImageUrl}
+                        alt="Aperçu"
+                        className="w-full object-cover"
+                        style={{ maxHeight: 140 }}
+                      />
+                      <button
+                        onClick={() => setPtImageUrl('')}
+                        className="absolute top-1.5 right-1.5 p-1 rounded-md"
+                        style={{ background: 'rgba(0,0,0,0.6)' }}
+                        title="Supprimer l'image"
+                      >
+                        <X size={12} style={{ color: '#fff' }} />
+                      </button>
+                    </div>
+                  ) : (
+                    <button
+                      onClick={() => ptFileInputRef.current?.click()}
+                      disabled={ptImageLoading}
+                      className="w-full flex items-center justify-center gap-2 py-3 rounded-lg transition-colors"
+                      style={{
+                        background: 'rgba(0,0,0,0.2)',
+                        border: '1px dashed rgba(255,255,255,0.12)',
+                        color: t.textDim,
+                        fontSize: '0.6rem',
+                        fontFamily: '"Cinzel", serif',
+                        cursor: ptImageLoading ? 'wait' : 'pointer',
+                      }}
+                    >
+                      {ptImageLoading ? (
+                        <><Loader2 size={12} className="animate-spin" /> Chargement...</>
+                      ) : (
+                        <><ImageIcon size={12} /> Choisir une image</>
+                      )}
+                    </button>
+                  )}
+                </div>
+
                 {/* Submit */}
                 <button
                   onClick={editingPreTaskId ? handleSaveEditPreTask : handleCreatePreTask}
@@ -1139,9 +1224,15 @@ export function GalleryQuestsTab({ t, isMobile }: {
                         className="flex items-center gap-2.5 px-3.5 py-2.5 rounded-lg group"
                         style={{ background: cardBg, border: `1px solid ${cardBorder}` }}
                       >
-                        <span className="px-1.5 py-0.5 rounded-md shrink-0" style={{ background: 'rgba(139,92,246,0.1)', border: '1px solid rgba(139,92,246,0.2)', fontSize: '0.45rem' }}>
-                          {itl.icon}
-                        </span>
+                        {pt.imageUrl ? (
+                          <div className="w-8 h-8 rounded-md overflow-hidden shrink-0" style={{ border: '1px solid rgba(255,255,255,0.08)' }}>
+                            <img src={pt.imageUrl} alt="" className="w-full h-full object-cover" />
+                          </div>
+                        ) : (
+                          <span className="px-1.5 py-0.5 rounded-md shrink-0" style={{ background: 'rgba(139,92,246,0.1)', border: '1px solid rgba(139,92,246,0.2)', fontSize: '0.45rem' }}>
+                            {itl.icon}
+                          </span>
+                        )}
                         <div className="flex-1 min-w-0">
                           <p className="truncate" style={{ color: t.text, fontSize: '0.68rem' }}>{pt.question}</p>
                           <div className="flex items-center gap-2 mt-0.5">
@@ -1152,6 +1243,11 @@ export function GalleryQuestsTab({ t, isMobile }: {
                             {pt.choices && pt.choices.length > 0 && (
                               <span style={{ color: t.textDim, fontSize: '0.42rem' }}>
                                 {pt.choices.length} choix
+                              </span>
+                            )}
+                            {pt.imageUrl && (
+                              <span className="flex items-center gap-0.5" style={{ color: t.textDim, fontSize: '0.42rem' }}>
+                                <ImageIcon size={8} /> image
                               </span>
                             )}
                           </div>

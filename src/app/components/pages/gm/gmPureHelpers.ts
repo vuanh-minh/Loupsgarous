@@ -677,6 +677,37 @@ export function distributeQuestRound(s: GameState): { state: GameState; distribu
   };
 }
 
+/**
+ * Assigns all "available" quests to a newly joined player immediately.
+ * Returns an updated questAssignments map.
+ */
+export function assignAvailableQuestsToNewPlayer(
+  s: GameState,
+  playerId: number,
+): Record<number, number[]> {
+  const newAssign: Record<number, number[]> = {};
+  for (const [k, v] of Object.entries(s.questAssignments || {})) {
+    newAssign[Number(k)] = [...v];
+  }
+  if (!newAssign[playerId]) newAssign[playerId] = [];
+
+  const availableQuests = (s.quests || []).filter(q => q.distributionOrder === 'available');
+  for (const quest of availableQuests) {
+    if (newAssign[playerId].includes(quest.id)) continue;
+    const isCollab = (quest.questType || 'individual') === 'collaborative';
+    // Collaborative quests: strict tag filter (same logic as autoAssignAvailableQuest)
+    if (quest.targetTags && quest.targetTags.length > 0) {
+      const pidTags = (s.playerTags || {})[playerId] || [];
+      if (!pidTags.some(tag => quest.targetTags!.includes(tag))) continue;
+    }
+    // Only assign collaborative quests to alive players
+    const player = s.players.find(p => p.id === playerId);
+    if (isCollab && player && !player.alive) continue;
+    newAssign[playerId].push(quest.id);
+  }
+  return newAssign;
+}
+
 // ── Villager P2 Clue Distribution ────────────────────────────────
 
 /** Resolve {role} and {durole} placeholders in hint text — includes French articles with auto-capitalization */

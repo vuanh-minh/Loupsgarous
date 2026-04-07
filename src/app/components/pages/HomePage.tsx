@@ -646,113 +646,298 @@ export function HomePage() {
         </motion.p>
         </div>
 
-        {/* Carte 3D rotative */}
-        <div style={{ transform: `translateY(${scrollY * 0.4}px)`, opacity: topElementsOpacity, transition: 'transform 0.1s ease-out, opacity 0.1s ease-out' }}>
-          <motion.div
-            initial={{ opacity: 0, scale: 0.8 }}
-            animate={{ opacity: 1, scale: 1 }}
-            transition={{ duration: 0.6, delay: 1.3 }}
-            style={{ perspective: '1000px', marginBottom: '0.5rem' }}
-          >
-          <div
-            ref={cardRef}
-            style={{
-              width: '110px',
-              height: '150px',
-              transformStyle: 'preserve-3d',
-              position: 'relative',
-              willChange: 'transform',
-            }}
-          >
-            <CardFace role={ROLES[frontRoleIdx]} />
-            <div
-              className="absolute inset-0"
-              style={{ transform: 'rotateY(180deg)', backfaceVisibility: 'hidden', transformStyle: 'preserve-3d' }}
+        <AnimatePresence mode="wait">
+          {countdown.days === 0 && countdown.hours === 0 && countdown.minutes === 0 && countdown.seconds === 0 ? (
+            /* ── Timer écoulé : container Rejoindre une partie ── */
+            <motion.div
+              key="join"
+              className="w-full max-w-sm px-4 flex flex-col gap-4"
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -20 }}
+              transition={{ duration: 0.5 }}
             >
-              <CardFace role={ROLES[backRoleIdx]} />
-            </div>
-          </div>
-        </motion.div>
-        </div>
+              {/* Quick reconnect */}
+              {cachedSession && (
+                <motion.button
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 0.1 }}
+                  onClick={() => navigate(`/player/${cachedSession.shortCode}`)}
+                  className="w-full flex items-center gap-3 p-3 rounded-2xl transition-all active:scale-95"
+                  style={{
+                    background: 'rgba(107,142,90,0.08)',
+                    border: '1.5px solid rgba(107,142,90,0.25)',
+                  }}
+                >
+                  <div className="w-10 h-10 rounded-full overflow-hidden flex-shrink-0" style={{ border: '2px solid rgba(107,142,90,0.4)' }}>
+                    <PAvatar player={{ avatar: cachedSession.playerAvatar, avatarUrl: cachedSession.playerAvatarUrl, name: cachedSession.playerName }} size="text-base" style={{ width: 40, height: 40 }} />
+                  </div>
+                  <div className="flex-1 text-left">
+                    <p style={{ color: '#8bc470', fontSize: '0.75rem', fontFamily: '"Cinzel", serif', fontWeight: 600 }}>Reprendre ma session</p>
+                    <p style={{ color: '#6b7b9b', fontSize: '0.65rem' }}>{cachedSession.playerName}</p>
+                  </div>
+                  <ArrowRight size={16} style={{ color: '#6b8e5a' }} />
+                </motion.button>
+              )}
 
-        {/* Bloc countdown */}
-        <div style={{ transform: `translateY(${scrollY * 0.4}px)`, opacity: topElementsOpacity, transition: 'transform 0.1s ease-out, opacity 0.1s ease-out', marginBottom: '16px' }}>
-          <motion.div
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.6, delay: 1.5 }}
-            className="flex flex-col items-center gap-2"
-          >
-          <p style={{ color: '#8090b0', fontFamily: '"Cinzel", serif', fontSize: '0.75rem', letterSpacing: '0.05em' }}>
-            Découverte des rôles dans
-          </p>
-          <div
-            className="flex items-center gap-2 px-5 py-3 rounded-2xl"
-            style={{
-              background: 'rgba(139,92,246,0.08)',
-              border: '1.5px solid rgba(139,92,246,0.25)',
-              boxShadow: '0 0 20px rgba(139,92,246,0.1)',
-            }}
-          >
-            {[
-              { value: countdown.days, label: 'j' },
-              { value: countdown.hours, label: 'h' },
-              { value: countdown.minutes, label: 'm' },
-              { value: countdown.seconds, label: 's' },
-            ].map(({ value, label }, i) => (
-              <div key={label} className="flex items-center gap-2">
-                {i > 0 && <span style={{ color: 'rgba(139,92,246,0.4)', fontSize: '1rem' }}>·</span>}
-                <div className="flex items-baseline gap-0.5">
-                  <span
-                    style={{
-                      fontFamily: '"Cinzel Decorative", serif',
-                      color: '#a78bfa',
-                      fontSize: '1.3rem',
-                      fontWeight: 700,
-                      minWidth: '2ch',
-                      textAlign: 'center',
-                      letterSpacing: '-0.02em',
-                    }}
-                  >
-                    {String(value).padStart(2, '0')}
-                  </span>
-                  <span style={{ color: 'rgba(167,139,250,0.5)', fontSize: '0.6rem', fontFamily: '"Cinzel", serif' }}>
-                    {label}
+              {/* Join form */}
+              <div
+                className="w-full rounded-2xl p-5 flex flex-col gap-4"
+                style={{
+                  background: 'rgba(255,255,255,0.03)',
+                  border: '1px solid rgba(255,255,255,0.08)',
+                }}
+              >
+                <div className="flex items-center gap-2">
+                  <LogIn size={15} style={{ color: '#8090b0' }} />
+                  <span style={{ color: '#c0c8d8', fontFamily: '"Cinzel", serif', fontSize: '0.85rem', fontWeight: 600 }}>
+                    Rejoindre une partie
                   </span>
                 </div>
-              </div>
-            ))}
-          </div>
-        </motion.div>
-        </div>
 
-        {/* Main buttons */}
-        <motion.div
-          className="w-full max-w-2xl px-4 flex flex-col gap-3"
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.6, delay: 1.7 }}
-        >
-          {galleryGrid.hasGroups ? (
-            <>
-              {galleryGrid.tagGroups.map((group, i) => {
-                const tc = TAG_COLORS[group.tag] ?? DEFAULT_TAG_COLOR;
-                return (
+                {/* Code inputs */}
+                <div className="flex justify-center gap-2" onPaste={handlePaste}>
+                  {codeDigits.map((digit, index) => (
+                    <input
+                      key={index}
+                      ref={(el) => { inputRefs.current[index] = el; }}
+                      type="text"
+                      inputMode="text"
+                      maxLength={1}
+                      value={digit}
+                      onChange={(e) => handleDigitChange(index, e.target.value)}
+                      onKeyDown={(e) => handleDigitKeyDown(index, e)}
+                      className="w-13 h-14 text-center rounded-xl outline-none uppercase transition-all"
+                      style={{
+                        width: 52,
+                        height: 56,
+                        background: digit ? 'rgba(212,168,67,0.08)' : 'rgba(255,255,255,0.04)',
+                        border: `2px solid ${digit ? 'rgba(212,168,67,0.4)' : 'rgba(255,255,255,0.1)'}`,
+                        color: '#d4a843',
+                        fontFamily: '"Cinzel Decorative", serif',
+                        fontSize: '1.4rem',
+                        fontWeight: 700,
+                        letterSpacing: '0.02em',
+                      }}
+                    />
+                  ))}
+                </div>
+
+                {/* Error */}
+                <AnimatePresence>
+                  {joinError && (
+                    <motion.div
+                      initial={{ opacity: 0, y: -4 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0 }}
+                      className="flex items-center justify-center gap-2"
+                    >
+                      <AlertCircle size={13} style={{ color: '#c41e3a' }} />
+                      <span style={{ color: '#c41e3a', fontSize: '0.72rem' }}>{joinError}</span>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+
+                {/* Join button */}
+                <button
+                  onClick={() => handleJoinGame(codeDigits.join(''))}
+                  disabled={joining || codeDigits.join('').length < CODE_LENGTH}
+                  className="w-full flex items-center justify-center gap-2 py-3 rounded-xl transition-all active:scale-95"
+                  style={{
+                    background: codeDigits.join('').length === CODE_LENGTH
+                      ? 'linear-gradient(135deg, #b8860b 0%, #d4a843 50%, #b8860b 100%)'
+                      : 'rgba(255,255,255,0.04)',
+                    color: codeDigits.join('').length === CODE_LENGTH ? '#0a0e1a' : '#4a5568',
+                    fontFamily: '"Cinzel", serif',
+                    fontSize: '0.9rem',
+                    fontWeight: 700,
+                    opacity: joining ? 0.7 : 1,
+                  }}
+                >
+                  {joining ? 'Connexion...' : <><LogIn size={15} /> Rejoindre</>}
+                </button>
+              </div>
+
+              {/* Spectateur */}
+              <button
+                onClick={() => navigate('/spectator')}
+                className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl transition-all active:scale-95"
+                style={{
+                  background: 'rgba(255,255,255,0.03)',
+                  border: '1px solid rgba(255,255,255,0.07)',
+                  color: '#6b7b9b',
+                  fontFamily: '"Cinzel", serif',
+                  fontSize: '0.8rem',
+                }}
+              >
+                <Eye size={14} />
+                Mode spectateur
+              </button>
+            </motion.div>
+          ) : (
+            /* ── Timer en cours : carte + countdown + galerie ── */
+            <motion.div
+              key="countdown"
+              className="w-full flex flex-col items-center"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.4 }}
+            >
+              {/* Carte 3D rotative */}
+              <div style={{ transform: `translateY(${scrollY * 0.4}px)`, opacity: topElementsOpacity, transition: 'transform 0.1s ease-out, opacity 0.1s ease-out' }}>
+                <motion.div
+                  initial={{ opacity: 0, scale: 0.8 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  transition={{ duration: 0.6, delay: 1.3 }}
+                  style={{ perspective: '1000px', marginBottom: '0.5rem' }}
+                >
+                  <div
+                    ref={cardRef}
+                    style={{
+                      width: '110px',
+                      height: '150px',
+                      transformStyle: 'preserve-3d',
+                      position: 'relative',
+                      willChange: 'transform',
+                    }}
+                  >
+                    <CardFace role={ROLES[frontRoleIdx]} />
+                    <div
+                      className="absolute inset-0"
+                      style={{ transform: 'rotateY(180deg)', backfaceVisibility: 'hidden', transformStyle: 'preserve-3d' }}
+                    >
+                      <CardFace role={ROLES[backRoleIdx]} />
+                    </div>
+                  </div>
+                </motion.div>
+              </div>
+
+              {/* Bloc countdown */}
+              <div style={{ transform: `translateY(${scrollY * 0.4}px)`, opacity: topElementsOpacity, transition: 'transform 0.1s ease-out, opacity 0.1s ease-out', marginBottom: '16px' }}>
+                <motion.div
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.6, delay: 1.5 }}
+                  className="flex flex-col items-center gap-2"
+                >
+                  <p style={{ color: '#8090b0', fontFamily: '"Cinzel", serif', fontSize: '0.75rem', letterSpacing: '0.05em' }}>
+                    Découverte des rôles dans
+                  </p>
+                  <div
+                    className="flex items-center gap-2 px-5 py-3 rounded-2xl"
+                    style={{
+                      background: 'rgba(139,92,246,0.08)',
+                      border: '1.5px solid rgba(139,92,246,0.25)',
+                      boxShadow: '0 0 20px rgba(139,92,246,0.1)',
+                    }}
+                  >
+                    {[
+                      { value: countdown.days, label: 'j' },
+                      { value: countdown.hours, label: 'h' },
+                      { value: countdown.minutes, label: 'm' },
+                      { value: countdown.seconds, label: 's' },
+                    ].map(({ value, label }, i) => (
+                      <div key={label} className="flex items-center gap-2">
+                        {i > 0 && <span style={{ color: 'rgba(139,92,246,0.4)', fontSize: '1rem' }}>·</span>}
+                        <div className="flex items-baseline gap-0.5">
+                          <span
+                            style={{
+                              fontFamily: '"Cinzel Decorative", serif',
+                              color: '#a78bfa',
+                              fontSize: '1.3rem',
+                              fontWeight: 700,
+                              minWidth: '2ch',
+                              textAlign: 'center',
+                              letterSpacing: '-0.02em',
+                            }}
+                          >
+                            {String(value).padStart(2, '0')}
+                          </span>
+                          <span style={{ color: 'rgba(167,139,250,0.5)', fontSize: '0.6rem', fontFamily: '"Cinzel", serif' }}>
+                            {label}
+                          </span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </motion.div>
+              </div>
+
+              {/* Galerie des joueurs */}
+              <motion.div
+                className="w-full max-w-2xl px-4 flex flex-col gap-3"
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.6, delay: 1.7 }}
+              >
+                {galleryGrid.hasGroups ? (
+                  <>
+                    {galleryGrid.tagGroups.map((group, i) => {
+                      const tc = TAG_COLORS[group.tag] ?? DEFAULT_TAG_COLOR;
+                      return (
+                        <motion.div
+                          key={group.tag}
+                          className="w-full rounded-xl p-3"
+                          style={{ background: tc.bg, border: `1px solid ${tc.border}` }}
+                          initial={{ opacity: 0, y: 16 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          transition={{ duration: 0.45, delay: 1.8 + i * 0.08 }}
+                        >
+                          <div className="flex items-center gap-2 mb-2.5">
+                            <Users size={12} style={{ color: tc.text, opacity: 0.7 }} />
+                            <span className="text-xs font-semibold tracking-wider uppercase" style={{ color: tc.text, fontFamily: '"Cinzel", serif' }}>{group.tag}</span>
+                            <span className="text-xs" style={{ color: tc.text, opacity: 0.5 }}>{group.players.length}</span>
+                          </div>
+                          <div className="grid grid-cols-4 gap-2.5">
+                            {group.players.map(p => (
+                              <div key={p.id} className="flex flex-col items-center gap-1">
+                                <div className="rounded-full overflow-hidden" style={{ width: 44, height: 44, background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)' }}>
+                                  <PAvatar player={{ avatar: '', avatarUrl: p.url, name: p.name }} size="text-base" style={{ width: 44, height: 44 }} />
+                                </div>
+                                <span className="text-center leading-tight" style={{ fontSize: 9, color: 'rgba(255,255,255,0.6)', maxWidth: 52, wordBreak: 'break-word' }}>{p.name.split(' ')[0]}</span>
+                              </div>
+                            ))}
+                          </div>
+                        </motion.div>
+                      );
+                    })}
+                    {galleryGrid.untagged.length > 0 && (
+                      <motion.div
+                        className="w-full rounded-xl p-3"
+                        style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.06)' }}
+                        initial={{ opacity: 0, y: 16 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ duration: 0.45, delay: 1.8 + galleryGrid.tagGroups.length * 0.08 }}
+                      >
+                        <div className="flex items-center gap-2 mb-2.5">
+                          <Users size={12} style={{ color: 'rgba(255,255,255,0.4)', opacity: 0.7 }} />
+                          <span className="text-xs font-semibold tracking-wider uppercase" style={{ color: 'rgba(255,255,255,0.4)', fontFamily: '"Cinzel", serif' }}>Autres</span>
+                        </div>
+                        <div className="grid grid-cols-4 gap-2.5">
+                          {galleryGrid.untagged.map(p => (
+                            <div key={p.id} className="flex flex-col items-center gap-1">
+                              <div className="rounded-full overflow-hidden" style={{ width: 44, height: 44, background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)' }}>
+                                <PAvatar player={{ avatar: '', avatarUrl: p.url, name: p.name }} size="text-base" style={{ width: 44, height: 44 }} />
+                              </div>
+                              <span className="text-center leading-tight" style={{ fontSize: 9, color: 'rgba(255,255,255,0.6)', maxWidth: 52, wordBreak: 'break-word' }}>{p.name.split(' ')[0]}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </motion.div>
+                    )}
+                  </>
+                ) : (
                   <motion.div
-                    key={group.tag}
                     className="w-full rounded-xl p-3"
-                    style={{ background: tc.bg, border: `1px solid ${tc.border}` }}
+                    style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.06)' }}
                     initial={{ opacity: 0, y: 16 }}
                     animate={{ opacity: 1, y: 0 }}
-                    transition={{ duration: 0.45, delay: 1.8 + i * 0.08 }}
+                    transition={{ duration: 0.45, delay: 1.8 }}
                   >
-                    <div className="flex items-center gap-2 mb-2.5">
-                      <Users size={12} style={{ color: tc.text, opacity: 0.7 }} />
-                      <span className="text-xs font-semibold tracking-wider uppercase" style={{ color: tc.text, fontFamily: '"Cinzel", serif' }}>{group.tag}</span>
-                      <span className="text-xs" style={{ color: tc.text, opacity: 0.5 }}>{group.players.length}</span>
-                    </div>
                     <div className="grid grid-cols-4 gap-2.5">
-                      {group.players.map(p => (
+                      {[...galleryGrid.tagGroups.flatMap(g => g.players), ...galleryGrid.untagged].map(p => (
                         <div key={p.id} className="flex flex-col items-center gap-1">
                           <div className="rounded-full overflow-hidden" style={{ width: 44, height: 44, background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)' }}>
                             <PAvatar player={{ avatar: '', avatarUrl: p.url, name: p.name }} size="text-base" style={{ width: 44, height: 44 }} />
@@ -762,54 +947,11 @@ export function HomePage() {
                       ))}
                     </div>
                   </motion.div>
-                );
-              })}
-              {galleryGrid.untagged.length > 0 && (
-                <motion.div
-                  className="w-full rounded-xl p-3"
-                  style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.06)' }}
-                  initial={{ opacity: 0, y: 16 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ duration: 0.45, delay: 1.8 + galleryGrid.tagGroups.length * 0.08 }}
-                >
-                  <div className="flex items-center gap-2 mb-2.5">
-                    <Users size={12} style={{ color: 'rgba(255,255,255,0.4)', opacity: 0.7 }} />
-                    <span className="text-xs font-semibold tracking-wider uppercase" style={{ color: 'rgba(255,255,255,0.4)', fontFamily: '"Cinzel", serif' }}>Autres</span>
-                  </div>
-                  <div className="grid grid-cols-4 gap-2.5">
-                    {galleryGrid.untagged.map(p => (
-                      <div key={p.id} className="flex flex-col items-center gap-1">
-                        <div className="rounded-full overflow-hidden" style={{ width: 44, height: 44, background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)' }}>
-                          <PAvatar player={{ avatar: '', avatarUrl: p.url, name: p.name }} size="text-base" style={{ width: 44, height: 44 }} />
-                        </div>
-                        <span className="text-center leading-tight" style={{ fontSize: 9, color: 'rgba(255,255,255,0.6)', maxWidth: 52, wordBreak: 'break-word' }}>{p.name.split(' ')[0]}</span>
-                      </div>
-                    ))}
-                  </div>
-                </motion.div>
-              )}
-            </>
-          ) : (
-            <motion.div
-              className="w-full rounded-xl p-3"
-              style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.06)' }}
-              initial={{ opacity: 0, y: 16 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.45, delay: 1.8 }}
-            >
-              <div className="grid grid-cols-4 gap-2.5">
-                {[...galleryGrid.tagGroups.flatMap(g => g.players), ...galleryGrid.untagged].map(p => (
-                  <div key={p.id} className="flex flex-col items-center gap-1">
-                    <div className="rounded-full overflow-hidden" style={{ width: 44, height: 44, background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)' }}>
-                      <PAvatar player={{ avatar: '', avatarUrl: p.url, name: p.name }} size="text-base" style={{ width: 44, height: 44 }} />
-                    </div>
-                    <span className="text-center leading-tight" style={{ fontSize: 9, color: 'rgba(255,255,255,0.6)', maxWidth: 52, wordBreak: 'break-word' }}>{p.name.split(' ')[0]}</span>
-                  </div>
-                ))}
-              </div>
+                )}
+              </motion.div>
             </motion.div>
           )}
-        </motion.div>
+        </AnimatePresence>
 
         {/* Download App + Règles blocs */}
         <div className="w-full max-w-2xl px-4 flex flex-col gap-3 mt-3">

@@ -2989,7 +2989,12 @@ export function GMQuestsPanel({ state, updateState, t, isMobile, onNavigateToPla
                     className="rounded-lg p-2.5 flex items-start gap-2"
                     style={{ background: 'rgba(107,142,90,0.04)', border: '1px solid rgba(107,142,90,0.12)' }}
                   >
-                    {refPlayer && (
+                    {task.imageUrl && (
+                      <div className="w-10 h-10 rounded-md overflow-hidden flex-shrink-0" style={{ border: '1px solid rgba(255,255,255,0.1)' }}>
+                        <img src={task.imageUrl} alt="" className="w-full h-full object-cover" />
+                      </div>
+                    )}
+                    {!task.imageUrl && refPlayer && (
                       <span className="w-6 h-6 rounded-full overflow-hidden flex-shrink-0 mt-0.5" style={{ border: '2px solid rgba(212,168,67,0.35)' }} title={refPlayer.name}>
                         <GMAvatar player={refPlayer} size="text-xs" />
                       </span>
@@ -3055,7 +3060,12 @@ export function GMQuestsPanel({ state, updateState, t, isMobile, onNavigateToPla
                     className="rounded-lg p-2.5 flex items-start gap-2"
                     style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.06)' }}
                   >
-                    {refPlayer && (
+                    {task.imageUrl && (
+                      <div className="w-10 h-10 rounded-md overflow-hidden flex-shrink-0" style={{ border: '1px solid rgba(255,255,255,0.1)' }}>
+                        <img src={task.imageUrl} alt="" className="w-full h-full object-cover" />
+                      </div>
+                    )}
+                    {!task.imageUrl && refPlayer && (
                       <span className="w-6 h-6 rounded-full overflow-hidden flex-shrink-0 mt-0.5" style={{ border: '2px solid rgba(212,168,67,0.35)' }} title={refPlayer.name}>
                         <GMAvatar player={refPlayer} size="text-xs" />
                       </span>
@@ -3069,11 +3079,6 @@ export function GMQuestsPanel({ state, updateState, t, isMobile, onNavigateToPla
                         <span style={{ color: '#6b8e5a', fontSize: '0.5rem' }}>
                           Reponse: {task.correctAnswer}
                         </span>
-                        {task.imageUrl && (
-                          <span className="flex items-center gap-1 px-1.5 py-0.5 rounded" style={{ background: 'rgba(59,130,246,0.06)', fontSize: '0.5rem', color: '#93c5fd' }}>
-                            <ImagePlus size={8} /> Image
-                          </span>
-                        )}
                       </div>
                     </div>
                     <div className="flex items-center gap-1 shrink-0">
