@@ -189,6 +189,32 @@ export const ROLES: RoleDefinition[] = [
     maxCount: 15,
     defaultCount: 0,
   },
+  {
+    id: 'enqueteur',
+    name: 'Enquêteur',
+    article: "l'" as const,
+    team: 'village' as const,
+    emoji: '🕵️‍♀️',
+    color: '#0ea5e9',
+    description: 'Un enqueteur du village qui obtient plus d\'informations des quetes reussies.',
+    power: 'Quand l\'Enqueteur reussit une quete, il recoit 2 indices au lieu de 1.',
+    minCount: 0,
+    maxCount: 15,
+    defaultCount: 0,
+  },
+  {
+    id: 'enqueteur-loup',
+    name: 'Espion',
+    article: "l'" as const,
+    team: 'werewolf' as const,
+    emoji: '🕵️‍♂️',
+    color: '#dc2626',
+    description: 'Un loup infiltre qui excelle dans la collecte d\'informations.',
+    power: 'Quand l\'Espion reussit une quete, il recoit 2 indices au lieu de 1.',
+    minCount: 0,
+    maxCount: 15,
+    defaultCount: 0,
+  },
 ];
 
 export const getRoleById = (id: string): RoleDefinition | undefined =>

@@ -1863,12 +1863,17 @@ actionRoutes.post("/make-server-2c00868b/game/action/quest-answer", async (c) =>
         if (!quest.playerResolvedInPhase) quest.playerResolvedInPhase = {};
         quest.playerResolvedInPhase[playerId] = `${state.turn}-${state.phase}`;
 
-        // ── Reward: grant 1 hint on success only ──
+        // ── Reward: grant hint(s) on success (Enqueteur gets 2) ──
         if (allCorrect) {
-          const hintId = grantDynamicHintReward(state, playerId);
-          if (hintId) {
-            if (!quest.rewardHintIds) quest.rewardHintIds = {};
-            quest.rewardHintIds[playerId] = hintId;
+          const player = state.players.find((p: any) => p.id === playerId);
+          const isEnqueteur = player?.role === 'enqueteur' || player?.role === 'enqueteur-loup';
+          const hintsToGrant = isEnqueteur ? 2 : 1;
+          for (let i = 0; i < hintsToGrant; i++) {
+            const hintId = grantDynamicHintReward(state, playerId);
+            if (hintId) {
+              if (!quest.rewardHintIds) quest.rewardHintIds = {};
+              quest.rewardHintIds[playerId] = hintId;
+            }
           }
         }
 
@@ -1971,15 +1976,20 @@ actionRoutes.post("/make-server-2c00868b/game/action/quest-collab-vote", async (
             quest.playerResolvedInPhase[pid] = `${state.turn}-${state.phase}`;
           }
 
-          // ── Reward: grant 1 hint per group member on success ──
+          // ── Reward: grant hint(s) per group member on success (Enqueteur gets 2) ──
           const _collabAutoAssigns: { shortCode: string; questTitle: string }[] = [];
           if (finalStatus === 'success') {
             if (!state.questCompletionsThisPhase) state.questCompletionsThisPhase = {};
             for (const pid of playerGroup) {
-              const hintId = grantDynamicHintReward(state, pid);
-              if (hintId) {
-                if (!quest.rewardHintIds) quest.rewardHintIds = {};
-                quest.rewardHintIds[pid] = hintId;
+              const player = state.players.find((p: any) => p.id === pid);
+              const isEnqueteur = player?.role === 'enqueteur' || player?.role === 'enqueteur-loup';
+              const hintsToGrant = isEnqueteur ? 2 : 1;
+              for (let i = 0; i < hintsToGrant; i++) {
+                const hintId = grantDynamicHintReward(state, pid);
+                if (hintId) {
+                  if (!quest.rewardHintIds) quest.rewardHintIds = {};
+                  quest.rewardHintIds[pid] = hintId;
+                }
               }
               // Auto-assign next quest if under phase limit
               const completions = state.questCompletionsThisPhase[pid] || 0;
