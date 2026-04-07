@@ -361,7 +361,7 @@ export function GMDynamicHintsPanel({
     } else if (recipientTeam === 'village') {
       // Dead players also receive hints
       recipientPlayerIds = players
-        .filter((p) => getRoleById(p.role)?.team !== 'werewolf')
+        .filter((p) => p.id !== targetPlayer.id && getRoleById(p.role)?.team !== 'werewolf')
         .map((p) => p.id);
     } else if (recipientTeam === 'wolves') {
       // Wolves receive hints about village-team special powers
