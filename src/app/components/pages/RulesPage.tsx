@@ -419,7 +419,8 @@ export function RulesPage() {
               { step: '9', title: 'Le Renard enquete', desc: 'Il designe 3 joueurs et apprend si au moins un Loup-Garou se cache parmi eux.', emoji: '🦊' },
               { step: '10', title: 'Le Concierge observe', desc: 'Il choisit un joueur et decouvre s\'il est sorti de chez lui et qui il a visite.', emoji: '🔑' },
               { step: '11', title: 'L\'Oracle consulte les etoiles', desc: 'Il decouvre ce qui s\'est passe cette nuit : qui est devore, sauve ou empoisonne.', emoji: '🌙' },
-              { step: '12', title: 'Le village se reveille', desc: 'Le MJ annonce les victimes de la nuit. La phase de jour commence.', emoji: '☀️' },
+              { step: '12', title: 'La petite fille', desc: 'Elle voit toutes les personnes qui se reveillent la nuit, sans savoir leur role ou action.', emoji: '👧' },
+              { step: '13', title: 'Le village se reveille', desc: 'Le MJ annonce les victimes de la nuit. La phase de jour commence.', emoji: '☀️' },
             ].map((item) => (
               <div
                 key={item.step}
