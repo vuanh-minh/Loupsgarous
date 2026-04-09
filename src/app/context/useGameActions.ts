@@ -716,7 +716,7 @@ export function useGameActions({ setState, stateRef, localModeRef }: ActionsDeps
 
   const resetGame = useCallback(() => {
     const currentGameId = stateRef.current.gameId;
-    const freshState = { ...initialState, gameId: currentGameId, roleConfig: { ...defaultRoleConfig } };
+    const freshState = { ...initialState, gameId: currentGameId, roleConfig: { ...defaultRoleConfig }, villagePresentIds: undefined, enqueteurBonusGrantedThisPhase: {} };
     setState(freshState);
     stateRef.current = freshState;
     if (localModeRef.current) {

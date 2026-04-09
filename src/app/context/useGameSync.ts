@@ -448,10 +448,14 @@ export function useGameSync({ setState, state, stateRef }: SyncDeps) {
     setState((prev) => {
       const next = { ...incoming, hypotheses: prev.hypotheses };
 
+      // Safety nets below only apply within the same game — cross-game merges would
+      // carry over stale "away" / quest state from a previous session into a new one.
+      const sameGame = prev.gameId === incoming.gameId;
+
       // Safety net: preserve villagePresentIds membership for players already present.
       // A stale GM broadcast could omit a player who just joined — union merge prevents
       // a player from being silently moved back to "away".
-      if (Array.isArray(prev.villagePresentIds) && prev.villagePresentIds.length > 0) {
+      if (sameGame && Array.isArray(prev.villagePresentIds) && prev.villagePresentIds.length > 0) {
         const incomingPresent: number[] = Array.isArray(next.villagePresentIds) ? next.villagePresentIds : [];
         const merged = [...new Set([...incomingPresent, ...prev.villagePresentIds])];
         if (merged.length !== incomingPresent.length) {
@@ -462,7 +466,7 @@ export function useGameSync({ setState, state, stateRef }: SyncDeps) {
       // Safety net: preserve questAssignments — a stale GM broadcast (before it has
       // merged the join action) could wipe out quests that were just assigned locally
       // or fetched from the server. Union-merge per player to prevent any loss.
-      if (prev.questAssignments && Object.keys(prev.questAssignments).length > 0) {
+      if (sameGame && prev.questAssignments && Object.keys(prev.questAssignments).length > 0) {
         const mergedAssignments: Record<number, number[]> = { ...(next.questAssignments || {}) };
         for (const [pidStr, prevIds] of Object.entries(prev.questAssignments)) {
           const pid = Number(pidStr);
