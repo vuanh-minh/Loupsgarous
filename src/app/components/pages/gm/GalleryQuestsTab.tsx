@@ -1,4 +1,5 @@
 import React, { useState, useCallback, useMemo, useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'motion/react';
 import {
   Plus, Trash2, ChevronDown, ChevronUp, Map as MapIcon,
@@ -11,6 +12,7 @@ import type { QuestTaskInputType, QuestType } from '../../../context/gameTypes';
 import type { GameThemeTokens } from '../../../context/gameTheme';
 import { API_BASE, jsonAuthHeaders, authHeaders } from '../../../context/apiConfig';
 import { AVATAR_GALLERY } from '../../../data/avatarGallery';
+import { AVATAR_DEFAULT_TAGS, DEFAULT_AVAILABLE_TAGS } from '../../../data/avatarDefaultTags';
 import type { GalleryTaskTemplate, GalleryTasksMap } from './GMPlayerGalleryPanel';
 
 /* ================================================================
@@ -66,6 +68,15 @@ const INPUT_TYPE_OPTIONS: { value: QuestTaskInputType; label: string; icon: Reac
   { value: 'multiple-choice', label: 'QCM', icon: <ListIcon size={12} /> },
 ];
 
+const TAG_COLORS: Record<string, string> = {
+  'THIGA & YOUSIGN': '#60a5fa',
+  'ESIEE': '#a78bfa',
+  'COLLÈGE / LYCÉE': '#34d399',
+  'FAMILY & CO': '#f97316',
+  'Generale': '#8b5cf6',
+  'Autres': '#6b7280',
+};
+
 const INPUT_TYPE_LABELS: Record<QuestTaskInputType, { label: string; icon: React.ReactNode }> = {
   text: { label: 'Texte', icon: <Type size={10} /> },
   code: { label: 'Code', icon: <Hash size={10} /> },
@@ -113,6 +124,13 @@ export function GalleryQuestsTab({ t, isMobile }: {
   const [showGalleryPicker, setShowGalleryPicker] = useState(false);
   const [expandedPickerPlayerId, setExpandedPickerPlayerId] = useState<number | null>(null);
 
+  // ── Bibliothèque : accordéon par tag + section générales ──
+  const [openTagGroups, setOpenTagGroups] = useState<Set<string>>(() => new Set([...DEFAULT_AVAILABLE_TAGS, 'Autres']));
+  const [openGenerales, setOpenGenerales] = useState(true);
+
+  // ── Public cible (form) ──
+  const [formPublicCible, setFormPublicCible] = useState<string[]>([]);
+
   // ── General pre-tasks (global, not player-specific) ──
   const [preTasks, setPreTasks] = useState<GalleryPreTaskList>([]);
   const [savingPreTasks, setSavingPreTasks] = useState(false);
@@ -127,6 +145,17 @@ export function GalleryQuestsTab({ t, isMobile }: {
   const [ptImageLoading, setPtImageLoading] = useState(false);
   const ptFileInputRef = useRef<HTMLInputElement>(null);
   const [expandedPtPlayerId, setExpandedPtPlayerId] = useState<number | null>(null);
+  const [zoomImageUrl, setZoomImageUrl] = useState<string | null>(null);
+
+  // ── Tâches déjà utilisées dans d'autres quêtes sauvegardées ──
+  const tasksInOtherQuests = useMemo(() => {
+    const set = new Set<string>();
+    preQuests.forEach(q => {
+      if (q.id === editingId) return;
+      q.tasks.forEach(task => set.add(`${task.question}::${task.correctAnswer}`));
+    });
+    return set;
+  }, [preQuests, editingId]);
 
   // ── Load from server ──
   useEffect(() => {
@@ -186,6 +215,7 @@ export function GalleryQuestsTab({ t, isMobile }: {
     setFormGroupSize(3);
     setFormDistribution('random');
     setFormTasks([]);
+    setFormPublicCible([]);
     setShowTaskForm(false);
     setTaskQuestion('');
     setTaskInputType('text');
@@ -233,11 +263,12 @@ export function GalleryQuestsTab({ t, isMobile }: {
       collaborativeGroupSize: isCollab ? formGroupSize : undefined,
       tasks: isCollab ? [] : formTasks,
       distributionOrder: formDistribution,
+      targetTags: formPublicCible.length > 0 ? formPublicCible : undefined,
       createdAt: new Date().toISOString(),
     };
     savePreQuests([...preQuests, newQuest]);
     resetForm();
-  }, [formTitle, formDescription, formQuestType, formGroupSize, formTasks, formDistribution, preQuests, savePreQuests, resetForm]);
+  }, [formTitle, formDescription, formQuestType, formGroupSize, formTasks, formDistribution, formPublicCible, preQuests, savePreQuests, resetForm]);
 
   // ── Start editing ──
   const handleStartEdit = useCallback((quest: GalleryPreQuest) => {
@@ -248,6 +279,7 @@ export function GalleryQuestsTab({ t, isMobile }: {
     setFormGroupSize(quest.collaborativeGroupSize ?? 3);
     setFormDistribution(quest.distributionOrder ?? 'random');
     setFormTasks([...quest.tasks]);
+    setFormPublicCible(quest.targetTags ?? []);
     setShowCreateForm(true);
     setExpandedId(null);
   }, []);
@@ -268,11 +300,12 @@ export function GalleryQuestsTab({ t, isMobile }: {
         collaborativeGroupSize: isCollab ? formGroupSize : undefined,
         tasks: isCollab ? [] : formTasks,
         distributionOrder: formDistribution,
+        targetTags: formPublicCible.length > 0 ? formPublicCible : undefined,
       };
     });
     savePreQuests(updated);
     resetForm();
-  }, [editingId, formTitle, formDescription, formQuestType, formGroupSize, formTasks, formDistribution, preQuests, savePreQuests, resetForm]);
+  }, [editingId, formTitle, formDescription, formQuestType, formGroupSize, formTasks, formDistribution, formPublicCible, preQuests, savePreQuests, resetForm]);
 
   // ── Delete ──
   const handleDelete = useCallback((questId: number) => {
@@ -524,328 +557,325 @@ export function GalleryQuestsTab({ t, isMobile }: {
                 ))}
               </div>
 
+              {/* Public cible */}
+              <div className="flex items-center gap-2 flex-wrap">
+                <span style={{ color: t.textDim, fontSize: '0.6rem', fontFamily: '"Cinzel", serif' }}>Public cible :</span>
+                <button
+                  onClick={() => setFormPublicCible([])}
+                  className="flex items-center gap-1 px-2 py-1 rounded-md transition-colors"
+                  style={{
+                    background: formPublicCible.length === 0 ? `${accentColor}15` : 'transparent',
+                    border: `1px solid ${formPublicCible.length === 0 ? `${accentColor}35` : 'transparent'}`,
+                    color: formPublicCible.length === 0 ? accentColor : t.textDim,
+                    fontSize: '0.5rem', fontWeight: 600, fontFamily: '"Cinzel", serif',
+                  }}
+                >
+                  <Users size={9} /> Tous
+                </button>
+                {DEFAULT_AVAILABLE_TAGS.map(tag => {
+                  const color = TAG_COLORS[tag] ?? '#6b7280';
+                  const selected = formPublicCible.includes(tag);
+                  return (
+                    <button
+                      key={tag}
+                      onClick={() => setFormPublicCible(prev => selected ? prev.filter(t => t !== tag) : [...prev, tag])}
+                      className="flex items-center gap-1 px-2 py-1 rounded-md transition-colors"
+                      style={{
+                        background: selected ? `${color}18` : 'transparent',
+                        border: `1px solid ${selected ? `${color}45` : 'transparent'}`,
+                        color: selected ? color : t.textDim,
+                        fontSize: '0.5rem', fontWeight: 600, fontFamily: '"Cinzel", serif',
+                      }}
+                    >
+                      {tag}
+                    </button>
+                  );
+                })}
+              </div>
+
               {/* ── Tasks section (individual only) ── */}
               {formQuestType === 'individual' && (
                 <div className="space-y-2">
-                  <div className="flex items-center gap-2">
-                    <span style={{ color: t.textDim, fontSize: '0.6rem', fontFamily: '"Cinzel", serif', fontWeight: 600 }}>
-                      Taches ({formTasks.length})
-                    </span>
-                    {!showTaskForm && (
-                      <button
-                        onClick={() => setShowTaskForm(true)}
-                        className="flex items-center gap-1 px-2 py-0.5 rounded-md transition-colors"
-                        style={{ background: `${accentColor}10`, border: `1px solid ${accentColor}25`, color: accentColor, fontSize: '0.5rem', fontFamily: '"Cinzel", serif' }}
-                      >
-                        <Plus size={9} /> Ajouter
-                      </button>
-                    )}
-                  </div>
 
-                  {/* Existing tasks */}
-                  {formTasks.map((task, idx) => {
-                    const itl = INPUT_TYPE_LABELS[task.inputType];
-                    return (
-                      <div key={task.id} className="flex items-center gap-2 px-3 py-2 rounded-lg" style={{ background: cardBg, border: `1px solid ${cardBorder}` }}>
-                        <span className="px-1.5 py-0.5 rounded-md shrink-0" style={{ background: `${accentColor}12`, border: `1px solid ${accentColor}25`, color: accentColor, fontSize: '0.45rem', fontWeight: 700, fontFamily: '"Cinzel", serif' }}>
-                          {itl.icon}
-                        </span>
-                        <span className="flex-1 min-w-0 truncate" style={{ color: t.text, fontSize: '0.65rem' }}>{task.question}</span>
-                        <span style={{ color: t.textDim, fontSize: '0.5rem' }}>= {task.correctAnswer}</span>
-                        <button onClick={() => removeTaskFromForm(task.id)} className="p-1 rounded-md hover:bg-white/5 shrink-0">
-                          <Trash2 size={10} style={{ color: '#c41e3a' }} />
-                        </button>
-                      </div>
-                    );
-                  })}
-
-                  {/* Inline task creation form */}
-                  <AnimatePresence>
-                    {showTaskForm && (
-                      <motion.div
-                        initial={{ height: 0, opacity: 0 }}
-                        animate={{ height: 'auto', opacity: 1 }}
-                        exit={{ height: 0, opacity: 0 }}
-                        className="overflow-hidden"
-                      >
-                        <div className="rounded-lg p-3 space-y-2" style={{ background: 'rgba(0,0,0,0.2)', border: `1px solid ${cardBorder}` }}>
-                          <div className="flex items-center gap-2">
-                            <input
-                              type="text"
-                              value={taskQuestion}
-                              onChange={e => setTaskQuestion(e.target.value)}
-                              placeholder="Question..."
-                              className="flex-1 px-2.5 py-1.5 rounded-md outline-none"
-                              style={{ background: inputBg, border: `1px solid ${inputBorder}`, color: t.text, fontSize: '0.65rem' }}
-                            />
-                            <div className="flex items-center gap-0.5 shrink-0">
-                              {INPUT_TYPE_OPTIONS.map(opt => (
-                                <button
-                                  key={opt.value}
-                                  onClick={() => setTaskInputType(opt.value)}
-                                  className="p-1.5 rounded-md transition-colors"
-                                  style={{
-                                    background: taskInputType === opt.value ? `${accentColor}15` : 'transparent',
-                                    border: `1px solid ${taskInputType === opt.value ? `${accentColor}30` : 'transparent'}`,
-                                    color: taskInputType === opt.value ? accentColor : t.textDim,
-                                  }}
-                                  title={opt.label}
-                                >
-                                  {opt.icon}
-                                </button>
-                              ))}
-                            </div>
-                          </div>
-                          <input
-                            type="text"
-                            value={taskCorrectAnswer}
-                            onChange={e => setTaskCorrectAnswer(e.target.value)}
-                            placeholder="Reponse correcte..."
-                            className="w-full px-2.5 py-1.5 rounded-md outline-none"
-                            style={{ background: inputBg, border: `1px solid ${inputBorder}`, color: t.text, fontSize: '0.65rem' }}
-                          />
-                          {taskInputType === 'multiple-choice' && (
-                            <div className="grid grid-cols-2 gap-1.5">
-                              {taskChoices.map((c, i) => (
-                                <input
-                                  key={i}
-                                  type="text"
-                                  value={c}
-                                  onChange={e => { const nc = [...taskChoices]; nc[i] = e.target.value; setTaskChoices(nc); }}
-                                  placeholder={`Choix ${i + 1}...`}
-                                  className="px-2.5 py-1.5 rounded-md outline-none"
-                                  style={{ background: inputBg, border: `1px solid ${inputBorder}`, color: t.text, fontSize: '0.6rem' }}
-                                />
-                              ))}
-                            </div>
-                          )}
-                          <div className="flex items-center gap-2">
-                            <button
-                              onClick={addTaskToForm}
-                              disabled={!taskQuestion.trim() || !taskCorrectAnswer.trim()}
-                              className="flex items-center gap-1 px-2.5 py-1 rounded-md transition-colors"
-                              style={{
-                                background: taskQuestion.trim() && taskCorrectAnswer.trim() ? `${accentColor}20` : 'rgba(255,255,255,0.03)',
-                                border: `1px solid ${taskQuestion.trim() && taskCorrectAnswer.trim() ? `${accentColor}40` : cardBorder}`,
-                                color: taskQuestion.trim() && taskCorrectAnswer.trim() ? accentColor : t.textDim,
-                                fontSize: '0.55rem', fontFamily: '"Cinzel", serif', fontWeight: 600,
-                              }}
-                            >
-                              <Check size={10} /> Valider
-                            </button>
-                            <button
-                              onClick={() => setShowTaskForm(false)}
-                              className="px-2 py-1 rounded-md hover:bg-white/5 transition-colors"
-                              style={{ color: t.textDim, fontSize: '0.55rem', fontFamily: '"Cinzel", serif' }}
-                            >
-                              Annuler
-                            </button>
-                          </div>
-                        </div>
-                      </motion.div>
-                    )}
-                  </AnimatePresence>
-
-                  {/* ── Gallery task picker ── */}
+                  {/* Bibliothèque de tâches — toujours visible */}
                   {(() => {
                     const playersWithTasks = AVATAR_GALLERY.filter(a => (galleryTasks[a.id] ?? []).length > 0);
-                    const totalPlayerTasks = Object.values(galleryTasks).reduce((sum, arr) => sum + arr.length, 0);
-                    const totalGalleryTasks = totalPlayerTasks + preTasks.length;
-                    if (totalGalleryTasks === 0 && !loadingGalleryTasks) return null;
+                    const totalGalleryTasks = Object.values(galleryTasks).reduce((s, a) => s + a.length, 0) + preTasks.length;
+                    if (loadingGalleryTasks) return (
+                      <div className="flex items-center gap-2 py-3 justify-center">
+                        <Loader2 size={12} className="animate-spin" style={{ color: '#8b5cf6', opacity: 0.5 }} />
+                        <span style={{ color: '#8b5cf6', fontSize: '0.55rem', opacity: 0.6, fontFamily: '"Cinzel", serif' }}>Chargement...</span>
+                      </div>
+                    );
+                    if (totalGalleryTasks === 0) return null;
                     return (
-                      <div className="mt-1">
-                        <button
-                          onClick={() => setShowGalleryPicker(!showGalleryPicker)}
-                          className="flex items-center gap-1.5 px-2.5 py-1 rounded-md transition-colors w-full justify-center"
-                          style={{
-                            background: showGalleryPicker ? 'rgba(139,92,246,0.12)' : 'rgba(139,92,246,0.05)',
-                            border: `1px solid ${showGalleryPicker ? 'rgba(139,92,246,0.3)' : 'rgba(139,92,246,0.15)'}`,
-                            color: '#8b5cf6',
-                            fontSize: '0.55rem', fontFamily: '"Cinzel", serif', fontWeight: 600,
-                          }}
-                        >
-                          <Library size={11} />
-                          {showGalleryPicker ? 'Masquer' : 'Piocher depuis la galerie'}
-                          {!showGalleryPicker && totalGalleryTasks > 0 && (
-                            <span className="px-1.5 py-0.5 rounded-full" style={{ background: 'rgba(139,92,246,0.15)', fontSize: '0.45rem', fontWeight: 700 }}>
-                              {totalGalleryTasks}
-                            </span>
-                          )}
-                        </button>
-                        <AnimatePresence>
-                          {showGalleryPicker && (
-                            <motion.div
-                              initial={{ height: 0, opacity: 0 }}
-                              animate={{ height: 'auto', opacity: 1 }}
-                              exit={{ height: 0, opacity: 0 }}
-                              className="overflow-hidden"
-                            >
-                              <div className="mt-2 rounded-lg p-2.5 space-y-1.5" style={{ background: 'rgba(139,92,246,0.04)', border: '1px solid rgba(139,92,246,0.12)' }}>
-                                {loadingGalleryTasks ? (
-                                  <div className="flex items-center gap-2 py-3 justify-center">
-                                    <Loader2 size={12} className="animate-spin" style={{ color: '#8b5cf6', opacity: 0.5 }} />
-                                    <span style={{ color: '#8b5cf6', fontSize: '0.55rem', opacity: 0.6, fontFamily: '"Cinzel", serif' }}>Chargement...</span>
-                                  </div>
-                                ) : playersWithTasks.length === 0 ? (
-                                  <p style={{ color: t.textDim, fontSize: '0.5rem', fontStyle: 'italic', textAlign: 'center', padding: '6px 0' }}>
-                                    Aucune tache dans la galerie joueurs
-                                  </p>
-                                ) : (
-                                  <div className="space-y-1">
-                                    {/* General pre-tasks group */}
-                                    {preTasks.length > 0 && (
-                                      <div>
-                                        <button
-                                          onClick={() => setExpandedPickerPlayerId(expandedPickerPlayerId === -1 ? null : -1)}
-                                          className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-md hover:bg-white/[0.03] transition-colors"
-                                        >
-                                          <div className="w-6 h-6 rounded-full flex items-center justify-center shrink-0" style={{ background: 'rgba(139,92,246,0.15)', border: '1px solid rgba(139,92,246,0.25)' }}>
-                                            <Library size={11} style={{ color: '#8b5cf6' }} />
-                                          </div>
-                                          <span className="flex-1 text-left truncate" style={{ color: '#8b5cf6', fontSize: '0.6rem', fontWeight: 600, fontFamily: '"Cinzel", serif' }}>
-                                            Pre-taches generales
-                                          </span>
-                                          <span className="px-1.5 py-0.5 rounded-full shrink-0" style={{ background: 'rgba(139,92,246,0.1)', border: '1px solid rgba(139,92,246,0.2)', color: '#8b5cf6', fontSize: '0.45rem', fontWeight: 700 }}>
-                                            {preTasks.length}
-                                          </span>
-                                          {expandedPickerPlayerId === -1 ? <ChevronUp size={10} style={{ color: t.textDim }} /> : <ChevronDown size={10} style={{ color: t.textDim }} />}
-                                        </button>
-                                        <AnimatePresence>
-                                          {expandedPickerPlayerId === -1 && (
-                                            <motion.div
-                                              initial={{ height: 0, opacity: 0 }}
-                                              animate={{ height: 'auto', opacity: 1 }}
-                                              exit={{ height: 0, opacity: 0 }}
-                                              className="overflow-hidden"
-                                            >
-                                              <div className="pl-8 pr-1 pb-1 space-y-1">
-                                                {preTasks.map(gt => {
-                                                  const alreadyAdded = formTasks.some(ft => ft.question === gt.question && ft.correctAnswer === gt.correctAnswer);
-                                                  const itl = INPUT_TYPE_LABELS[gt.inputType];
-                                                  return (
-                                                    <button
-                                                      key={gt.id}
-                                                      disabled={alreadyAdded}
-                                                      onClick={() => {
-                                                        const id = Date.now() + Math.floor(Math.random() * 100000);
-                                                        setFormTasks(prev => [...prev, {
-                                                          id,
-                                                          question: gt.question,
-                                                          inputType: gt.inputType,
-                                                          correctAnswer: gt.correctAnswer,
-                                                          choices: gt.choices ? [...gt.choices] : undefined,
-                                                          imageUrl: gt.imageUrl,
-                                                        }]);
-                                                      }}
-                                                      className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-md transition-colors text-left"
-                                                      style={{
-                                                        background: alreadyAdded ? 'rgba(107,142,90,0.08)' : 'rgba(0,0,0,0.12)',
-                                                        border: `1px solid ${alreadyAdded ? 'rgba(107,142,90,0.2)' : 'rgba(255,255,255,0.04)'}`,
-                                                        opacity: alreadyAdded ? 0.6 : 1,
-                                                        cursor: alreadyAdded ? 'default' : 'pointer',
-                                                      }}
-                                                    >
-                                                      <span className="shrink-0" style={{ fontSize: '0.45rem' }}>{itl.icon}</span>
-                                                      <span className="flex-1 min-w-0 truncate" style={{ color: t.text, fontSize: '0.58rem' }}>{gt.question}</span>
-                                                      {alreadyAdded ? (
-                                                        <Check size={10} style={{ color: '#6b8e5a', flexShrink: 0 }} />
-                                                      ) : (
-                                                        <Plus size={10} style={{ color: '#8b5cf6', flexShrink: 0 }} />
-                                                      )}
-                                                    </button>
-                                                  );
-                                                })}
-                                              </div>
-                                            </motion.div>
-                                          )}
-                                        </AnimatePresence>
-                                      </div>
-                                    )}
-                                    {/* Player-specific task groups */}
-                                    {playersWithTasks.map(avatar => {
-                                      const tasks = galleryTasks[avatar.id] ?? [];
-                                      const isPlayerExpanded = expandedPickerPlayerId === avatar.id;
-                                      return (
-                                        <div key={avatar.id}>
+                      <div className="rounded-lg p-2.5 space-y-3" style={{ background: 'rgba(139,92,246,0.04)', border: '1px solid rgba(139,92,246,0.12)' }}>
+                        <div className="flex items-center gap-1.5">
+                          <Library size={10} style={{ color: '#8b5cf6' }} />
+                          <span style={{ color: '#8b5cf6', fontSize: '0.5rem', fontWeight: 700, fontFamily: '"Cinzel", serif' }}>
+                            Bibliotheque ({totalGalleryTasks})
+                          </span>
+                        </div>
+                        <div className="space-y-3">
+                          {/* Pre-taches générales */}
+                          {preTasks.length > 0 && (
+                            <div>
+                              <button
+                                onClick={() => setOpenGenerales(v => !v)}
+                                className="w-full flex items-center gap-2 px-1 mb-1.5 hover:bg-white/[0.02] rounded transition-colors"
+                              >
+                                <div className="w-5 h-5 rounded-full flex items-center justify-center shrink-0" style={{ background: 'rgba(139,92,246,0.15)', border: '1px solid rgba(139,92,246,0.25)' }}>
+                                  <Library size={10} style={{ color: '#8b5cf6' }} />
+                                </div>
+                                <span style={{ color: '#8b5cf6', fontSize: '0.55rem', fontWeight: 600, fontFamily: '"Cinzel", serif' }}>Generales</span>
+                                <span className="px-1.5 py-0.5 rounded-full" style={{ background: 'rgba(139,92,246,0.1)', border: '1px solid rgba(139,92,246,0.2)', color: '#8b5cf6', fontSize: '0.42rem', fontWeight: 700 }}>{preTasks.length}</span>
+                                <span className="ml-auto">{openGenerales ? <ChevronUp size={10} style={{ color: '#8b5cf6' }} /> : <ChevronDown size={10} style={{ color: '#8b5cf6' }} />}</span>
+                              </button>
+                              <AnimatePresence initial={false}>
+                                {openGenerales && (
+                                  <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} className="overflow-hidden">
+                                    <div className="grid grid-cols-2 gap-1.5 pb-1">
+                                      {preTasks.map(gt => {
+                                        const alreadyAdded = formTasks.some(ft => ft.question === gt.question && ft.correctAnswer === gt.correctAnswer);
+                                        const usedElsewhere = !alreadyAdded && tasksInOtherQuests.has(`${gt.question}::${gt.correctAnswer}`);
+                                        const itl = INPUT_TYPE_LABELS[gt.inputType];
+                                        return (
                                           <button
-                                            onClick={() => setExpandedPickerPlayerId(isPlayerExpanded ? null : avatar.id)}
-                                            className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-md hover:bg-white/[0.03] transition-colors"
+                                            key={gt.id}
+                                            disabled={alreadyAdded}
+                                            onClick={() => {
+                                              if (alreadyAdded) return;
+                                              setFormTasks(prev => [...prev, { id: Date.now() + Math.floor(Math.random() * 100000), question: gt.question, inputType: gt.inputType, correctAnswer: gt.correctAnswer, choices: gt.choices ? [...gt.choices] : undefined, imageUrl: gt.imageUrl }]);
+                                            }}
+                                            className="flex flex-col gap-1 px-2 py-1.5 rounded-md transition-all text-left"
+                                            style={{ background: alreadyAdded ? 'rgba(107,142,90,0.08)' : 'rgba(0,0,0,0.15)', border: `1px solid ${alreadyAdded ? 'rgba(107,142,90,0.25)' : 'rgba(255,255,255,0.05)'}`, opacity: alreadyAdded ? 0.2 : usedElsewhere ? 0.38 : 1, cursor: alreadyAdded ? 'default' : 'pointer' }}
                                           >
-                                            <div className="w-6 h-6 rounded-full overflow-hidden shrink-0" style={{ border: '1px solid rgba(139,92,246,0.2)' }}>
-                                              <img src={avatar.url} alt={avatar.name} className="w-full h-full object-cover" loading="lazy" />
+                                            <div className="flex items-center justify-between gap-1">
+                                              <span className="flex items-center gap-1" style={{ color: t.textDim, fontSize: '0.42rem' }}>{itl.icon}<span>{itl.label}</span></span>
+                                              {alreadyAdded ? <Check size={9} style={{ color: '#6b8e5a', flexShrink: 0 }} /> : <Plus size={9} style={{ color: '#8b5cf6', flexShrink: 0 }} />}
                                             </div>
-                                            <span className="flex-1 text-left truncate" style={{ color: t.text, fontSize: '0.6rem', fontWeight: 600, fontFamily: '"Cinzel", serif' }}>
-                                              {avatar.name}
-                                            </span>
-                                            <span className="px-1.5 py-0.5 rounded-full shrink-0" style={{ background: 'rgba(139,92,246,0.1)', border: '1px solid rgba(139,92,246,0.2)', color: '#8b5cf6', fontSize: '0.45rem', fontWeight: 700 }}>
-                                              {tasks.length}
-                                            </span>
-                                            {isPlayerExpanded ? <ChevronUp size={10} style={{ color: t.textDim }} /> : <ChevronDown size={10} style={{ color: t.textDim }} />}
+                                            <span className="line-clamp-2" style={{ color: t.text, fontSize: '0.55rem', lineHeight: 1.3 }}>{gt.question}</span>
                                           </button>
-                                          <AnimatePresence>
-                                            {isPlayerExpanded && (
-                                              <motion.div
-                                                initial={{ height: 0, opacity: 0 }}
-                                                animate={{ height: 'auto', opacity: 1 }}
-                                                exit={{ height: 0, opacity: 0 }}
-                                                className="overflow-hidden"
-                                              >
-                                                <div className="pl-8 pr-1 pb-1 space-y-1">
+                                        );
+                                      })}
+                                    </div>
+                                  </motion.div>
+                                )}
+                              </AnimatePresence>
+                            </div>
+                          )}
+                          {/* Groupes par tag */}
+                          {(() => {
+                            // Construire les groupes : tag → avatars ayant des tâches
+                            const tagGroups: { tag: string; avatars: typeof playersWithTasks }[] = DEFAULT_AVAILABLE_TAGS.map(tag => ({
+                              tag,
+                              avatars: playersWithTasks.filter(a => (AVATAR_DEFAULT_TAGS[a.name] ?? []).includes(tag)),
+                            })).filter(g => g.avatars.length > 0);
+                            // Joueurs sans tag connu
+                            const untagged = playersWithTasks.filter(a => !(AVATAR_DEFAULT_TAGS[a.name] ?? []).length);
+                            if (untagged.length > 0) tagGroups.push({ tag: 'Autres', avatars: untagged });
+
+                            return tagGroups.map(({ tag, avatars }) => {
+                              const color = TAG_COLORS[tag] ?? '#6b7280';
+                              const isOpen = openTagGroups.has(tag);
+                              const toggleTag = () => setOpenTagGroups(prev => {
+                                const next = new Set(prev);
+                                if (next.has(tag)) next.delete(tag); else next.add(tag);
+                                return next;
+                              });
+                              return (
+                                <div key={tag}>
+                                  {/* En-tête de groupe — cliquable */}
+                                  <button
+                                    onClick={toggleTag}
+                                    className="w-full flex items-center gap-1.5 px-1 mb-2 hover:bg-white/[0.02] rounded transition-colors"
+                                  >
+                                    <span className="px-2 py-0.5 rounded-full" style={{ background: `${color}18`, border: `1px solid ${color}35`, color, fontSize: '0.45rem', fontWeight: 700, fontFamily: '"Cinzel", serif', letterSpacing: '0.04em' }}>
+                                      {tag}
+                                    </span>
+                                    <span style={{ color: `${color}80`, fontSize: '0.42rem' }}>{avatars.length} joueur{avatars.length > 1 ? 's' : ''}</span>
+                                    <span className="ml-auto">{isOpen ? <ChevronUp size={10} style={{ color }} /> : <ChevronDown size={10} style={{ color }} />}</span>
+                                  </button>
+                                  <AnimatePresence initial={false}>
+                                    {isOpen && (
+                                      <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} className="overflow-hidden">
+                                        {/* Grille 4 colonnes */}
+                                        <div className="grid grid-cols-5 gap-2 pb-1">
+                                          {avatars.map(avatar => {
+                                            const tasks = galleryTasks[avatar.id] ?? [];
+                                            return (
+                                              <div key={avatar.id} className="flex flex-col gap-1">
+                                                {/* En-tête joueur */}
+                                                <div className="flex flex-col items-center gap-0.5 pb-1" style={{ borderBottom: `1px solid rgba(255,255,255,0.04)` }}>
+                                                  <div className="w-8 h-8 rounded-full overflow-hidden shrink-0" style={{ border: `1px solid ${color}30` }}>
+                                                    <img src={avatar.url} alt={avatar.name} className="w-full h-full object-cover" loading="lazy" />
+                                                  </div>
+                                                  <span className="text-center leading-tight" style={{ color: t.text, fontSize: '0.42rem', fontWeight: 600, fontFamily: '"Cinzel", serif', wordBreak: 'break-word' }}>{avatar.name}</span>
+                                                </div>
+                                                {/* Tâches du joueur */}
+                                                <div className="flex flex-col gap-0.5">
                                                   {tasks.map(gt => {
                                                     const alreadyAdded = formTasks.some(ft => ft.question === gt.question && ft.correctAnswer === gt.correctAnswer);
+                                                    const usedElsewhere = !alreadyAdded && tasksInOtherQuests.has(`${gt.question}::${gt.correctAnswer}`);
                                                     const itl = INPUT_TYPE_LABELS[gt.inputType];
                                                     return (
                                                       <button
                                                         key={gt.id}
                                                         disabled={alreadyAdded}
                                                         onClick={() => {
-                                                          const id = Date.now() + Math.floor(Math.random() * 100000);
-                                                          setFormTasks(prev => [...prev, {
-                                                            id,
-                                                            question: gt.question,
-                                                            inputType: gt.inputType,
-                                                            correctAnswer: gt.correctAnswer,
-                                                            choices: gt.choices ? [...gt.choices] : undefined,
-                                                            imageUrl: gt.imageUrl,
-                                                          }]);
+                                                          if (alreadyAdded) return;
+                                                          setFormTasks(prev => [...prev, { id: Date.now() + Math.floor(Math.random() * 100000), question: gt.question, inputType: gt.inputType, correctAnswer: gt.correctAnswer, choices: gt.choices ? [...gt.choices] : undefined, imageUrl: gt.imageUrl }]);
                                                         }}
-                                                        className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-md transition-colors text-left"
-                                                        style={{
-                                                          background: alreadyAdded ? 'rgba(107,142,90,0.08)' : 'rgba(0,0,0,0.12)',
-                                                          border: `1px solid ${alreadyAdded ? 'rgba(107,142,90,0.2)' : 'rgba(255,255,255,0.04)'}`,
-                                                          opacity: alreadyAdded ? 0.6 : 1,
-                                                          cursor: alreadyAdded ? 'default' : 'pointer',
-                                                        }}
+                                                        className="w-full flex items-start gap-1 px-1.5 py-1 rounded transition-all text-left"
+                                                        style={{ background: alreadyAdded ? 'rgba(107,142,90,0.08)' : 'rgba(0,0,0,0.18)', border: `1px solid ${alreadyAdded ? 'rgba(107,142,90,0.25)' : 'rgba(255,255,255,0.04)'}`, opacity: alreadyAdded ? 0.2 : usedElsewhere ? 0.38 : 1, cursor: alreadyAdded ? 'default' : 'pointer' }}
                                                       >
-                                                        <span className="shrink-0" style={{ fontSize: '0.45rem' }}>{itl.icon}</span>
-                                                        <span className="flex-1 min-w-0 truncate" style={{ color: t.text, fontSize: '0.58rem' }}>{gt.question}</span>
-                                                        {alreadyAdded ? (
-                                                          <Check size={10} style={{ color: '#6b8e5a', flexShrink: 0 }} />
-                                                        ) : (
-                                                          <Plus size={10} style={{ color: '#8b5cf6', flexShrink: 0 }} />
-                                                        )}
+                                                        <span className="shrink-0 mt-0.5" style={{ color: t.textDim, fontSize: '0.38rem' }}>{itl.icon}</span>
+                                                        <span className="flex-1 min-w-0 line-clamp-3" style={{ color: t.text, fontSize: '0.48rem', lineHeight: 1.3 }}>{gt.question}</span>
+                                                        {alreadyAdded
+                                                          ? <Check size={7} style={{ color: '#6b8e5a', flexShrink: 0, marginTop: 2 }} />
+                                                          : <Plus size={7} style={{ color: '#8b5cf6', flexShrink: 0, marginTop: 2 }} />
+                                                        }
                                                       </button>
                                                     );
                                                   })}
                                                 </div>
-                                              </motion.div>
-                                            )}
-                                          </AnimatePresence>
+                                              </div>
+                                            );
+                                          })}
                                         </div>
-                                      );
-                                    })}
-                                  </div>
-                                )}
-                              </div>
-                            </motion.div>
-                          )}
-                        </AnimatePresence>
+                                      </motion.div>
+                                    )}
+                                  </AnimatePresence>
+                                </div>
+                              );
+                            });
+                          })()}
+                        </div>
                       </div>
                     );
                   })()}
 
-                  {formTasks.length === 0 && !showTaskForm && !showGalleryPicker && (
-                    <p style={{ color: t.textDim, fontSize: '0.5rem', fontStyle: 'italic', textAlign: 'center', padding: '8px 0' }}>
+                  {/* Tâches sélectionnées */}
+                  {formTasks.length > 0 && (
+                    <div className="space-y-1">
+                      <span style={{ color: t.textDim, fontSize: '0.55rem', fontFamily: '"Cinzel", serif', fontWeight: 600 }}>
+                        Selectionnees ({formTasks.length})
+                      </span>
+                      {formTasks.map(task => {
+                        const itl = INPUT_TYPE_LABELS[task.inputType];
+                        return (
+                          <div key={task.id} className="flex items-center gap-2 px-2.5 py-1.5 rounded-md" style={{ background: cardBg, border: `1px solid ${cardBorder}` }}>
+                            <span className="shrink-0" style={{ color: accentColor, fontSize: '0.42rem' }}>{itl.icon}</span>
+                            <span className="flex-1 min-w-0 truncate" style={{ color: t.text, fontSize: '0.6rem' }}>{task.question}</span>
+                            <button onClick={() => removeTaskFromForm(task.id)} className="p-0.5 rounded hover:bg-white/5 shrink-0">
+                              <X size={10} style={{ color: t.textDim }} />
+                            </button>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+
+                  {/* Création manuelle (secondaire) */}
+                  <div>
+                    {!showTaskForm && (
+                      <button
+                        onClick={() => setShowTaskForm(true)}
+                        className="flex items-center gap-1.5 px-2.5 py-1 rounded-md transition-colors"
+                        style={{ background: 'transparent', border: `1px solid ${cardBorder}`, color: t.textDim, fontSize: '0.5rem', fontFamily: '"Cinzel", serif', fontWeight: 600 }}
+                      >
+                        <Plus size={9} /> Creer manuellement
+                      </button>
+                    )}
+                    <AnimatePresence>
+                      {showTaskForm && (
+                        <motion.div
+                          initial={{ height: 0, opacity: 0 }}
+                          animate={{ height: 'auto', opacity: 1 }}
+                          exit={{ height: 0, opacity: 0 }}
+                          className="overflow-hidden"
+                        >
+                          <div className="rounded-lg p-3 space-y-2" style={{ background: 'rgba(0,0,0,0.2)', border: `1px solid ${cardBorder}` }}>
+                            <div className="flex items-center gap-2">
+                              <input
+                                type="text"
+                                value={taskQuestion}
+                                onChange={e => setTaskQuestion(e.target.value)}
+                                placeholder="Question..."
+                                className="flex-1 px-2.5 py-1.5 rounded-md outline-none"
+                                style={{ background: inputBg, border: `1px solid ${inputBorder}`, color: t.text, fontSize: '0.65rem' }}
+                              />
+                              <div className="flex items-center gap-0.5 shrink-0">
+                                {INPUT_TYPE_OPTIONS.map(opt => (
+                                  <button
+                                    key={opt.value}
+                                    onClick={() => setTaskInputType(opt.value)}
+                                    className="p-1.5 rounded-md transition-colors"
+                                    style={{
+                                      background: taskInputType === opt.value ? `${accentColor}15` : 'transparent',
+                                      border: `1px solid ${taskInputType === opt.value ? `${accentColor}30` : 'transparent'}`,
+                                      color: taskInputType === opt.value ? accentColor : t.textDim,
+                                    }}
+                                    title={opt.label}
+                                  >
+                                    {opt.icon}
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
+                            <input
+                              type="text"
+                              value={taskCorrectAnswer}
+                              onChange={e => setTaskCorrectAnswer(e.target.value)}
+                              placeholder="Reponse correcte..."
+                              className="w-full px-2.5 py-1.5 rounded-md outline-none"
+                              style={{ background: inputBg, border: `1px solid ${inputBorder}`, color: t.text, fontSize: '0.65rem' }}
+                            />
+                            {taskInputType === 'multiple-choice' && (
+                              <div className="grid grid-cols-2 gap-1.5">
+                                {taskChoices.map((c, i) => (
+                                  <input
+                                    key={i}
+                                    type="text"
+                                    value={c}
+                                    onChange={e => { const nc = [...taskChoices]; nc[i] = e.target.value; setTaskChoices(nc); }}
+                                    placeholder={`Choix ${i + 1}...`}
+                                    className="px-2.5 py-1.5 rounded-md outline-none"
+                                    style={{ background: inputBg, border: `1px solid ${inputBorder}`, color: t.text, fontSize: '0.6rem' }}
+                                  />
+                                ))}
+                              </div>
+                            )}
+                            <div className="flex items-center gap-2">
+                              <button
+                                onClick={addTaskToForm}
+                                disabled={!taskQuestion.trim() || !taskCorrectAnswer.trim()}
+                                className="flex items-center gap-1 px-2.5 py-1 rounded-md transition-colors"
+                                style={{
+                                  background: taskQuestion.trim() && taskCorrectAnswer.trim() ? `${accentColor}20` : 'rgba(255,255,255,0.03)',
+                                  border: `1px solid ${taskQuestion.trim() && taskCorrectAnswer.trim() ? `${accentColor}40` : cardBorder}`,
+                                  color: taskQuestion.trim() && taskCorrectAnswer.trim() ? accentColor : t.textDim,
+                                  fontSize: '0.55rem', fontFamily: '"Cinzel", serif', fontWeight: 600,
+                                }}
+                              >
+                                <Check size={10} /> Valider
+                              </button>
+                              <button
+                                onClick={() => setShowTaskForm(false)}
+                                className="px-2 py-1 rounded-md hover:bg-white/5 transition-colors"
+                                style={{ color: t.textDim, fontSize: '0.55rem', fontFamily: '"Cinzel", serif' }}
+                              >
+                                Annuler
+                              </button>
+                            </div>
+                          </div>
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
+                  </div>
+
+                  {formTasks.length === 0 && !showTaskForm && (
+                    <p style={{ color: t.textDim, fontSize: '0.5rem', fontStyle: 'italic', textAlign: 'center', padding: '4px 0' }}>
                       Ajoutez au moins une tache pour creer la quete
                     </p>
                   )}
@@ -881,53 +911,109 @@ export function GalleryQuestsTab({ t, isMobile }: {
         </div>
       )}
 
-      <div className="space-y-2">
+      <div className="grid grid-cols-5 gap-2">
         {preQuests.map(quest => {
           const isExpanded = expandedId === quest.id;
           const isCollab = quest.questType === 'collaborative';
+
+          // Dériver les tags à partir des tâches de la quête
+          const questTags: string[] = (() => {
+            const tags = new Set<string>();
+            quest.tasks.forEach(task => {
+              const key = `${task.question}::${task.correctAnswer}`;
+              if (preTasks.some(pt => `${pt.question}::${pt.correctAnswer}` === key)) {
+                tags.add('Generale');
+              }
+              AVATAR_GALLERY.forEach(avatar => {
+                if ((galleryTasks[avatar.id] ?? []).some(gt => `${gt.question}::${gt.correctAnswer}` === key)) {
+                  (AVATAR_DEFAULT_TAGS[avatar.name] ?? []).forEach(tag => tags.add(tag));
+                }
+              });
+            });
+            if (tags.size === 0 && quest.tasks.length > 0) tags.add('Generale');
+            return Array.from(tags);
+          })();
+
           return (
             <motion.div
               key={quest.id}
               layout
-              className="rounded-xl overflow-hidden"
+              className="rounded-xl overflow-hidden col-span-1"
               style={{ background: cardBg, border: `1px solid ${cardBorder}` }}
             >
-              {/* Quest header */}
+              {/* Tuile principale */}
               <div
-                className="flex items-center gap-3 px-4 py-3 cursor-pointer hover:bg-white/[0.02] transition-colors"
+                className="flex flex-col gap-1.5 px-3 py-2.5 cursor-pointer hover:bg-white/[0.02] transition-colors"
                 onClick={() => setExpandedId(isExpanded ? null : quest.id)}
               >
-                <div className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0" style={{ background: `${accentColor}15` }}>
-                  {isCollab ? <Handshake size={13} style={{ color: accentColor }} /> : <MapIcon size={13} style={{ color: accentColor }} />}
+                {/* Icône + actions */}
+                <div className="flex items-center justify-between">
+                  <div className="w-6 h-6 rounded-md flex items-center justify-center shrink-0" style={{ background: `${accentColor}15` }}>
+                    {isCollab ? <Handshake size={11} style={{ color: accentColor }} /> : <MapIcon size={11} style={{ color: accentColor }} />}
+                  </div>
+                  <div className="flex items-center gap-0.5">
+                    <button
+                      onClick={(e) => { e.stopPropagation(); handleStartEdit(quest); }}
+                      className="p-1 rounded hover:bg-white/5 transition-colors"
+                      title="Modifier"
+                    >
+                      <Pencil size={9} style={{ color: t.textDim }} />
+                    </button>
+                    <button
+                      onClick={(e) => { e.stopPropagation(); handleDelete(quest.id); }}
+                      className="p-1 rounded hover:bg-red-500/10 transition-colors"
+                      title="Supprimer"
+                    >
+                      <Trash2 size={9} style={{ color: '#c41e3a' }} />
+                    </button>
+                    {isExpanded ? <ChevronUp size={10} style={{ color: t.textDim }} /> : <ChevronDown size={10} style={{ color: t.textDim }} />}
+                  </div>
                 </div>
-                <div className="flex-1 min-w-0">
-                  <p className="truncate" style={{ color: t.text, fontSize: '0.75rem', fontWeight: 600, fontFamily: '"Cinzel", serif' }}>{quest.title}</p>
-                  <p className="truncate" style={{ color: t.textDim, fontSize: '0.5rem' }}>
-                    {isCollab ? `Collaborative (x${quest.collaborativeGroupSize ?? 3})` : `${quest.tasks.length} tache${quest.tasks.length !== 1 ? 's' : ''}`}
-                    {' · '}
-                    {distributionLabel(quest.distributionOrder)}
-                  </p>
-                </div>
-                <div className="flex items-center gap-1.5 shrink-0">
-                  <button
-                    onClick={(e) => { e.stopPropagation(); handleStartEdit(quest); }}
-                    className="p-1.5 rounded-md hover:bg-white/5 transition-colors"
-                    title="Modifier"
-                  >
-                    <Pencil size={11} style={{ color: t.textDim }} />
-                  </button>
-                  <button
-                    onClick={(e) => { e.stopPropagation(); handleDelete(quest.id); }}
-                    className="p-1.5 rounded-md hover:bg-red-500/10 transition-colors"
-                    title="Supprimer"
-                  >
-                    <Trash2 size={11} style={{ color: '#c41e3a' }} />
-                  </button>
-                  {isExpanded ? <ChevronUp size={13} style={{ color: t.textDim }} /> : <ChevronDown size={13} style={{ color: t.textDim }} />}
-                </div>
+                {/* Titre */}
+                <p className="leading-tight" style={{ color: t.text, fontSize: '0.62rem', fontWeight: 600, fontFamily: '"Cinzel", serif', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{quest.title}</p>
+                {/* Meta */}
+                <p style={{ color: t.textDim, fontSize: '0.45rem' }}>
+                  {isCollab ? `Collab x${quest.collaborativeGroupSize ?? 3}` : `${quest.tasks.length} tache${quest.tasks.length !== 1 ? 's' : ''}`}
+                  {' · '}{distributionLabel(quest.distributionOrder)}
+                </p>
+                {/* Tags (dérivés des tâches) */}
+                {questTags.length > 0 && (
+                  <div className="flex flex-wrap gap-0.5 mt-0.5">
+                    {questTags.map(tag => {
+                      const color = TAG_COLORS[tag] ?? '#6b7280';
+                      return (
+                        <span key={tag} className="px-1.5 py-0.5 rounded-full" style={{ background: `${color}18`, border: `1px solid ${color}35`, color, fontSize: '0.38rem', fontWeight: 700, fontFamily: '"Cinzel", serif', letterSpacing: '0.03em' }}>
+                          {tag}
+                        </span>
+                      );
+                    })}
+                  </div>
+                )}
+                {/* Public cible */}
+                {(() => {
+                  const cible = quest.targetTags ?? [];
+                  const label = cible.length === 0 ? 'Tous' : null;
+                  return (
+                    <div className="flex items-center gap-1 flex-wrap mt-0.5">
+                      <Users size={8} style={{ color: t.textDim, flexShrink: 0 }} />
+                      {label ? (
+                        <span className="px-1.5 py-0.5 rounded-md" style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', color: t.textDim, fontSize: '0.38rem', fontWeight: 600, fontFamily: '"Cinzel", serif' }}>
+                          Tous
+                        </span>
+                      ) : cible.map(tag => {
+                        const color = TAG_COLORS[tag] ?? '#6b7280';
+                        return (
+                          <span key={tag} className="px-1.5 py-0.5 rounded-md" style={{ background: `${color}12`, border: `1px solid ${color}30`, color, fontSize: '0.38rem', fontWeight: 600, fontFamily: '"Cinzel", serif' }}>
+                            {tag}
+                          </span>
+                        );
+                      })}
+                    </div>
+                  );
+                })()}
               </div>
 
-              {/* Expanded detail */}
+              {/* Détail expansible */}
               <AnimatePresence>
                 {isExpanded && (
                   <motion.div
@@ -936,30 +1022,27 @@ export function GalleryQuestsTab({ t, isMobile }: {
                     exit={{ height: 0, opacity: 0 }}
                     className="overflow-hidden"
                   >
-                    <div className="px-4 pb-4 space-y-2" style={{ borderTop: `1px solid ${cardBorder}` }}>
+                    <div className="px-3 pb-3 space-y-1.5" style={{ borderTop: `1px solid ${cardBorder}` }}>
                       {quest.description && (
-                        <p className="pt-2" style={{ color: t.textDim, fontSize: '0.6rem', lineHeight: 1.5 }}>{quest.description}</p>
+                        <p className="pt-2" style={{ color: t.textDim, fontSize: '0.5rem', lineHeight: 1.5 }}>{quest.description}</p>
                       )}
                       {quest.tasks.length > 0 && (
-                        <div className="space-y-1.5 pt-1">
+                        <div className="space-y-1 pt-1">
                           {quest.tasks.map((task, idx) => {
                             const itl = INPUT_TYPE_LABELS[task.inputType];
                             return (
-                              <div key={task.id} className="flex items-center gap-2 px-3 py-2 rounded-lg" style={{ background: 'rgba(0,0,0,0.15)', border: `1px solid rgba(255,255,255,0.04)` }}>
-                                <span className="text-xs font-bold shrink-0" style={{ color: `${accentColor}90`, fontFamily: '"Cinzel", serif', fontSize: '0.45rem' }}>#{idx + 1}</span>
-                                <span className="px-1 py-0.5 rounded shrink-0" style={{ background: `${accentColor}12`, border: `1px solid ${accentColor}20`, fontSize: '0.45rem' }}>{itl.icon}</span>
-                                <span className="flex-1 min-w-0 truncate" style={{ color: t.text, fontSize: '0.6rem' }}>{task.question}</span>
-                                <span className="px-1.5 py-0.5 rounded-md shrink-0" style={{ background: 'rgba(107,142,90,0.1)', border: '1px solid rgba(107,142,90,0.2)', color: '#6b8e5a', fontSize: '0.45rem', fontFamily: '"Cinzel", serif' }}>
-                                  {task.correctAnswer}
-                                </span>
+                              <div key={task.id} className="flex items-center gap-1.5 px-2 py-1.5 rounded-lg" style={{ background: 'rgba(0,0,0,0.15)', border: `1px solid rgba(255,255,255,0.04)` }}>
+                                <span className="shrink-0" style={{ color: `${accentColor}80`, fontFamily: '"Cinzel", serif', fontSize: '0.4rem' }}>#{idx + 1}</span>
+                                <span className="shrink-0" style={{ fontSize: '0.4rem' }}>{itl.icon}</span>
+                                <span className="flex-1 min-w-0 truncate" style={{ color: t.text, fontSize: '0.52rem' }}>{task.question}</span>
                               </div>
                             );
                           })}
                         </div>
                       )}
                       {isCollab && quest.tasks.length === 0 && (
-                        <p className="pt-2" style={{ color: t.textDim, fontSize: '0.55rem', fontStyle: 'italic' }}>
-                          Quete collaborative : les joueurs votent succes/echec
+                        <p className="pt-1" style={{ color: t.textDim, fontSize: '0.48rem', fontStyle: 'italic' }}>
+                          Vote succes/echec
                         </p>
                       )}
                     </div>
@@ -1225,7 +1308,11 @@ export function GalleryQuestsTab({ t, isMobile }: {
                         style={{ background: cardBg, border: `1px solid ${cardBorder}` }}
                       >
                         {pt.imageUrl ? (
-                          <div className="w-8 h-8 rounded-md overflow-hidden shrink-0" style={{ border: '1px solid rgba(255,255,255,0.08)' }}>
+                          <div
+                            className="w-8 h-8 rounded-md overflow-hidden shrink-0 cursor-zoom-in"
+                            style={{ border: '1px solid rgba(255,255,255,0.08)' }}
+                            onClick={(e) => { e.stopPropagation(); setZoomImageUrl(pt.imageUrl!); }}
+                          >
                             <img src={pt.imageUrl} alt="" className="w-full h-full object-cover" />
                           </div>
                         ) : (
@@ -1359,6 +1446,39 @@ export function GalleryQuestsTab({ t, isMobile }: {
           );
         })()}
       </div>
+      {createPortal(<AnimatePresence>
+        {zoomImageUrl && (
+          <motion.div
+            key="zoom-overlay"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[9999] flex items-center justify-center p-6"
+            style={{ background: 'rgba(0,0,0,0.85)', backdropFilter: 'blur(8px)', cursor: 'zoom-out' }}
+            onClick={() => setZoomImageUrl(null)}
+          >
+            <motion.img
+              src={zoomImageUrl}
+              alt="Indice agrandi"
+              initial={{ scale: 0.85, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.85, opacity: 0 }}
+              transition={{ type: 'spring', stiffness: 300, damping: 25 }}
+              className="max-w-full max-h-full rounded-xl object-contain shadow-2xl"
+              style={{ maxWidth: '90vw', maxHeight: '85vh' }}
+              draggable={false}
+              onClick={(e) => e.stopPropagation()}
+            />
+            <button
+              className="absolute top-4 right-4 rounded-full p-2 flex items-center justify-center"
+              style={{ background: 'rgba(255,255,255,0.12)', color: '#fff' }}
+              onClick={() => setZoomImageUrl(null)}
+            >
+              <X size={20} />
+            </button>
+          </motion.div>
+        )}
+      </AnimatePresence>, document.body)}
     </div>
   );
 }

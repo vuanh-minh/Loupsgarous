@@ -1,4 +1,5 @@
 import React, { useState, useCallback, useMemo, useRef, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'motion/react';
 import {
   Users, Search, Plus, Trash2, Lightbulb,
@@ -37,6 +38,7 @@ export interface GalleryTaskTemplate {
   correctAnswer: string;
   choices?: string[];
   imageUrl?: string;
+  noPlayerLink?: boolean;
 }
 
 /** Map of galleryId -> task templates */
@@ -115,6 +117,7 @@ export function GMPlayerGalleryPanel({
   const [newTaskInputType, setNewTaskInputType] = useState<QuestTaskInputType>('text');
   const [newTaskCorrectAnswer, setNewTaskCorrectAnswer] = useState('');
   const [newTaskChoices, setNewTaskChoices] = useState<string[]>(['', '', '', '']);
+  const [newTaskNoPlayerLink, setNewTaskNoPlayerLink] = useState(false);
   const taskInputRef = useRef<HTMLInputElement | null>(null);
 
   // ── Image upload state ──
@@ -147,6 +150,8 @@ export function GMPlayerGalleryPanel({
   const [editTaskCorrectAnswer, setEditTaskCorrectAnswer] = useState('');
   const [editTaskChoices, setEditTaskChoices] = useState<string[]>(['', '', '', '']);
   const [editTaskImageUrl, setEditTaskImageUrl] = useState<string | undefined>();
+  const [editTaskNoPlayerLink, setEditTaskNoPlayerLink] = useState(false);
+  const [zoomImageUrl, setZoomImageUrl] = useState<string | null>(null);
 
   // Track which gallery IDs are already in the current game
   const usedGalleryIds = useMemo(() => {
@@ -446,6 +451,7 @@ export function GMPlayerGalleryPanel({
           correctAnswer: newTaskCorrectAnswer.trim(),
           choices: newTaskInputType === 'multiple-choice' ? newTaskChoices.filter((c) => c.trim()) : undefined,
           imageUrl: newTaskImageUrl,
+          noPlayerLink: newTaskNoPlayerLink || undefined,
         },
       ],
     };
@@ -455,8 +461,9 @@ export function GMPlayerGalleryPanel({
     setNewTaskCorrectAnswer('');
     setNewTaskChoices(['', '', '', '']);
     setNewTaskImageUrl(undefined);
+    setNewTaskNoPlayerLink(false);
     setTimeout(() => taskInputRef.current?.focus(), 50);
-  }, [selectedGalleryId, newTaskQuestion, newTaskInputType, newTaskCorrectAnswer, newTaskChoices, newTaskImageUrl, galleryTasks, saveGalleryTasks]);
+  }, [selectedGalleryId, newTaskQuestion, newTaskInputType, newTaskCorrectAnswer, newTaskChoices, newTaskImageUrl, newTaskNoPlayerLink, galleryTasks, saveGalleryTasks]);
 
   // ── Delete task template ──
   const deleteTask = useCallback((taskId: number) => {
@@ -500,13 +507,14 @@ export function GMPlayerGalleryPanel({
               correctAnswer: editTaskCorrectAnswer.trim(),
               choices: editTaskInputType === 'multiple-choice' ? editTaskChoices.filter((c) => c.trim()) : undefined,
               imageUrl: editTaskImageUrl,
+              noPlayerLink: editTaskNoPlayerLink || undefined,
             }
           : t
       ),
     };
     saveGalleryTasks(newTasks);
     setEditingTaskId(null);
-  }, [selectedGalleryId, editingTaskId, editTaskQuestion, editTaskInputType, editTaskCorrectAnswer, editTaskChoices, editTaskImageUrl, galleryTasks, saveGalleryTasks]);
+  }, [selectedGalleryId, editingTaskId, editTaskQuestion, editTaskInputType, editTaskCorrectAnswer, editTaskChoices, editTaskImageUrl, editTaskNoPlayerLink, galleryTasks, saveGalleryTasks]);
 
   // ── Import single player into current game ──
   const importPlayer = useCallback((avatar: GalleryAvatar) => {
@@ -546,7 +554,7 @@ export function GMPlayerGalleryPanel({
           correctAnswer: gt.correctAnswer,
           choices: gt.choices,
           imageUrl: gt.imageUrl,
-          referencedPlayerId: newPlayer.id,
+          referencedPlayerId: gt.noPlayerLink ? undefined : newPlayer.id,
           createdAt: new Date().toISOString(),
         }));
         return {
@@ -626,7 +634,7 @@ export function GMPlayerGalleryPanel({
               correctAnswer: gt.correctAnswer,
               choices: gt.choices,
               imageUrl: gt.imageUrl,
-              referencedPlayerId: np.id,
+              referencedPlayerId: gt.noPlayerLink ? undefined : np.id,
               createdAt: new Date().toISOString(),
             });
           });
@@ -947,7 +955,7 @@ export function GMPlayerGalleryPanel({
                   <>
                     <span className="px-1.5 py-0.5 rounded-md shrink-0 mt-0.5" style={{ background: pc.bg, border: `1px solid ${pc.border}`, color: pc.text, fontSize: '0.5rem', fontWeight: 700, fontFamily: '"Cinzel", serif' }}>P{hint.priority ?? 1}</span>
                     <div className="flex-1 min-w-0">
-                      {hint.imageUrl && <img src={hint.imageUrl} alt="Hint" className="w-12 h-12 rounded-lg object-cover mb-1" />}
+                      {hint.imageUrl && <img src={hint.imageUrl} alt="Hint" className="w-12 h-12 rounded-lg object-cover mb-1 cursor-zoom-in" onClick={(e) => { e.stopPropagation(); setZoomImageUrl(hint.imageUrl!); }} />}
                       <p className="text-sm" style={{ color: t.text, fontSize: '0.7rem', lineHeight: 1.5 }}>{hint.text || <span style={{ opacity: 0.5, fontStyle: 'italic' }}>Image seule</span>}</p>
                     </div>
                     <button onClick={() => { setEditingHintId(hint.id); setEditHintText(hint.text); setEditHintPriority(hint.priority ?? 1); setEditHintImageUrl(hint.imageUrl); }} className="p-1.5 rounded-md hover:bg-white/5 transition-colors shrink-0" title="Modifier"><Pencil size={12} style={{ color: '#8b5cf6' }} /></button>
@@ -1053,6 +1061,10 @@ export function GMPlayerGalleryPanel({
                         <button onClick={() => setEditTaskImageUrl(undefined)} className="p-1 rounded-md hover:bg-white/5 transition-colors"><X size={11} style={{ color: '#c41e3a' }} /></button>
                       </div>
                     )}
+                    <label className="flex items-center gap-2 cursor-pointer select-none">
+                      <input type="checkbox" checked={editTaskNoPlayerLink} onChange={(e) => setEditTaskNoPlayerLink(e.target.checked)} className="w-3 h-3 accent-purple-500" />
+                      <span style={{ color: t.textDim, fontSize: '0.6rem' }}>Ne pas associer à ce joueur</span>
+                    </label>
                     <div className="flex items-center gap-2">
                       <button onClick={updateTask} disabled={!editTaskQuestion.trim() || !editTaskCorrectAnswer.trim()} className="flex items-center gap-1 px-3 py-1 rounded-lg transition-colors" style={{ background: 'rgba(139,92,246,0.15)', border: '1px solid rgba(139,92,246,0.3)', color: '#8b5cf6', fontSize: '0.65rem', fontFamily: '"Cinzel", serif' }}>
                         <Check size={11} /> Enregistrer
@@ -1066,10 +1078,11 @@ export function GMPlayerGalleryPanel({
                   <>
                     <span className="px-1.5 py-0.5 rounded-md shrink-0 mt-0.5" style={{ background: 'rgba(139,92,246,0.12)', border: '1px solid rgba(139,92,246,0.25)', color: '#8b5cf6', fontSize: '0.5rem', fontWeight: 700, fontFamily: '"Cinzel", serif' }}>{itl.icon}</span>
                     <div className="flex-1 min-w-0">
-                      {task.imageUrl && <img src={task.imageUrl} alt="Task" className="w-12 h-12 rounded-lg object-cover mb-1" />}
+                      {task.imageUrl && <img src={task.imageUrl} alt="Task" className="w-12 h-12 rounded-lg object-cover mb-1 cursor-zoom-in" onClick={(e) => { e.stopPropagation(); setZoomImageUrl(task.imageUrl!); }} />}
                       <p className="text-sm" style={{ color: t.text, fontSize: '0.7rem', lineHeight: 1.5 }}>{task.question || <span style={{ opacity: 0.5, fontStyle: 'italic' }}>Image seule</span>}</p>
+                      {task.noPlayerLink && <span style={{ color: t.textDim, fontSize: '0.5rem', fontStyle: 'italic' }}>non associée</span>}
                     </div>
-                    <button onClick={() => { setEditingTaskId(task.id); setEditTaskQuestion(task.question); setEditTaskInputType(task.inputType); setEditTaskCorrectAnswer(task.correctAnswer); setEditTaskChoices(task.choices?.length ? [...task.choices, ...Array(4).fill('')].slice(0, 4) : ['', '', '', '']); setEditTaskImageUrl(task.imageUrl); }} className="p-1.5 rounded-md hover:bg-white/5 transition-colors shrink-0" title="Modifier"><Pencil size={12} style={{ color: '#8b5cf6' }} /></button>
+                    <button onClick={() => { setEditingTaskId(task.id); setEditTaskQuestion(task.question); setEditTaskInputType(task.inputType); setEditTaskCorrectAnswer(task.correctAnswer); setEditTaskChoices(task.choices?.length ? [...task.choices, ...Array(4).fill('')].slice(0, 4) : ['', '', '', '']); setEditTaskImageUrl(task.imageUrl); setEditTaskNoPlayerLink(task.noPlayerLink ?? false); }} className="p-1.5 rounded-md hover:bg-white/5 transition-colors shrink-0" title="Modifier"><Pencil size={12} style={{ color: '#8b5cf6' }} /></button>
                     <button onClick={() => deleteTask(task.id)} className="p-1.5 rounded-md hover:bg-white/5 transition-colors shrink-0" title="Supprimer"><Trash2 size={12} style={{ color: '#c41e3a' }} /></button>
                   </>
                 )}
@@ -1131,6 +1144,10 @@ export function GMPlayerGalleryPanel({
               <button onClick={() => setNewTaskImageUrl(undefined)} className="p-1 rounded-md hover:bg-white/5 transition-colors" title="Retirer l'image"><X size={12} style={{ color: '#c41e3a' }} /></button>
             </div>
           )}
+          <label className="flex items-center gap-2 cursor-pointer select-none">
+            <input type="checkbox" checked={newTaskNoPlayerLink} onChange={(e) => setNewTaskNoPlayerLink(e.target.checked)} className="w-3 h-3 accent-purple-500" />
+            <span style={{ color: t.textDim, fontSize: '0.6rem' }}>Ne pas associer à ce joueur</span>
+          </label>
           <button onClick={addTask} disabled={!newTaskQuestion.trim() || !newTaskCorrectAnswer.trim()} className="w-full flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg transition-colors" style={{ background: newTaskQuestion.trim() && newTaskCorrectAnswer.trim() ? `${t.gold}20` : 'rgba(255,255,255,0.03)', border: `1px solid ${newTaskQuestion.trim() && newTaskCorrectAnswer.trim() ? `${t.gold}40` : 'rgba(255,255,255,0.05)'}`, color: newTaskQuestion.trim() && newTaskCorrectAnswer.trim() ? t.gold : t.textDim, fontFamily: '"Cinzel", serif', fontSize: '0.65rem', cursor: newTaskQuestion.trim() && newTaskCorrectAnswer.trim() ? 'pointer' : 'not-allowed' }}>
             <Plus size={12} /> Ajouter tache
           </button>
@@ -1414,6 +1431,39 @@ export function GMPlayerGalleryPanel({
         </div>
       </div>
       )}
+      {createPortal(<AnimatePresence>
+        {zoomImageUrl && (
+          <motion.div
+            key="zoom-overlay"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[9999] flex items-center justify-center p-6"
+            style={{ background: 'rgba(0,0,0,0.85)', backdropFilter: 'blur(8px)', cursor: 'zoom-out' }}
+            onClick={() => setZoomImageUrl(null)}
+          >
+            <motion.img
+              src={zoomImageUrl}
+              alt="Indice agrandi"
+              initial={{ scale: 0.85, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.85, opacity: 0 }}
+              transition={{ type: 'spring', stiffness: 300, damping: 25 }}
+              className="max-w-full max-h-full rounded-xl object-contain shadow-2xl"
+              style={{ maxWidth: '90vw', maxHeight: '85vh' }}
+              draggable={false}
+              onClick={(e) => e.stopPropagation()}
+            />
+            <button
+              className="absolute top-4 right-4 rounded-full p-2 flex items-center justify-center"
+              style={{ background: 'rgba(255,255,255,0.12)', color: '#fff' }}
+              onClick={() => setZoomImageUrl(null)}
+            >
+              <X size={20} />
+            </button>
+          </motion.div>
+        )}
+      </AnimatePresence>, document.body)}
     </div>
   );
 }
