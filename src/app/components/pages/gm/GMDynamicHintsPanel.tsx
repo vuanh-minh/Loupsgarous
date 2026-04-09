@@ -134,6 +134,7 @@ export function GMDynamicHintsPanel({
   const dynImageTextRef = useRef<string>('');
   const inputRef = useRef<HTMLInputElement | null>(null);
   const [galleryTargetPlayer, setGalleryTargetPlayer] = useState<number | null>(null);
+  const [zoomImageUrl, setZoomImageUrl] = useState<string | null>(null);
   const [villagerDistribFeedback, setVillagerDistribFeedback] = useState<string | null>(null);
   const [manualDistribPriority, setManualDistribPriority] = useState<1 | 2>(2);
   const [shareHintPlayerId, setShareHintPlayerId] = useState<number | null>(null);
@@ -1907,6 +1908,41 @@ export function GMDynamicHintsPanel({
       </AnimatePresence>, document.body)}
       </div>{/* end Indices Dynamiques wrapper */}
 
+      {/* ── Image Zoom Overlay ── */}
+      {createPortal(<AnimatePresence>
+        {zoomImageUrl && (
+          <motion.div
+            key="zoom-overlay"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[9999] flex items-center justify-center p-6"
+            style={{ background: 'rgba(0,0,0,0.85)', backdropFilter: 'blur(8px)', cursor: 'zoom-out' }}
+            onClick={() => setZoomImageUrl(null)}
+          >
+            <motion.img
+              src={zoomImageUrl}
+              alt="Indice agrandi"
+              initial={{ scale: 0.85, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.85, opacity: 0 }}
+              transition={{ type: 'spring', stiffness: 300, damping: 25 }}
+              className="max-w-full max-h-full rounded-xl object-contain shadow-2xl"
+              style={{ maxWidth: '90vw', maxHeight: '85vh' }}
+              draggable={false}
+              onClick={(e) => e.stopPropagation()}
+            />
+            <button
+              className="absolute top-4 right-4 rounded-full p-2 flex items-center justify-center"
+              style={{ background: 'rgba(255,255,255,0.12)', color: '#fff' }}
+              onClick={() => setZoomImageUrl(null)}
+            >
+              <X size={20} />
+            </button>
+          </motion.div>
+        )}
+      </AnimatePresence>, document.body)}
+
       {/* ── Hint Image Gallery Modal ── */}
       <AnimatePresence>
         {galleryTargetPlayer !== null && (
@@ -2062,9 +2098,10 @@ export function GMDynamicHintsPanel({
                             <img
                               src={cat.hint.imageUrl}
                               alt="Indice"
-                              className="rounded-lg max-h-16 object-contain mt-1.5"
+                              className="rounded-lg max-h-16 object-contain mt-1.5 cursor-zoom-in"
                               style={{ border: `1px solid rgba(${t.overlayChannel}, 0.1)` }}
                               draggable={false}
+                              onClick={(e) => { e.stopPropagation(); setZoomImageUrl(cat.hint.imageUrl!); }}
                             />
                           )}
                           <div className="flex items-center gap-2 mt-1.5 flex-wrap">
