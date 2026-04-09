@@ -98,7 +98,7 @@ export interface Quest {
   createdAt: string;
   resolvedAt?: string;
   hidden: boolean;                              // hidden from players until revealed by GM
-  rewardHintIds?: Record<number, number>;       // playerId -> hintId rewarded on success
+  rewardHintIds?: Record<number, number>; // playerId -> hintId rewarded on success
   targetTags?: string[];                        // if set, only players with at least one of these tags are eligible (OR logic)
   distributionOrder?: number | 'random' | 'available';        // numeric = priority (lower first), 'random' = random pick (default), 'available' = auto-assigned to all eligible players
   /** Tracks in which phase each player's quest was resolved: playerId -> "turn-phase" key */
@@ -254,6 +254,8 @@ export interface GameState {
   questsPerPhase: number;
   /** Tracks quest completions this phase: playerId -> count of quests completed */
   questCompletionsThisPhase: Record<number, number>;
+  /** Tracks whether the Enqueteur/Espion bonus hint was already granted this phase: playerId -> true */
+  enqueteurBonusGrantedThisPhase?: Record<number, boolean>;
   /** Player tags: playerId -> array of tag names */
   playerTags: Record<number, string[]>;
   /** Available tags created by GM */

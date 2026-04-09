@@ -6,9 +6,9 @@ import type { DynamicHint } from './gameTypes';
 import { resolveHintText } from '../components/pages/gm/gmPureHelpers';
 
 /**
- * Client-side dynamic hint reward: pick an unrevealed dynamic hint
- * matching the player's team, reveal it, create a standard hint +
- * playerHint for just that player. Returns the updated state pieces.
+ * Client-side dynamic hint reward: used in local mode only (no server).
+ * Picks an unrevealed dynamic hint matching the player's team, reveals it,
+ * creates a standard hint + playerHint for that player.
  */
 function grantDynamicHintRewardClient(
   s: GameState,
@@ -25,7 +25,6 @@ function grantDynamicHintRewardClient(
   const role = getRoleById(player.role);
   const playerTeam = role?.team === 'werewolf' ? 'werewolf' : 'village';
 
-  // Pre-compute hint texts already owned by this player (for deduplication)
   const ownedHintIds = new Set(
     playerHints.filter((ph) => ph.playerId === rewardPlayerId).map((ph) => ph.hintId)
   );
@@ -35,7 +34,6 @@ function grantDynamicHintRewardClient(
       .map((h) => (h.text as string).trim().toLowerCase())
   );
 
-  // Helper: compute recipientTeam for a target
   const getRecipientTeam = (targetRole: { team: string; id: string }): 'village' | 'wolves' | 'villageois' | null => {
     if (targetRole.team === 'werewolf') return 'village';
     if (targetRole.id === 'villageois') return 'villageois';
@@ -43,10 +41,8 @@ function grantDynamicHintRewardClient(
     return null;
   };
 
-  // ── Village alternation: alternate between wolf hints ('village') and special role hints ('wolves') ──
   let orderedSearchTeams: string[][];
   if (playerTeam === 'village') {
-    // Count hints already granted to this player by type
     let wolfHintCount = 0;
     let specialHintCount = 0;
     for (const dh of dynamicHints) {
@@ -67,7 +63,6 @@ function grantDynamicHintRewardClient(
     orderedSearchTeams = [['wolves'], ['wolves', 'villageois']];
   }
 
-  // ── Multi-pass candidate search with alternation ──
   let candidateIndices: number[] = [];
   for (const wantedTeams of orderedSearchTeams) {
     candidateIndices = [];
@@ -80,7 +75,6 @@ function grantDynamicHintRewardClient(
       if (!targetRole) continue;
       const recipientTeam = getRecipientTeam(targetRole);
       if (recipientTeam === null || !wantedTeams.includes(recipientTeam)) continue;
-      // Deduplication: skip if resolved text matches a hint the player already owns
       const resolvedCandidate = dh.text.replace(/\{role\}/gi, getRoleById(target.role)?.name ?? target.role);
       if (ownedHintTexts.has(resolvedCandidate.trim().toLowerCase())) continue;
       candidateIndices.push(i);
@@ -91,7 +85,7 @@ function grantDynamicHintRewardClient(
   if (candidateIndices.length === 0) return { dynamicHints, hints, playerHints, rewardHintId: null };
 
   const pickedIdx = candidateIndices[Math.floor(Math.random() * candidateIndices.length)];
-  const picked = { ...dynamicHints[pickedIdx], revealed: true, revealedAt: new Date().toISOString() };
+  const picked = { ...dynamicHints[pickedIdx], revealed: true, revealedAt: new Date().toISOString(), grantedToPlayerId: rewardPlayerId };
   dynamicHints[pickedIdx] = picked;
 
   const target = players.find((p) => p.id === picked.targetPlayerId);
@@ -385,22 +379,41 @@ export function useServerActions() {
         return { ...q, tasks, playerStatuses };
       });
 
-      // If resolved as success, grant a dynamic hint reward
-      const resolvedQuest = quests.find((q) => q.id === questId);
-      if (resolvedQuest?.playerStatuses?.[playerId] === 'success') {
-        const reward = grantDynamicHintRewardClient(s, playerId);
-        const updatedQuests = reward.rewardHintId !== null
-          ? quests.map((q) => q.id === questId
-              ? { ...q, rewardHintIds: { ...(q.rewardHintIds || {}), [playerId]: reward.rewardHintId! } }
-              : q)
-          : quests;
-        return { ...s, quests: updatedQuests, dynamicHints: reward.dynamicHints, hints: reward.hints, playerHints: reward.playerHints };
+      // In local mode only: grant hint here (no server to handle it)
+      if (localMode) {
+        const resolvedQuest = quests.find((q) => q.id === questId);
+        if (resolvedQuest?.playerStatuses?.[playerId] === 'success') {
+          const player = s.players.find((p) => p.id === playerId);
+          const isEnqueteur = player?.role === 'enqueteur' || player?.role === 'enqueteur-loup';
+          const reward = grantDynamicHintRewardClient(s, playerId);
+          const updatedQuests = reward.rewardHintId !== null
+            ? quests.map((q) => q.id === questId
+                ? { ...q, rewardHintIds: { ...(q.rewardHintIds || {}), [playerId]: reward.rewardHintId! } }
+                : q)
+            : quests;
+          let updatedState = { ...s, quests: updatedQuests, dynamicHints: reward.dynamicHints, hints: reward.hints, playerHints: reward.playerHints };
+          // Enqueteur/Espion bonus: grant an additional random hint (once per phase)
+          if (isEnqueteur) {
+            const bonusGranted = s.enqueteurBonusGrantedThisPhase ?? {};
+            if (!bonusGranted[playerId]) {
+              const bonus = grantDynamicHintRewardClient(updatedState, playerId);
+              updatedState = {
+                ...updatedState,
+                dynamicHints: bonus.dynamicHints,
+                hints: bonus.hints,
+                playerHints: bonus.playerHints,
+                enqueteurBonusGrantedThisPhase: { ...bonusGranted, [playerId]: true },
+              };
+            }
+          }
+          return updatedState;
+        }
       }
 
       return { ...s, quests };
     };
     if (localMode) return applyLocal(mutator);
-    // Optimistic update
+    // Optimistic update (online: no hint grant, server handles it)
     applyLocal(mutator);
     return postAction('quest-answer', { questId, taskId, answer, playerId, gameId });
   }, [gameId, localMode, applyLocal]);
@@ -428,18 +441,31 @@ export function useServerActions() {
             for (const pid of playerGroup) {
               playerStatuses[pid] = finalStatus;
             }
-            // Grant dynamic hint rewards on success
-            if (finalStatus === 'success') {
+            // In local mode only: grant hints here (no server to handle it)
+            if (localMode && finalStatus === 'success') {
               for (const pid of playerGroup) {
+                const player = s.players.find((p) => p.id === pid);
+                const isEnqueteur = player?.role === 'enqueteur' || player?.role === 'enqueteur-loup';
                 const reward = grantDynamicHintRewardClient(
                   { ...s, dynamicHints: [...(s.dynamicHints ?? [])], hints: [...(s.hints ?? [])], playerHints },
                   pid,
                 );
-                // Merge reward state back — dynamicHints/hints may have been mutated
                 Object.assign(s, { dynamicHints: reward.dynamicHints, hints: reward.hints });
                 playerHints = reward.playerHints;
                 if (reward.rewardHintId !== null) {
-                  rewardHintIds[pid] = reward.rewardHintId!;
+                  rewardHintIds[pid] = reward.rewardHintId;
+                }
+                // Enqueteur/Espion bonus: grant an additional random hint (once per phase)
+                if (isEnqueteur) {
+                  const bonusGranted = s.enqueteurBonusGrantedThisPhase ?? {};
+                  if (!bonusGranted[pid]) {
+                    const bonus = grantDynamicHintRewardClient(
+                      { ...s, dynamicHints: reward.dynamicHints, hints: reward.hints, playerHints },
+                      pid,
+                    );
+                    Object.assign(s, { dynamicHints: bonus.dynamicHints, hints: bonus.hints, enqueteurBonusGrantedThisPhase: { ...bonusGranted, [pid]: true } });
+                    playerHints = bonus.playerHints;
+                  }
                 }
               }
             }
@@ -451,6 +477,7 @@ export function useServerActions() {
       return { ...s, quests, playerHints };
     };
     if (localMode) return applyLocal(mutator);
+    // Optimistic update (online: no hint grant, server handles it)
     applyLocal(mutator);
     return postAction('quest-collab-vote', { questId, playerId, vote, gameId });
   }, [gameId, localMode, applyLocal]);

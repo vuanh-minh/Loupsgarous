@@ -1079,6 +1079,7 @@ actionRoutes.post("/make-server-2c00868b/game/action/timer-transition", async (c
       state.phaseDeathHistory = [...(state.phaseDeathHistory || []), dawnRecord];
       state.aliveAtPhaseStart = Object.fromEntries((state.players as any[]).map((p: any) => [p.id, p.alive]));
       state.questCompletionsThisPhase = {};
+      state.enqueteurBonusGrantedThisPhase = {};
       distributeQuestsToAlivePlayers(state);
 
       console.log(`Timer auto-transition: night → day (turn ${state.turn})`);
@@ -1141,6 +1142,7 @@ actionRoutes.post("/make-server-2c00868b/game/action/timer-transition", async (c
           state.phaseTimerEndAt = durNightMaire > 0 ? computeNewEndAt(durNightMaire) : null;
           state.aliveAtPhaseStart = Object.fromEntries((state.players as any[]).map((p: any) => [p.id, p.alive]));
           state.questCompletionsThisPhase = {};
+          state.enqueteurBonusGrantedThisPhase = {};
           distributeQuestsToAlivePlayers(state);
           console.log(`Timer auto-transition: maire election resolved → night 1 (turn ${state.turn})`);
 
@@ -1293,6 +1295,7 @@ actionRoutes.post("/make-server-2c00868b/game/action/timer-transition", async (c
           state.phaseDeathHistory = [...(state.phaseDeathHistory || []), duskRecord];
           state.aliveAtPhaseStart = Object.fromEntries((state.players as any[]).map((p: any) => [p.id, p.alive]));
           state.questCompletionsThisPhase = {};
+          state.enqueteurBonusGrantedThisPhase = {};
           distributeQuestsToAlivePlayers(state);
 
           console.log(`Timer auto-transition: day vote → night (turn ${newTurn})`);
@@ -1863,16 +1866,21 @@ actionRoutes.post("/make-server-2c00868b/game/action/quest-answer", async (c) =>
         if (!quest.playerResolvedInPhase) quest.playerResolvedInPhase = {};
         quest.playerResolvedInPhase[playerId] = `${state.turn}-${state.phase}`;
 
-        // ── Reward: grant hint(s) on success (Enqueteur gets 2) ──
+        // ── Reward: grant hint on success ──
         if (allCorrect) {
           const player = state.players.find((p: any) => p.id === playerId);
           const isEnqueteur = player?.role === 'enqueteur' || player?.role === 'enqueteur-loup';
-          const hintsToGrant = isEnqueteur ? 2 : 1;
-          for (let i = 0; i < hintsToGrant; i++) {
-            const hintId = grantDynamicHintReward(state, playerId);
-            if (hintId) {
-              if (!quest.rewardHintIds) quest.rewardHintIds = {};
-              quest.rewardHintIds[playerId] = hintId;
+          const hintId = grantDynamicHintReward(state, playerId);
+          if (hintId) {
+            if (!quest.rewardHintIds) quest.rewardHintIds = {};
+            quest.rewardHintIds[playerId] = hintId;
+          }
+          // Enqueteur/Espion bonus: grant an additional random hint (once per phase)
+          if (isEnqueteur) {
+            if (!state.enqueteurBonusGrantedThisPhase) state.enqueteurBonusGrantedThisPhase = {};
+            if (!state.enqueteurBonusGrantedThisPhase[playerId]) {
+              grantDynamicHintReward(state, playerId);
+              state.enqueteurBonusGrantedThisPhase[playerId] = true;
             }
           }
         }
@@ -1976,19 +1984,24 @@ actionRoutes.post("/make-server-2c00868b/game/action/quest-collab-vote", async (
             quest.playerResolvedInPhase[pid] = `${state.turn}-${state.phase}`;
           }
 
-          // ── Reward: grant hint(s) per group member on success (Enqueteur gets 2) ──
+          // ── Reward: grant hint per group member on success ──
           const _collabAutoAssigns: { shortCode: string; questTitle: string }[] = [];
           if (finalStatus === 'success') {
             if (!state.questCompletionsThisPhase) state.questCompletionsThisPhase = {};
             for (const pid of playerGroup) {
               const player = state.players.find((p: any) => p.id === pid);
               const isEnqueteur = player?.role === 'enqueteur' || player?.role === 'enqueteur-loup';
-              const hintsToGrant = isEnqueteur ? 2 : 1;
-              for (let i = 0; i < hintsToGrant; i++) {
-                const hintId = grantDynamicHintReward(state, pid);
-                if (hintId) {
-                  if (!quest.rewardHintIds) quest.rewardHintIds = {};
-                  quest.rewardHintIds[pid] = hintId;
+              const hintId = grantDynamicHintReward(state, pid);
+              if (hintId) {
+                if (!quest.rewardHintIds) quest.rewardHintIds = {};
+                quest.rewardHintIds[pid] = hintId;
+              }
+              // Enqueteur/Espion bonus: grant an additional random hint (once per phase)
+              if (isEnqueteur) {
+                if (!state.enqueteurBonusGrantedThisPhase) state.enqueteurBonusGrantedThisPhase = {};
+                if (!state.enqueteurBonusGrantedThisPhase[pid]) {
+                  grantDynamicHintReward(state, pid);
+                  state.enqueteurBonusGrantedThisPhase[pid] = true;
                 }
               }
               // Auto-assign next quest if under phase limit
