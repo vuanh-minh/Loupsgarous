@@ -6,6 +6,7 @@ import {
   Check, X, UserPlus, Download, ClipboardList,
   Type, Hash, List as ListIcon, ImagePlus, Loader2,
   Shield, ChevronDown, Map as MapIcon, Pencil,
+  ChevronLeft, ChevronRight,
 } from 'lucide-react';
 import type { GameState, DynamicHint, TaskTemplate, QuestTaskInputType } from '../../../context/gameTypes';
 import type { GameThemeTokens } from '../../../context/gameTheme';
@@ -151,7 +152,8 @@ export function GMPlayerGalleryPanel({
   const [editTaskChoices, setEditTaskChoices] = useState<string[]>(['', '', '', '']);
   const [editTaskImageUrl, setEditTaskImageUrl] = useState<string | undefined>();
   const [editTaskNoPlayerLink, setEditTaskNoPlayerLink] = useState(false);
-  const [zoomImageUrl, setZoomImageUrl] = useState<string | null>(null);
+  const [zoomIndex, setZoomIndex] = useState<number | null>(null);
+  const [zoomTaskImageUrl, setZoomTaskImageUrl] = useState<string | null>(null);
 
   // Track which gallery IDs are already in the current game
   const usedGalleryIds = useMemo(() => {
@@ -359,6 +361,32 @@ export function GMPlayerGalleryPanel({
     () => (selectedGalleryId !== null ? galleryTasks[selectedGalleryId] ?? [] : []),
     [selectedGalleryId, galleryTasks],
   );
+
+  // ── Flat list of all image hints across all players (for zoom navigation) ──
+  const allImageHints = useMemo(() => {
+    const items: { imageUrl: string; text: string; hintId: number; playerName: string; playerId: number }[] = [];
+    for (const avatar of filteredAvatars) {
+      const hints = galleryHints[avatar.id] ?? [];
+      for (const hint of hints) {
+        if (hint.imageUrl) {
+          items.push({ imageUrl: hint.imageUrl, text: hint.text, hintId: hint.id, playerName: avatar.name, playerId: avatar.id });
+        }
+      }
+    }
+    return items;
+  }, [filteredAvatars, galleryHints]);
+
+  // ── Keyboard navigation for hint zoom overlay ──
+  useEffect(() => {
+    if (zoomIndex === null) return;
+    const handleKey = (e: KeyboardEvent) => {
+      if (e.key === 'ArrowRight' && zoomIndex < allImageHints.length - 1) { e.preventDefault(); setZoomIndex(zoomIndex + 1); }
+      else if (e.key === 'ArrowLeft' && zoomIndex > 0) { e.preventDefault(); setZoomIndex(zoomIndex - 1); }
+      else if (e.key === 'Escape') setZoomIndex(null);
+    };
+    window.addEventListener('keydown', handleKey);
+    return () => window.removeEventListener('keydown', handleKey);
+  }, [zoomIndex, allImageHints.length]);
 
   // ── Desktop arrow-key navigation through gallery grid ──
   useEffect(() => {
@@ -955,7 +983,7 @@ export function GMPlayerGalleryPanel({
                   <>
                     <span className="px-1.5 py-0.5 rounded-md shrink-0 mt-0.5" style={{ background: pc.bg, border: `1px solid ${pc.border}`, color: pc.text, fontSize: '0.5rem', fontWeight: 700, fontFamily: '"Cinzel", serif' }}>P{hint.priority ?? 1}</span>
                     <div className="flex-1 min-w-0">
-                      {hint.imageUrl && <img src={hint.imageUrl} alt="Hint" className="w-12 h-12 rounded-lg object-cover mb-1 cursor-zoom-in" onClick={(e) => { e.stopPropagation(); setZoomImageUrl(hint.imageUrl!); }} />}
+                      {hint.imageUrl && <img src={hint.imageUrl} alt="Hint" className="w-12 h-12 rounded-lg object-cover mb-1 cursor-zoom-in" onClick={(e) => { e.stopPropagation(); const idx = allImageHints.findIndex(i => i.hintId === hint.id && i.playerId === selectedGalleryId); setZoomIndex(idx >= 0 ? idx : null); }} />}
                       <p className="text-sm" style={{ color: t.text, fontSize: '0.7rem', lineHeight: 1.5 }}>{hint.text || <span style={{ opacity: 0.5, fontStyle: 'italic' }}>Image seule</span>}</p>
                     </div>
                     <button onClick={() => { setEditingHintId(hint.id); setEditHintText(hint.text); setEditHintPriority(hint.priority ?? 1); setEditHintImageUrl(hint.imageUrl); }} className="p-1.5 rounded-md hover:bg-white/5 transition-colors shrink-0" title="Modifier"><Pencil size={12} style={{ color: '#8b5cf6' }} /></button>
@@ -1078,7 +1106,7 @@ export function GMPlayerGalleryPanel({
                   <>
                     <span className="px-1.5 py-0.5 rounded-md shrink-0 mt-0.5" style={{ background: 'rgba(139,92,246,0.12)', border: '1px solid rgba(139,92,246,0.25)', color: '#8b5cf6', fontSize: '0.5rem', fontWeight: 700, fontFamily: '"Cinzel", serif' }}>{itl.icon}</span>
                     <div className="flex-1 min-w-0">
-                      {task.imageUrl && <img src={task.imageUrl} alt="Task" className="w-12 h-12 rounded-lg object-cover mb-1 cursor-zoom-in" onClick={(e) => { e.stopPropagation(); setZoomImageUrl(task.imageUrl!); }} />}
+                      {task.imageUrl && <img src={task.imageUrl} alt="Task" className="w-12 h-12 rounded-lg object-cover mb-1 cursor-zoom-in" onClick={(e) => { e.stopPropagation(); setZoomTaskImageUrl(task.imageUrl!); }} />}
                       <p className="text-sm" style={{ color: t.text, fontSize: '0.7rem', lineHeight: 1.5 }}>{task.question || <span style={{ opacity: 0.5, fontStyle: 'italic' }}>Image seule</span>}</p>
                       {task.noPlayerLink && <span style={{ color: t.textDim, fontSize: '0.5rem', fontStyle: 'italic' }}>non associée</span>}
                     </div>
@@ -1432,19 +1460,90 @@ export function GMPlayerGalleryPanel({
       </div>
       )}
       {createPortal(<AnimatePresence>
-        {zoomImageUrl && (
+        {zoomIndex !== null && allImageHints.length > 0 && (() => {
+          const item = allImageHints[zoomIndex];
+          if (!item) return null;
+          const hasPrev = zoomIndex > 0;
+          const hasNext = zoomIndex < allImageHints.length - 1;
+          const goPrev = () => hasPrev && setZoomIndex(zoomIndex - 1);
+          const goNext = () => hasNext && setZoomIndex(zoomIndex + 1);
+          return (
+            <motion.div
+              key="zoom-hint-overlay"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="fixed inset-0 z-[9999] flex flex-col items-center justify-center p-6 gap-4"
+              style={{ background: 'rgba(0,0,0,0.88)', backdropFilter: 'blur(8px)' }}
+              onClick={() => setZoomIndex(null)}
+            >
+              {/* Image + arrows */}
+              <div className="relative flex items-center justify-center w-full" onClick={(e) => e.stopPropagation()}>
+                <button
+                  className="absolute left-0 z-10 p-2 rounded-full transition-all"
+                  style={{ background: hasPrev ? 'rgba(255,255,255,0.15)' : 'rgba(255,255,255,0.04)', color: hasPrev ? '#fff' : 'rgba(255,255,255,0.2)', cursor: hasPrev ? 'pointer' : 'default' }}
+                  onClick={goPrev}
+                >
+                  <ChevronLeft size={24} />
+                </button>
+                <motion.img
+                  key={item.imageUrl}
+                  src={item.imageUrl}
+                  alt="Indice agrandi"
+                  initial={{ scale: 0.9, opacity: 0 }}
+                  animate={{ scale: 1, opacity: 1 }}
+                  exit={{ scale: 0.9, opacity: 0 }}
+                  transition={{ type: 'spring', stiffness: 300, damping: 25 }}
+                  className="rounded-xl object-contain shadow-2xl mx-12"
+                  style={{ maxWidth: '80vw', maxHeight: '65vh' }}
+                  draggable={false}
+                />
+                <button
+                  className="absolute right-0 z-10 p-2 rounded-full transition-all"
+                  style={{ background: hasNext ? 'rgba(255,255,255,0.15)' : 'rgba(255,255,255,0.04)', color: hasNext ? '#fff' : 'rgba(255,255,255,0.2)', cursor: hasNext ? 'pointer' : 'default' }}
+                  onClick={goNext}
+                >
+                  <ChevronRight size={24} />
+                </button>
+              </div>
+              {/* Hint text + player name */}
+              <div className="flex flex-col items-center gap-1 text-center px-4" onClick={(e) => e.stopPropagation()}>
+                <span style={{ color: 'rgba(255,255,255,0.45)', fontSize: '0.6rem', fontFamily: '"Cinzel", serif', letterSpacing: '0.05em' }}>
+                  {item.playerName} — {zoomIndex + 1} / {allImageHints.length}
+                </span>
+                {item.text && (
+                  <p style={{ color: 'rgba(255,255,255,0.9)', fontSize: '0.85rem', fontFamily: '"Inter", sans-serif', fontWeight: 400, lineHeight: 1.6, maxWidth: '60ch' }}>
+                    {item.text}
+                  </p>
+                )}
+              </div>
+              {/* Close */}
+              <button
+                className="absolute top-4 right-4 rounded-full p-2 flex items-center justify-center"
+                style={{ background: 'rgba(255,255,255,0.12)', color: '#fff' }}
+                onClick={() => setZoomIndex(null)}
+              >
+                <X size={20} />
+              </button>
+            </motion.div>
+          );
+        })()}
+      </AnimatePresence>, document.body)}
+      {/* ── Task image simple zoom ── */}
+      {createPortal(<AnimatePresence>
+        {zoomTaskImageUrl && (
           <motion.div
-            key="zoom-overlay"
+            key="zoom-task-overlay"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             className="fixed inset-0 z-[9999] flex items-center justify-center p-6"
             style={{ background: 'rgba(0,0,0,0.85)', backdropFilter: 'blur(8px)', cursor: 'zoom-out' }}
-            onClick={() => setZoomImageUrl(null)}
+            onClick={() => setZoomTaskImageUrl(null)}
           >
             <motion.img
-              src={zoomImageUrl}
-              alt="Indice agrandi"
+              src={zoomTaskImageUrl}
+              alt="Tâche agrandie"
               initial={{ scale: 0.85, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
               exit={{ scale: 0.85, opacity: 0 }}
@@ -1457,7 +1556,7 @@ export function GMPlayerGalleryPanel({
             <button
               className="absolute top-4 right-4 rounded-full p-2 flex items-center justify-center"
               style={{ background: 'rgba(255,255,255,0.12)', color: '#fff' }}
-              onClick={() => setZoomImageUrl(null)}
+              onClick={() => setZoomTaskImageUrl(null)}
             >
               <X size={20} />
             </button>
