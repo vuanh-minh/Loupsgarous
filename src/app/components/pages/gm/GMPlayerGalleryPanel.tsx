@@ -154,6 +154,7 @@ export function GMPlayerGalleryPanel({
   const [editTaskNoPlayerLink, setEditTaskNoPlayerLink] = useState(false);
   const [zoomIndex, setZoomIndex] = useState<number | null>(null);
   const [zoomTaskImageUrl, setZoomTaskImageUrl] = useState<string | null>(null);
+  const [zoomEditText, setZoomEditText] = useState<string | null>(null);
 
   // Track which gallery IDs are already in the current game
   const usedGalleryIds = useMemo(() => {
@@ -380,13 +381,28 @@ export function GMPlayerGalleryPanel({
   useEffect(() => {
     if (zoomIndex === null) return;
     const handleKey = (e: KeyboardEvent) => {
+      if (zoomEditText !== null) { if (e.key === 'Escape') setZoomEditText(null); return; }
       if (e.key === 'ArrowRight' && zoomIndex < allImageHints.length - 1) { e.preventDefault(); setZoomIndex(zoomIndex + 1); }
       else if (e.key === 'ArrowLeft' && zoomIndex > 0) { e.preventDefault(); setZoomIndex(zoomIndex - 1); }
       else if (e.key === 'Escape') setZoomIndex(null);
     };
     window.addEventListener('keydown', handleKey);
     return () => window.removeEventListener('keydown', handleKey);
-  }, [zoomIndex, allImageHints.length]);
+  }, [zoomIndex, allImageHints.length, zoomEditText]);
+
+  // ── Save hint text from zoom overlay ──
+  const saveZoomHintText = useCallback(() => {
+    if (zoomIndex === null || zoomEditText === null) return;
+    const item = allImageHints[zoomIndex];
+    if (!item) return;
+    const current = galleryHints[item.playerId] ?? [];
+    const newHints = {
+      ...galleryHints,
+      [item.playerId]: current.map((h) => h.id === item.hintId ? { ...h, text: zoomEditText.trim() } : h),
+    };
+    saveGalleryHints(newHints);
+    setZoomEditText(null);
+  }, [zoomIndex, zoomEditText, allImageHints, galleryHints, saveGalleryHints]);
 
   // ── Desktop arrow-key navigation through gallery grid ──
   useEffect(() => {
@@ -1482,7 +1498,7 @@ export function GMPlayerGalleryPanel({
                 <button
                   className="absolute left-0 z-10 p-2 rounded-full transition-all"
                   style={{ background: hasPrev ? 'rgba(255,255,255,0.15)' : 'rgba(255,255,255,0.04)', color: hasPrev ? '#fff' : 'rgba(255,255,255,0.2)', cursor: hasPrev ? 'pointer' : 'default' }}
-                  onClick={goPrev}
+                  onClick={() => { setZoomEditText(null); goPrev(); }}
                 >
                   <ChevronLeft size={24} />
                 </button>
@@ -1501,20 +1517,57 @@ export function GMPlayerGalleryPanel({
                 <button
                   className="absolute right-0 z-10 p-2 rounded-full transition-all"
                   style={{ background: hasNext ? 'rgba(255,255,255,0.15)' : 'rgba(255,255,255,0.04)', color: hasNext ? '#fff' : 'rgba(255,255,255,0.2)', cursor: hasNext ? 'pointer' : 'default' }}
-                  onClick={goNext}
+                  onClick={() => { setZoomEditText(null); goNext(); }}
                 >
                   <ChevronRight size={24} />
                 </button>
               </div>
               {/* Hint text + player name */}
-              <div className="flex flex-col items-center gap-1 text-center px-4" onClick={(e) => e.stopPropagation()}>
+              <div className="flex flex-col items-center gap-2 text-center px-4 w-full" style={{ maxWidth: '60ch' }} onClick={(e) => e.stopPropagation()}>
                 <span style={{ color: 'rgba(255,255,255,0.45)', fontSize: '0.6rem', fontFamily: '"Cinzel", serif', letterSpacing: '0.05em' }}>
                   {item.playerName} — {zoomIndex + 1} / {allImageHints.length}
                 </span>
-                {item.text && (
-                  <p style={{ color: 'rgba(255,255,255,0.9)', fontSize: '0.85rem', fontFamily: '"Inter", sans-serif', fontWeight: 400, lineHeight: 1.6, maxWidth: '60ch' }}>
-                    {item.text}
-                  </p>
+                {zoomEditText !== null ? (
+                  <div className="flex flex-col items-center gap-2 w-full">
+                    <textarea
+                      autoFocus
+                      value={zoomEditText}
+                      onChange={(e) => setZoomEditText(e.target.value)}
+                      rows={3}
+                      className="w-full rounded-lg px-3 py-2 outline-none resize-none text-center"
+                      style={{ background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.2)', color: '#fff', fontSize: '0.85rem', fontFamily: '"Inter", sans-serif', lineHeight: 1.6 }}
+                    />
+                    <div className="flex gap-2">
+                      <button
+                        onClick={saveZoomHintText}
+                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg"
+                        style={{ background: 'rgba(107,142,90,0.25)', border: '1px solid rgba(107,142,90,0.4)', color: '#6b8e5a', fontSize: '0.7rem', fontWeight: 600 }}
+                      >
+                        <Check size={12} /> Sauvegarder
+                      </button>
+                      <button
+                        onClick={() => setZoomEditText(null)}
+                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg"
+                        style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)', color: 'rgba(255,255,255,0.5)', fontSize: '0.7rem' }}
+                      >
+                        <X size={12} /> Annuler
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="flex items-start gap-2 justify-center">
+                    <p style={{ color: 'rgba(255,255,255,0.9)', fontSize: '0.85rem', fontFamily: '"Inter", sans-serif', fontWeight: 400, lineHeight: 1.6 }}>
+                      {item.text || <span style={{ color: 'rgba(255,255,255,0.3)', fontStyle: 'italic' }}>Aucun texte</span>}
+                    </p>
+                    <button
+                      onClick={() => setZoomEditText(item.text ?? '')}
+                      className="p-1 rounded-md shrink-0 mt-0.5"
+                      style={{ background: 'rgba(255,255,255,0.08)', color: 'rgba(255,255,255,0.4)' }}
+                      title="Modifier le texte"
+                    >
+                      <Pencil size={11} />
+                    </button>
+                  </div>
                 )}
               </div>
               {/* Close */}
