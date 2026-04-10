@@ -297,7 +297,8 @@ export function useGameSync({ setState, state, stateRef }: SyncDeps) {
       // GM is the only creator/editor of quests. Only merge player-driven
       // fields (playerStatuses, task playerAnswers/playerResults, collaborativeVotes)
       // from the server so that newly-created quests aren't wiped by a stale read.
-      const mergeQuests = (local: any[], server: any[]): any[] => {
+      const mergeQuests = (local: any[], server: any[], deletedIds: number[]): any[] => {
+        const deletedSet = new Set(deletedIds);
         const serverMap = new Map<number, any>();
         for (const q of server) serverMap.set(q.id, q);
         // Start from local (preserves quests not yet synced)
@@ -322,9 +323,10 @@ export function useGameSync({ setState, state, stateRef }: SyncDeps) {
             tasks: mergedTasks,
           };
         });
-        // Also add any server-only quests (e.g. restored from another GM session)
+        // Also add any server-only quests (e.g. restored from another GM session),
+        // but skip quests explicitly deleted by the GM
         for (const sq of server) {
-          if (!local.some((lq: any) => lq.id === sq.id)) {
+          if (!local.some((lq: any) => lq.id === sq.id) && !deletedSet.has(sq.id)) {
             merged.push(sq);
           }
         }
@@ -350,7 +352,7 @@ export function useGameSync({ setState, state, stateRef }: SyncDeps) {
         return result;
       };
 
-      const mergedQuests = mergeQuests(s.quests ?? [], serverState.quests ?? []);
+      const mergedQuests = mergeQuests(s.quests ?? [], serverState.quests ?? [], s.deletedQuestIds ?? []);
       const mergedQuestAssignments = mergeQuestAssignments(
         s.questAssignments ?? {},
         serverState.questAssignments ?? {},

@@ -252,6 +252,8 @@ export interface GameState {
   quests: Quest[];
   /** Quest assignments: playerId -> array of assigned quest IDs */
   questAssignments: Record<number, number[]>;
+  /** IDs of quests explicitly deleted by the GM — prevents sync from restoring them */
+  deletedQuestIds?: number[];
   /** Max quests a player can complete per phase (day or night). 0 = unlimited. Default 1. */
   questsPerPhase: number;
   /** Tracks quest completions this phase: playerId -> count of quests completed */

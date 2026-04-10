@@ -492,7 +492,9 @@ export function GMQuestsPanel({ state, updateState, t, isMobile, onNavigateToPla
       for (const [pidStr, qids] of Object.entries(s.questAssignments || {})) {
         newAssignments[Number(pidStr)] = qids.filter(qid => qid !== questId);
       }
-      return { ...s, quests: newQuests, questAssignments: newAssignments };
+      // Track deleted quest ID so sync doesn't restore it from a stale server state
+      const deletedQuestIds = [...new Set([...(s.deletedQuestIds || []), questId])];
+      return { ...s, quests: newQuests, questAssignments: newAssignments, deletedQuestIds };
     });
   }, [updateState]);
 

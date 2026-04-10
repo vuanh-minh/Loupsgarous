@@ -185,6 +185,7 @@ export const initialState: GameState = {
   nominations: {},
   quests: [],
   questAssignments: {},
+  deletedQuestIds: [],
   questsPerPhase: 1,
   questCompletionsThisPhase: {},
   playerTags: {},
