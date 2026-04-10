@@ -54,15 +54,15 @@ export function useGameSync({ setState, state, stateRef }: SyncDeps) {
     return () => { cancelled = true; };
   }, []);
 
-  // ── Auto-persist in local mode ──
+  // ── Auto-persist to localStorage (safety net for all modes) ──
   useLayoutEffect(() => {
-    if (!localMode || !state.gameId) return;
+    if (!state.gameId) return;
     try {
       localSaveState(state.gameId, state);
     } catch (err) {
       console.log('Auto-persist error:', err);
     }
-  }, [localMode, state]);
+  }, [state]);
 
   // ── Sync state to server (GM only) ──
   const syncToServer = useCallback(async () => {
@@ -120,7 +120,16 @@ export function useGameSync({ setState, state, stateRef }: SyncDeps) {
       const res = await fetch(`${API_BASE}/game/state${qs}`, {
         headers: { 'Authorization': `Bearer ${publicAnonKey}` },
       });
-      if (!res.ok) { console.log('Load state error:', res.status); return null; }
+      if (!res.ok) {
+        console.log('Load state error:', res.status);
+        // Fallback to localStorage when server fails
+        const fallbackGid = opts?.gameId || stateRef.current.gameId;
+        if (fallbackGid) {
+          const cached = localLoadState(fallbackGid);
+          if (cached) { syncEventCounter(cached.events || []); return cached; }
+        }
+        return null;
+      }
       const data = await res.json();
       if (data.gameState) {
         const gs = data.gameState as GameState;
@@ -187,9 +196,21 @@ export function useGameSync({ setState, state, stateRef }: SyncDeps) {
         syncEventCounter(gs.events);
         return gs;
       }
+      // Server returned no gameState — fallback to localStorage
+      const fallbackGid = opts?.gameId || stateRef.current.gameId;
+      if (fallbackGid) {
+        const cached = localLoadState(fallbackGid);
+        if (cached) { syncEventCounter(cached.events || []); return cached; }
+      }
       return null;
     } catch (err) {
       console.log('Network load error:', err);
+      // Fallback to localStorage on network error
+      const fallbackGid = opts?.gameId || stateRef.current.gameId;
+      if (fallbackGid) {
+        const cached = localLoadState(fallbackGid);
+        if (cached) { syncEventCounter(cached.events || []); return cached; }
+      }
       return null;
     }
   }, [stateRef]);
