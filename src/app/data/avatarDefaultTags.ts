@@ -65,6 +65,7 @@ export const AVATAR_DEFAULT_TAGS: Record<string, string[]> = {
   Yangui: ["ESIEE"],
   Victor: ["ESIEE"],
   Yann: ["ESIEE"],
+  Tatiana: ["THIGA & YOUSIGN"],
 };
 
 /** All unique tags extracted from the mapping */
