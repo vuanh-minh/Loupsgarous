@@ -591,6 +591,50 @@ export function GMQuestsPanel({ state, updateState, t, isMobile, onNavigateToPla
 
 
 
+  // ── DISTRIBUTE GENERAL QUESTS ONLY ──
+  const handleDistributeGeneralQuests = useCallback(() => {
+    let distributedCount = 0;
+    updateState((s) => {
+      const allPlayers = s.players || [];
+      const generalQuests = (s.quests || []).filter(q => q.isGenerale || q.distributionOrder === 'available');
+      if (generalQuests.length === 0) return s;
+
+      const newAssign: Record<number, number[]> = {};
+      for (const [k, v] of Object.entries(s.questAssignments || {})) {
+        newAssign[Number(k)] = [...v];
+      }
+
+      for (const p of allPlayers) {
+        if (!newAssign[p.id]) newAssign[p.id] = [];
+        const myQids = new Set(newAssign[p.id]);
+        // Quêtes générales que ce joueur n'a pas encore
+        const available = generalQuests.filter(q => {
+          if (myQids.has(q.id)) return false;
+          // Respecter les tags si configurés
+          if (q.targetTags && q.targetTags.length > 0) {
+            const pidTags = (s.playerTags || {})[p.id] || [];
+            if (!q.targetTags.some(tag => pidTags.includes(tag))) return false;
+          }
+          return true;
+        });
+        if (available.length === 0) continue;
+        // Choisir une quête aléatoire
+        const picked = available[Math.floor(Math.random() * available.length)];
+        newAssign[p.id].push(picked.id);
+        distributedCount++;
+      }
+
+      return { ...s, questAssignments: newAssign };
+    });
+
+    requestAnimationFrame(() => {
+      if (distributedCount > 0) {
+        setLastDistributionResult(`${distributedCount} quete${distributedCount > 1 ? 's' : ''} generale${distributedCount > 1 ? 's' : ''} distribuee${distributedCount > 1 ? 's' : ''}`);
+        setTimeout(() => setLastDistributionResult(null), 4000);
+      }
+    });
+  }, [updateState]);
+
   // ── Task Library CRUD ──
 
   const resetTaskForm = useCallback(() => {
@@ -2129,6 +2173,26 @@ export function GMQuestsPanel({ state, updateState, t, isMobile, onNavigateToPla
               Tous les joueurs ont deja toutes les quetes disponibles.
             </span>
           )}
+
+          {/* Distribute General Quests button */}
+          {quests.some(q => q.isGenerale || q.distributionOrder === 'available') && (
+            <motion.button
+              whileTap={{ scale: 0.97 }}
+              onClick={handleDistributeGeneralQuests}
+              className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-lg cursor-pointer"
+              style={{
+                background: 'linear-gradient(135deg, rgba(168,85,247,0.15), rgba(168,85,247,0.08))',
+                color: '#a855f7',
+                border: '1px solid rgba(168,85,247,0.2)',
+                fontFamily: '"Cinzel", serif',
+                fontSize: '0.65rem',
+                fontWeight: 600,
+              }}
+            >
+              <Users size={13} />
+              Distribuer les quetes Generales
+            </motion.button>
+          )}
         </div>
       )}
 
@@ -3408,6 +3472,26 @@ export function GMQuestsPanel({ state, updateState, t, isMobile, onNavigateToPla
             <span style={{ color: t.textDim, fontSize: '0.5rem', textAlign: 'center', fontStyle: 'italic' }}>
               Tous les joueurs ont deja toutes les quetes.
             </span>
+          )}
+
+          {/* Distribute General Quests (mobile) */}
+          {quests.some(q => q.isGenerale || q.distributionOrder === 'available') && (
+            <motion.button
+              whileTap={{ scale: 0.97 }}
+              onClick={handleDistributeGeneralQuests}
+              className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-lg cursor-pointer"
+              style={{
+                background: 'linear-gradient(135deg, rgba(168,85,247,0.15), rgba(168,85,247,0.08))',
+                color: '#a855f7',
+                border: '1px solid rgba(168,85,247,0.2)',
+                fontFamily: '"Cinzel", serif',
+                fontSize: '0.6rem',
+                fontWeight: 600,
+              }}
+            >
+              <Users size={13} />
+              Generales
+            </motion.button>
           )}
         </div>
       )}
