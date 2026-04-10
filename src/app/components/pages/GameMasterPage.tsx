@@ -818,10 +818,10 @@ export function GameMasterPage() {
         const preTasksJson = await preTasksRes.json();
         const preQuestsJson = await preQuestsRes.json();
         const galleryHintsData: Record<number, { id: number; text: string; priority: 1 | 2 | 3; imageUrl?: string }[]> = hintsJson.hints || {};
-        const galleryTasksData: Record<number, { id: number; question: string; inputType: string; correctAnswer: string; choices?: string[]; imageUrl?: string }[]> = tasksJson.tasks || {};
+        const galleryTasksData: Record<number, { id: number; question: string; inputType: string; correctAnswer: string; choices?: string[]; imageUrl?: string; noPlayerLink?: boolean }[]> = tasksJson.tasks || {};
         const galleryPreTasks: { id: number; question: string; inputType: string; correctAnswer: string; choices?: string[]; imageUrl?: string }[] =
           Array.isArray(preTasksJson.pretasks) ? preTasksJson.pretasks : (preTasksJson.pretasks?.list ?? []);
-        const galleryPreQuests: { id: number; title: string; description: string; questType: string; collaborativeGroupSize?: number; tasks: { id: number; question: string; inputType: string; correctAnswer: string; choices?: string[]; imageUrl?: string }[]; targetTags?: string[]; distributionOrder?: number | 'random' | 'available'; createdAt: string }[] =
+        const galleryPreQuests: { id: number; title: string; description: string; questType: string; collaborativeGroupSize?: number; tasks: { id: number; question: string; inputType: string; correctAnswer: string; choices?: string[]; imageUrl?: string; referencedPlayerId?: number }[]; targetTags?: string[]; distributionOrder?: number | 'random' | 'available'; createdAt: string }[] =
           Array.isArray(preQuestsJson.quests) ? preQuestsJson.quests : (preQuestsJson.quests?.list ?? []);
 
         const importedHints: any[] = [];
@@ -875,7 +875,7 @@ export function GameMasterPage() {
                 correctAnswer: tpl.correctAnswer,
                 choices: tpl.choices,
                 imageUrl: tpl.imageUrl,
-                referencedPlayerId: playerId,
+                referencedPlayerId: tpl.noPlayerLink ? undefined : playerId,
                 createdAt: new Date().toISOString(),
                 gallerySourceId: galleryId,
               });
@@ -913,6 +913,9 @@ export function GameMasterPage() {
                 correctAnswer: t.correctAnswer,
                 choices: t.choices ? [...t.choices] : undefined,
                 imageUrl: t.imageUrl,
+                referencedPlayerId: t.referencedPlayerId != null
+                  ? (galleryPlayers.find(gp => gp.galleryId === t.referencedPlayerId)?.playerId ?? t.referencedPlayerId)
+                  : undefined,
                 createdAt: new Date().toISOString(),
                 gallerySourceId: 'prequest' as any,
               }));

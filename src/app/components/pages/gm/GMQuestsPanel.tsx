@@ -5,7 +5,7 @@ import {
   ChevronDown, ChevronUp, Map as MapIcon, Type, Hash, Users, List,
   AlertTriangle, BookOpen, Handshake, ExternalLink,
   Shuffle, Package, Zap, Send, UserPlus,
-  Upload, Download, FileSpreadsheet, X,
+  Upload, Download, FileSpreadsheet, X, Check,
   Tag, Pencil, Save, ArrowUpDown, Repeat,
   ImagePlus, UserCircle, Library, Link2, Unlink,
 } from 'lucide-react';
@@ -202,6 +202,7 @@ export function GMQuestsPanel({ state, updateState, t, isMobile, onNavigateToPla
   const [newTargetMode, setNewTargetMode] = useState<'everyone' | 'tags'>('everyone');
   const [newTargetTags, setNewTargetTags] = useState<string[]>([]);
   const [newDistributionOrder, setNewDistributionOrder] = useState<number | 'random' | 'available'>('random');
+  const [newIsGenerale, setNewIsGenerale] = useState(false);
 
   // ── Task library state ──
   const [showTaskCreateForm, setShowTaskCreateForm] = useState(false);
@@ -319,6 +320,7 @@ export function GMQuestsPanel({ state, updateState, t, isMobile, onNavigateToPla
     setNewTargetMode('everyone');
     setNewTargetTags([]);
     setNewDistributionOrder('random');
+    setNewIsGenerale(false);
     setSelectedTaskIds(new Set());
     setShowCreateForm(false);
     setEditingQuestId(null);
@@ -339,6 +341,7 @@ export function GMQuestsPanel({ state, updateState, t, isMobile, onNavigateToPla
       setNewTargetTags([]);
     }
     setNewDistributionOrder(quest.distributionOrder ?? 'random');
+    setNewIsGenerale(quest.isGenerale ?? false);
     // Select library-based tasks
     const libraryIds = new Set<number>();
     for (const task of quest.tasks) {
@@ -389,6 +392,7 @@ export function GMQuestsPanel({ state, updateState, t, isMobile, onNavigateToPla
         collaborativeGroupSize: isCollab ? newGroupSize : undefined,
         targetTags: resolvedTargetTags,
         distributionOrder: newDistributionOrder,
+        isGenerale: newIsGenerale,
         tasks: mergedTasks,
       };
 
@@ -396,7 +400,7 @@ export function GMQuestsPanel({ state, updateState, t, isMobile, onNavigateToPla
         ...s,
         quests: (s.quests || []).map(q => q.id === editingQuestId ? updatedQuest : q),
       };
-      if (newDistributionOrder === 'available') {
+      if (newDistributionOrder === 'available' && s.maireElectionDone) {
         ns.questAssignments = autoAssignAvailableQuest(ns, updatedQuest);
       }
       return ns;
@@ -424,10 +428,11 @@ export function GMQuestsPanel({ state, updateState, t, isMobile, onNavigateToPla
         hidden: true,
         targetTags: resolvedTargetTags,
         distributionOrder: newDistributionOrder,
+        isGenerale: newIsGenerale,
       };
       updateState((s) => {
         const ns = { ...s, quests: [...(s.quests || []), quest] };
-        if (newDistributionOrder === 'available') {
+        if (newDistributionOrder === 'available' && s.maireElectionDone) {
           ns.questAssignments = autoAssignAvailableQuest(ns, quest);
         }
         return ns;
@@ -465,18 +470,19 @@ export function GMQuestsPanel({ state, updateState, t, isMobile, onNavigateToPla
       hidden: true,
       targetTags: resolvedTargetTags,
       distributionOrder: newDistributionOrder,
+      isGenerale: newIsGenerale,
     };
 
     updateState((s) => {
       const ns = { ...s, quests: [...(s.quests || []), quest] };
-      if (newDistributionOrder === 'available') {
+      if (newDistributionOrder === 'available' && s.maireElectionDone) {
         ns.questAssignments = autoAssignAvailableQuest(ns, quest);
       }
       return ns;
     });
     setSelectedTaskIds(new Set());
     resetForm();
-  }, [newTitle, newDescription, newQuestType, newGroupSize, selectedTaskIds, state.taskLibrary, newTargetMode, newTargetTags, newDistributionOrder, updateState, resetForm, autoAssignAvailableQuest]);
+  }, [newTitle, newDescription, newQuestType, newGroupSize, selectedTaskIds, state.taskLibrary, newTargetMode, newTargetTags, newDistributionOrder, newIsGenerale, updateState, resetForm, autoAssignAvailableQuest]);
 
   const handleDeleteQuest = useCallback((questId: number) => {
     updateState((s) => {
@@ -815,6 +821,7 @@ export function GMQuestsPanel({ state, updateState, t, isMobile, onNavigateToPla
         correctAnswer: t.correctAnswer,
         choices: t.choices ? [...t.choices] : undefined,
         imageUrl: t.imageUrl,
+        referencedPlayerId: t.referencedPlayerId,
         createdAt: new Date().toISOString(),
       }));
 
@@ -879,6 +886,7 @@ export function GMQuestsPanel({ state, updateState, t, isMobile, onNavigateToPla
           correctAnswer: t.correctAnswer,
           choices: t.choices ? [...t.choices] : undefined,
           imageUrl: t.imageUrl,
+          referencedPlayerId: t.referencedPlayerId,
           createdAt: new Date().toISOString(),
         }));
         allNewTaskLib = [...allNewTaskLib, ...newLibEntries];
@@ -1826,6 +1834,24 @@ export function GMQuestsPanel({ state, updateState, t, isMobile, onNavigateToPla
                 </span>
               </div>
 
+              {/* Generale checkbox */}
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setNewIsGenerale(!newIsGenerale)}
+                  className="flex items-center gap-2 px-3 py-1.5 rounded-md transition-colors"
+                  style={{
+                    background: newIsGenerale ? 'rgba(139,92,246,0.15)' : 'rgba(255,255,255,0.04)',
+                    border: `1px solid ${newIsGenerale ? 'rgba(139,92,246,0.4)' : 'rgba(255,255,255,0.06)'}`,
+                    color: newIsGenerale ? '#8b5cf6' : t.textMuted,
+                    fontSize: '0.7rem',
+                    fontFamily: '"Cinzel", serif',
+                  }}
+                >
+                  {newIsGenerale ? <Check size={12} /> : <X size={12} />}
+                  <span>Generale (1/2 quetes par joueur)</span>
+                </button>
+              </div>
+
               {/* Task picker from library — hidden for collaborative quests */}
               {newQuestType !== 'collaborative' && taskLibrary.length === 0 && (
                 <div className="rounded-lg p-3 flex items-center gap-2" style={{ background: 'rgba(59,130,246,0.04)', border: '1px dashed rgba(59,130,246,0.15)' }}>
@@ -2126,7 +2152,7 @@ export function GMQuestsPanel({ state, updateState, t, isMobile, onNavigateToPla
       )}
 
       {/* ── Quest pool list ── */}
-      <div className="flex flex-col gap-2">
+      <div className="grid grid-cols-5 gap-2">
         {quests.map((quest) => {
           const isExpanded = expandedQuestId === quest.id;
           const assignedPlayerIds = playersWithQuest(quest.id, assignments);
@@ -2148,75 +2174,79 @@ export function GMQuestsPanel({ state, updateState, t, isMobile, onNavigateToPla
                   : t.isDay ? 'rgba(0,0,0,0.12)' : 'rgba(255,255,255,0.06)'}`,
               }}
             >
-              {/* Quest header */}
+              {/* Quest header — tuile compacte */}
               <div
                 role="button"
                 tabIndex={0}
                 onClick={() => setExpandedQuestId(isExpanded ? null : quest.id)}
                 onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setExpandedQuestId(isExpanded ? null : quest.id); } }}
-                className="w-full flex items-center justify-between p-3 text-left cursor-pointer"
+                className="flex flex-col gap-1.5 p-2.5 cursor-pointer"
               >
-                <div className="flex items-center gap-2 min-w-0 flex-1">
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <span style={{ fontFamily: '"Cinzel", serif', color: t.text, fontSize: '0.8rem', fontWeight: 600 }}>
-                        {quest.title}
+                {/* Ligne badges + chevron */}
+                <div className="flex items-center justify-between gap-1">
+                  <div className="flex items-center gap-1 flex-wrap">
+                    {isCollaborative && (
+                      <span className="flex items-center gap-0.5 px-1.5 py-0.5 rounded" style={{ background: 'rgba(106,122,176,0.15)', fontSize: '0.45rem', color: '#9aabda', border: '1px solid rgba(106,122,176,0.3)' }}>
+                        <Handshake size={8} /> Collab
                       </span>
-                      {isCollaborative && (
-                        <span className="flex items-center gap-1 px-1.5 py-0.5 rounded" style={{ background: 'rgba(106,122,176,0.15)', fontSize: '0.5rem', color: '#9aabda', border: '1px solid rgba(106,122,176,0.3)' }}>
-                          <Handshake size={9} /> Collab
-                        </span>
-                      )}
-                      {quest.targetTags && quest.targetTags.length > 0 && (
-                        <span className="flex items-center gap-1 px-1.5 py-0.5 rounded" style={{ background: 'rgba(168,85,247,0.12)', fontSize: '0.5rem', color: '#c084fc', border: '1px solid rgba(168,85,247,0.25)' }}>
-                          <Tag size={9} /> {quest.targetTags.join(', ')}
-                        </span>
-                      )}
-                      {quest.distributionOrder === 'available' ? (
-                        <span className="flex items-center gap-1 px-1.5 py-0.5 rounded" style={{ background: 'rgba(107,142,90,0.12)', fontSize: '0.5rem', color: '#6b8e5a', border: '1px solid rgba(107,142,90,0.25)' }}>
-                          <Zap size={9} /> Auto
-                        </span>
-                      ) : typeof quest.distributionOrder === 'number' ? (
-                        <span className="flex items-center gap-1 px-1.5 py-0.5 rounded" style={{ background: 'rgba(212,168,67,0.12)', fontSize: '0.5rem', color: '#d4a843', border: '1px solid rgba(212,168,67,0.25)' }}>
-                          <ArrowUpDown size={9} /> #{quest.distributionOrder}
-                        </span>
-                      ) : (
-                        <span className="flex items-center gap-1 px-1.5 py-0.5 rounded" style={{ background: 'rgba(59,130,246,0.08)', fontSize: '0.5rem', color: '#60a5fa', border: '1px solid rgba(59,130,246,0.15)' }}>
-                          <Shuffle size={9} /> Alea
-                        </span>
-                      )}
-                    </div>
-                    {/* Status summary */}
-                    <div className="flex items-center gap-2 mt-1 flex-wrap">
-                      <span className="flex items-center gap-1 px-1.5 py-0.5 rounded-full" style={{ background: 'rgba(212,168,67,0.1)', fontSize: '0.55rem', color: '#d4a843' }}>
-                        <Users size={9} /> {assignedPlayerIds.length} joueur{assignedPlayerIds.length !== 1 ? 's' : ''}
+                    )}
+                    {quest.distributionOrder === 'available' ? (
+                      <span className="flex items-center gap-0.5 px-1.5 py-0.5 rounded" style={{ background: 'rgba(107,142,90,0.12)', fontSize: '0.45rem', color: '#6b8e5a', border: '1px solid rgba(107,142,90,0.25)' }}>
+                        <Zap size={8} /> Auto
                       </span>
-                      {agg.pending > 0 && (
-                        <span className="flex items-center gap-1 px-1.5 py-0.5 rounded-full" style={{ background: 'rgba(245,158,11,0.1)', fontSize: '0.55rem', color: '#f59e0b' }}>
-                          <AlertTriangle size={9} /> {agg.pending} en attente
-                        </span>
-                      )}
-                      {agg.success > 0 && (
-                        <span className="flex items-center gap-1 px-1.5 py-0.5 rounded-full" style={{ background: 'rgba(107,142,90,0.1)', fontSize: '0.55rem', color: '#6b8e5a' }}>
-                          <CheckCircle size={9} /> {agg.success}
-                        </span>
-                      )}
-                      {agg.fail > 0 && (
-                        <span className="flex items-center gap-1 px-1.5 py-0.5 rounded-full" style={{ background: 'rgba(196,30,58,0.1)', fontSize: '0.55rem', color: '#c41e3a' }}>
-                          <XCircle size={9} /> {agg.fail}
-                        </span>
-                      )}
-                      {assignedPlayerIds.length === 0 && (
-                        <span className="flex items-center gap-1 px-1.5 py-0.5 rounded-full" style={{ background: 'rgba(255,255,255,0.04)', fontSize: '0.55rem', color: t.textDim }}>
-                          <Package size={9} /> En reserve
-                        </span>
-                      )}
-                    </div>
+                    ) : typeof quest.distributionOrder === 'number' ? (
+                      <span className="flex items-center gap-0.5 px-1.5 py-0.5 rounded" style={{ background: 'rgba(212,168,67,0.12)', fontSize: '0.45rem', color: '#d4a843', border: '1px solid rgba(212,168,67,0.25)' }}>
+                        <ArrowUpDown size={8} /> #{quest.distributionOrder}
+                      </span>
+                    ) : (
+                      <span className="flex items-center gap-0.5 px-1.5 py-0.5 rounded" style={{ background: 'rgba(59,130,246,0.08)', fontSize: '0.45rem', color: '#60a5fa', border: '1px solid rgba(59,130,246,0.15)' }}>
+                        <Shuffle size={8} /> Alea
+                      </span>
+                    )}
                   </div>
+                  {isExpanded ? <ChevronUp size={11} style={{ color: t.textMuted, flexShrink: 0 }} /> : <ChevronDown size={11} style={{ color: t.textMuted, flexShrink: 0 }} />}
                 </div>
-                <div className="flex items-center gap-2 shrink-0">
-                  {isExpanded ? <ChevronUp size={14} style={{ color: t.textMuted }} /> : <ChevronDown size={14} style={{ color: t.textMuted }} />}
+                {/* Titre */}
+                <p style={{ fontFamily: '"Cinzel", serif', color: t.text, fontSize: '0.62rem', fontWeight: 600, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden', lineHeight: 1.3 }}>
+                  {quest.title}
+                </p>
+                {/* Statuts */}
+                <div className="flex flex-wrap gap-0.5">
+                  <span className="flex items-center gap-0.5 px-1 py-0.5 rounded-full" style={{ background: 'rgba(212,168,67,0.1)', fontSize: '0.42rem', color: '#d4a843' }}>
+                    <Users size={7} /> {assignedPlayerIds.length}
+                  </span>
+                  {agg.pending > 0 && (
+                    <span className="flex items-center gap-0.5 px-1 py-0.5 rounded-full" style={{ background: 'rgba(245,158,11,0.1)', fontSize: '0.42rem', color: '#f59e0b' }}>
+                      <AlertTriangle size={7} /> {agg.pending}
+                    </span>
+                  )}
+                  {agg.success > 0 && (
+                    <span className="flex items-center gap-0.5 px-1 py-0.5 rounded-full" style={{ background: 'rgba(107,142,90,0.1)', fontSize: '0.42rem', color: '#6b8e5a' }}>
+                      <CheckCircle size={7} /> {agg.success}
+                    </span>
+                  )}
+                  {agg.fail > 0 && (
+                    <span className="flex items-center gap-0.5 px-1 py-0.5 rounded-full" style={{ background: 'rgba(196,30,58,0.1)', fontSize: '0.42rem', color: '#c41e3a' }}>
+                      <XCircle size={7} /> {agg.fail}
+                    </span>
+                  )}
+                  {assignedPlayerIds.length === 0 && (
+                    <span className="flex items-center gap-0.5 px-1 py-0.5 rounded-full" style={{ background: 'rgba(255,255,255,0.04)', fontSize: '0.42rem', color: t.textDim }}>
+                      <Package size={7} /> Reserve
+                    </span>
+                  )}
                 </div>
+                {/* Public cible */}
+                {quest.targetTags && quest.targetTags.length > 0 && (
+                  <div className="flex items-center gap-1 flex-wrap">
+                    <Users size={7} style={{ color: t.textDim, flexShrink: 0 }} />
+                    {quest.targetTags.map(tag => (
+                      <span key={tag} className="px-1 py-0.5 rounded" style={{ background: 'rgba(168,85,247,0.1)', fontSize: '0.38rem', color: '#c084fc', border: '1px solid rgba(168,85,247,0.2)' }}>
+                        {tag}
+                      </span>
+                    ))}
+                  </div>
+                )}
               </div>
 
               {/* Expanded detail */}

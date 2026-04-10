@@ -6,7 +6,7 @@ import {
   Type, Hash, Users, List as ListIcon,
   Handshake, Shuffle, Zap, Send,
   Tag, Pencil, Save, X, Loader2, BookOpen, Check,
-  Library, UserCircle, Image as ImageIcon,
+  Library, UserCircle, Image as ImageIcon, Search,
 } from 'lucide-react';
 import type { QuestTaskInputType, QuestType } from '../../../context/gameTypes';
 import type { GameThemeTokens } from '../../../context/gameTheme';
@@ -26,6 +26,7 @@ export interface GalleryPreQuestTask {
   correctAnswer: string;
   choices?: string[];
   imageUrl?: string;
+  referencedPlayerId?: number;
 }
 
 export interface GalleryPreQuest {
@@ -38,6 +39,7 @@ export interface GalleryPreQuest {
   targetTags?: string[];
   distributionOrder?: number | 'random' | 'available';
   createdAt: string;
+  isGenerale?: boolean;
 }
 
 /** Array of pre-quests stored globally */
@@ -109,6 +111,7 @@ export function GalleryQuestsTab({ t, isMobile }: {
   const [formQuestType, setFormQuestType] = useState<QuestType>('individual');
   const [formGroupSize, setFormGroupSize] = useState(3);
   const [formDistribution, setFormDistribution] = useState<number | 'random' | 'available'>('random');
+  const [formIsGenerale, setFormIsGenerale] = useState(false);
   const [formTasks, setFormTasks] = useState<GalleryPreQuestTask[]>([]);
 
   // ── Inline task creation ──
@@ -127,6 +130,8 @@ export function GalleryQuestsTab({ t, isMobile }: {
   // ── Bibliothèque : accordéon par tag + section générales ──
   const [openTagGroups, setOpenTagGroups] = useState<Set<string>>(() => new Set([...DEFAULT_AVAILABLE_TAGS, 'Autres']));
   const [openGenerales, setOpenGenerales] = useState(true);
+  const [librarySearch, setLibrarySearch] = useState('');
+  const [hideAttributed, setHideAttributed] = useState(false);
 
   // ── Public cible (form) ──
   const [formPublicCible, setFormPublicCible] = useState<string[]>([]);
@@ -143,6 +148,7 @@ export function GalleryQuestsTab({ t, isMobile }: {
   const [ptChoices, setPtChoices] = useState<string[]>(['', '', '', '']);
   const [ptImageUrl, setPtImageUrl] = useState('');
   const [ptImageLoading, setPtImageLoading] = useState(false);
+  const [ptIsGenerale, setPtIsGenerale] = useState(false);
   const ptFileInputRef = useRef<HTMLInputElement>(null);
   const [expandedPtPlayerId, setExpandedPtPlayerId] = useState<number | null>(null);
   const [zoomImageUrl, setZoomImageUrl] = useState<string | null>(null);
@@ -214,6 +220,7 @@ export function GalleryQuestsTab({ t, isMobile }: {
     setFormQuestType('individual');
     setFormGroupSize(3);
     setFormDistribution('random');
+    setFormIsGenerale(false);
     setFormTasks([]);
     setFormPublicCible([]);
     setShowTaskForm(false);
@@ -264,11 +271,12 @@ export function GalleryQuestsTab({ t, isMobile }: {
       tasks: isCollab ? [] : formTasks,
       distributionOrder: formDistribution,
       targetTags: formPublicCible.length > 0 ? formPublicCible : undefined,
+      isGenerale: formIsGenerale,
       createdAt: new Date().toISOString(),
     };
     savePreQuests([...preQuests, newQuest]);
     resetForm();
-  }, [formTitle, formDescription, formQuestType, formGroupSize, formTasks, formDistribution, formPublicCible, preQuests, savePreQuests, resetForm]);
+  }, [formTitle, formDescription, formQuestType, formGroupSize, formTasks, formDistribution, formPublicCible, formIsGenerale, preQuests, savePreQuests, resetForm]);
 
   // ── Start editing ──
   const handleStartEdit = useCallback((quest: GalleryPreQuest) => {
@@ -278,6 +286,7 @@ export function GalleryQuestsTab({ t, isMobile }: {
     setFormQuestType(quest.questType);
     setFormGroupSize(quest.collaborativeGroupSize ?? 3);
     setFormDistribution(quest.distributionOrder ?? 'random');
+    setFormIsGenerale(quest.isGenerale ?? false);
     setFormTasks([...quest.tasks]);
     setFormPublicCible(quest.targetTags ?? []);
     setShowCreateForm(true);
@@ -301,11 +310,12 @@ export function GalleryQuestsTab({ t, isMobile }: {
         tasks: isCollab ? [] : formTasks,
         distributionOrder: formDistribution,
         targetTags: formPublicCible.length > 0 ? formPublicCible : undefined,
+        isGenerale: formIsGenerale,
       };
     });
     savePreQuests(updated);
     resetForm();
-  }, [editingId, formTitle, formDescription, formQuestType, formGroupSize, formTasks, formDistribution, formPublicCible, preQuests, savePreQuests, resetForm]);
+  }, [editingId, formTitle, formDescription, formQuestType, formGroupSize, formTasks, formDistribution, formPublicCible, formIsGenerale, preQuests, savePreQuests, resetForm]);
 
   // ── Delete ──
   const handleDelete = useCallback((questId: number) => {
@@ -341,6 +351,7 @@ export function GalleryQuestsTab({ t, isMobile }: {
     setPtCorrectAnswer('');
     setPtChoices(['', '', '', '']);
     setPtImageUrl('');
+    setPtIsGenerale(false);
     setShowPreTaskForm(false);
     setEditingPreTaskId(null);
   }, []);
@@ -354,11 +365,12 @@ export function GalleryQuestsTab({ t, isMobile }: {
       correctAnswer: ptCorrectAnswer.trim(),
       choices: ptInputType === 'multiple-choice' ? ptChoices.filter(c => c.trim()) : undefined,
       imageUrl: ptImageUrl.trim() || undefined,
+      isGenerale: ptIsGenerale,
       createdAt: new Date().toISOString(),
     };
     savePreTasks([...preTasks, newTask]);
     resetPreTaskForm();
-  }, [ptQuestion, ptInputType, ptCorrectAnswer, ptChoices, ptImageUrl, preTasks, savePreTasks, resetPreTaskForm]);
+  }, [ptQuestion, ptInputType, ptCorrectAnswer, ptChoices, ptImageUrl, ptIsGenerale, preTasks, savePreTasks, resetPreTaskForm]);
 
   const handleStartEditPreTask = useCallback((task: GalleryPreTask) => {
     setEditingPreTaskId(task.id);
@@ -557,6 +569,24 @@ export function GalleryQuestsTab({ t, isMobile }: {
                 ))}
               </div>
 
+              {/* Generale toggle */}
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setFormIsGenerale(!formIsGenerale)}
+                  className="flex items-center gap-2 px-3 py-1.5 rounded-md transition-colors"
+                  style={{
+                    background: formIsGenerale ? 'rgba(139,92,246,0.15)' : 'rgba(255,255,255,0.04)',
+                    border: `1px solid ${formIsGenerale ? 'rgba(139,92,246,0.4)' : 'rgba(255,255,255,0.06)'}`,
+                    color: formIsGenerale ? '#8b5cf6' : t.textMuted,
+                    fontSize: '0.7rem',
+                    fontFamily: '"Cinzel", serif',
+                  }}
+                >
+                  {formIsGenerale ? <Check size={12} /> : <X size={12} />}
+                  <span>Generale (1/2 quetes par joueur)</span>
+                </button>
+              </div>
+
               {/* Public cible */}
               <div className="flex items-center gap-2 flex-wrap">
                 <span style={{ color: t.textDim, fontSize: '0.6rem', fontFamily: '"Cinzel", serif' }}>Public cible :</span>
@@ -608,6 +638,9 @@ export function GalleryQuestsTab({ t, isMobile }: {
                       </div>
                     );
                     if (totalGalleryTasks === 0) return null;
+                    const filteredPlayersWithTasks = librarySearch.trim()
+                      ? playersWithTasks.filter(a => a.name.toLowerCase().includes(librarySearch.trim().toLowerCase()))
+                      : playersWithTasks;
                     return (
                       <div className="rounded-lg p-2.5 space-y-3" style={{ background: 'rgba(139,92,246,0.04)', border: '1px solid rgba(139,92,246,0.12)' }}>
                         <div className="flex items-center gap-1.5">
@@ -615,11 +648,42 @@ export function GalleryQuestsTab({ t, isMobile }: {
                           <span style={{ color: '#8b5cf6', fontSize: '0.5rem', fontWeight: 700, fontFamily: '"Cinzel", serif' }}>
                             Bibliotheque ({totalGalleryTasks})
                           </span>
+                          <button
+                            onClick={() => setHideAttributed(v => !v)}
+                            className="ml-auto flex items-center gap-1 px-1.5 py-0.5 rounded-md transition-colors"
+                            style={{
+                              background: hideAttributed ? 'rgba(139,92,246,0.15)' : 'rgba(255,255,255,0.04)',
+                              border: `1px solid ${hideAttributed ? 'rgba(139,92,246,0.4)' : 'rgba(255,255,255,0.08)'}`,
+                              color: hideAttributed ? '#8b5cf6' : '#6b7280',
+                              fontSize: '0.42rem', fontFamily: '"Cinzel", serif', fontWeight: 600,
+                            }}
+                            title={hideAttributed ? 'Afficher les tâches attribuées' : 'Masquer les tâches attribuées'}
+                          >
+                            {hideAttributed ? <Check size={8} /> : <X size={8} />}
+                            {hideAttributed ? 'Attribuées masquées' : 'Masquer attribuées'}
+                          </button>
+                        </div>
+                        {/* Barre de recherche joueur */}
+                        <div className="relative">
+                          <Search size={9} className="absolute left-2 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: '#8b5cf6', opacity: 0.5 }} />
+                          <input
+                            type="text"
+                            value={librarySearch}
+                            onChange={e => setLibrarySearch(e.target.value)}
+                            placeholder="Rechercher un joueur..."
+                            className="w-full pl-6 pr-2 py-1 rounded-md text-white outline-none"
+                            style={{ background: 'rgba(139,92,246,0.08)', border: '1px solid rgba(139,92,246,0.2)', fontSize: '0.5rem', fontFamily: '"Cinzel", serif', color: 'inherit' }}
+                          />
+                          {librarySearch && (
+                            <button onClick={() => setLibrarySearch('')} className="absolute right-1.5 top-1/2 -translate-y-1/2">
+                              <X size={8} style={{ color: '#8b5cf6', opacity: 0.6 }} />
+                            </button>
+                          )}
                         </div>
                         <div className="space-y-3">
-                          {/* Pre-taches générales */}
-                          {preTasks.length > 0 && (
-                            <div>
+                          {/* Pre-taches générales — masquées si recherche active */}
+                          {preTasks.length > 0 && !librarySearch.trim() && (
+  <div>
                               <button
                                 onClick={() => setOpenGenerales(v => !v)}
                                 className="w-full flex items-center gap-2 px-1 mb-1.5 hover:bg-white/[0.02] rounded transition-colors"
@@ -638,6 +702,7 @@ export function GalleryQuestsTab({ t, isMobile }: {
                                       {preTasks.map(gt => {
                                         const alreadyAdded = formTasks.some(ft => ft.question === gt.question && ft.correctAnswer === gt.correctAnswer);
                                         const usedElsewhere = !alreadyAdded && tasksInOtherQuests.has(`${gt.question}::${gt.correctAnswer}`);
+                                        if (hideAttributed && (alreadyAdded || usedElsewhere)) return null;
                                         const itl = INPUT_TYPE_LABELS[gt.inputType];
                                         return (
                                           <button
@@ -645,7 +710,7 @@ export function GalleryQuestsTab({ t, isMobile }: {
                                             disabled={alreadyAdded}
                                             onClick={() => {
                                               if (alreadyAdded) return;
-                                              setFormTasks(prev => [...prev, { id: Date.now() + Math.floor(Math.random() * 100000), question: gt.question, inputType: gt.inputType, correctAnswer: gt.correctAnswer, choices: gt.choices ? [...gt.choices] : undefined, imageUrl: gt.imageUrl }]);
+                                              setFormTasks(prev => [...prev, { id: Date.now() + Math.floor(Math.random() * 100000), question: gt.question, inputType: gt.inputType, correctAnswer: gt.correctAnswer, choices: gt.choices ? [...gt.choices] : undefined, imageUrl: gt.imageUrl, referencedPlayerId: (gt as any).referencedPlayerId }]);
                                             }}
                                             className="flex flex-col gap-1 px-2 py-1.5 rounded-md transition-all text-left"
                                             style={{ background: alreadyAdded ? 'rgba(107,142,90,0.08)' : 'rgba(0,0,0,0.15)', border: `1px solid ${alreadyAdded ? 'rgba(107,142,90,0.25)' : 'rgba(255,255,255,0.05)'}`, opacity: alreadyAdded ? 0.2 : usedElsewhere ? 0.38 : 1, cursor: alreadyAdded ? 'default' : 'pointer' }}
@@ -666,18 +731,18 @@ export function GalleryQuestsTab({ t, isMobile }: {
                           )}
                           {/* Groupes par tag */}
                           {(() => {
-                            // Construire les groupes : tag → avatars ayant des tâches
-                            const tagGroups: { tag: string; avatars: typeof playersWithTasks }[] = DEFAULT_AVAILABLE_TAGS.map(tag => ({
+                            // Construire les groupes : tag → avatars ayant des tâches (filtrés par recherche)
+                            const tagGroups: { tag: string; avatars: typeof filteredPlayersWithTasks }[] = DEFAULT_AVAILABLE_TAGS.map(tag => ({
                               tag,
-                              avatars: playersWithTasks.filter(a => (AVATAR_DEFAULT_TAGS[a.name] ?? []).includes(tag)),
+                              avatars: filteredPlayersWithTasks.filter(a => (AVATAR_DEFAULT_TAGS[a.name] ?? []).includes(tag)),
                             })).filter(g => g.avatars.length > 0);
                             // Joueurs sans tag connu
-                            const untagged = playersWithTasks.filter(a => !(AVATAR_DEFAULT_TAGS[a.name] ?? []).length);
+                            const untagged = filteredPlayersWithTasks.filter(a => !(AVATAR_DEFAULT_TAGS[a.name] ?? []).length);
                             if (untagged.length > 0) tagGroups.push({ tag: 'Autres', avatars: untagged });
 
                             return tagGroups.map(({ tag, avatars }) => {
                               const color = TAG_COLORS[tag] ?? '#6b7280';
-                              const isOpen = openTagGroups.has(tag);
+                              const isOpen = openTagGroups.has(tag) || !!librarySearch.trim();
                               const toggleTag = () => setOpenTagGroups(prev => {
                                 const next = new Set(prev);
                                 if (next.has(tag)) next.delete(tag); else next.add(tag);
@@ -703,6 +768,11 @@ export function GalleryQuestsTab({ t, isMobile }: {
                                         <div className="grid grid-cols-5 gap-2 pb-1">
                                           {avatars.map(avatar => {
                                             const tasks = galleryTasks[avatar.id] ?? [];
+                                            if (hideAttributed && !tasks.some(gt => {
+                                              const alreadyAdded = formTasks.some(ft => ft.question === gt.question && ft.correctAnswer === gt.correctAnswer);
+                                              const usedElsewhere = !alreadyAdded && tasksInOtherQuests.has(`${gt.question}::${gt.correctAnswer}`);
+                                              return !alreadyAdded && !usedElsewhere;
+                                            })) return null;
                                             return (
                                               <div key={avatar.id} className="flex flex-col gap-1">
                                                 {/* En-tête joueur */}
@@ -717,6 +787,7 @@ export function GalleryQuestsTab({ t, isMobile }: {
                                                   {tasks.map(gt => {
                                                     const alreadyAdded = formTasks.some(ft => ft.question === gt.question && ft.correctAnswer === gt.correctAnswer);
                                                     const usedElsewhere = !alreadyAdded && tasksInOtherQuests.has(`${gt.question}::${gt.correctAnswer}`);
+                                                    if (hideAttributed && (alreadyAdded || usedElsewhere)) return null;
                                                     const itl = INPUT_TYPE_LABELS[gt.inputType];
                                                     return (
                                                       <button
@@ -724,7 +795,7 @@ export function GalleryQuestsTab({ t, isMobile }: {
                                                         disabled={alreadyAdded}
                                                         onClick={() => {
                                                           if (alreadyAdded) return;
-                                                          setFormTasks(prev => [...prev, { id: Date.now() + Math.floor(Math.random() * 100000), question: gt.question, inputType: gt.inputType, correctAnswer: gt.correctAnswer, choices: gt.choices ? [...gt.choices] : undefined, imageUrl: gt.imageUrl }]);
+                                                          setFormTasks(prev => [...prev, { id: Date.now() + Math.floor(Math.random() * 100000), question: gt.question, inputType: gt.inputType, correctAnswer: gt.correctAnswer, choices: gt.choices ? [...gt.choices] : undefined, imageUrl: gt.imageUrl, referencedPlayerId: gt.noPlayerLink ? undefined : avatar.id }]);
                                                         }}
                                                         className="w-full flex items-start gap-1 px-1.5 py-1 rounded transition-all text-left"
                                                         style={{ background: alreadyAdded ? 'rgba(107,142,90,0.08)' : 'rgba(0,0,0,0.18)', border: `1px solid ${alreadyAdded ? 'rgba(107,142,90,0.25)' : 'rgba(255,255,255,0.04)'}`, opacity: alreadyAdded ? 0.2 : usedElsewhere ? 0.38 : 1, cursor: alreadyAdded ? 'default' : 'pointer' }}
@@ -765,6 +836,11 @@ export function GalleryQuestsTab({ t, isMobile }: {
                         const itl = INPUT_TYPE_LABELS[task.inputType];
                         return (
                           <div key={task.id} className="flex items-center gap-2 px-2.5 py-1.5 rounded-md" style={{ background: cardBg, border: `1px solid ${cardBorder}` }}>
+                            {task.referencedPlayerId != null && (() => {
+                              const av = AVATAR_GALLERY.find(a => a.id === task.referencedPlayerId);
+                              if (!av) return null;
+                              return <img src={av.url} alt={av.name} className="w-5 h-5 rounded-full shrink-0 object-cover" style={{ border: '1px solid rgba(255,255,255,0.15)' }} />;
+                            })()}
                             <span className="shrink-0" style={{ color: accentColor, fontSize: '0.42rem' }}>{itl.icon}</span>
                             <span className="flex-1 min-w-0 truncate" style={{ color: t.text, fontSize: '0.6rem' }}>{task.question}</span>
                             <button onClick={() => removeTaskFromForm(task.id)} className="p-0.5 rounded hover:bg-white/5 shrink-0">
@@ -1033,6 +1109,11 @@ export function GalleryQuestsTab({ t, isMobile }: {
                             return (
                               <div key={task.id} className="flex items-center gap-1.5 px-2 py-1.5 rounded-lg" style={{ background: 'rgba(0,0,0,0.15)', border: `1px solid rgba(255,255,255,0.04)` }}>
                                 <span className="shrink-0" style={{ color: `${accentColor}80`, fontFamily: '"Cinzel", serif', fontSize: '0.4rem' }}>#{idx + 1}</span>
+                                {task.referencedPlayerId != null && (() => {
+                                  const av = AVATAR_GALLERY.find(a => a.id === task.referencedPlayerId);
+                                  if (!av) return null;
+                                  return <img src={av.url} alt={av.name} className="w-4 h-4 rounded-full shrink-0 object-cover" style={{ border: '1px solid rgba(255,255,255,0.15)' }} />;
+                                })()}
                                 <span className="shrink-0" style={{ fontSize: '0.4rem' }}>{itl.icon}</span>
                                 <span className="flex-1 min-w-0 truncate" style={{ color: t.text, fontSize: '0.52rem' }}>{task.question}</span>
                               </div>
@@ -1146,14 +1227,21 @@ export function GalleryQuestsTab({ t, isMobile }: {
                 </div>
 
                 {/* Correct answer */}
-                <input
-                  type="text"
-                  value={ptCorrectAnswer}
-                  onChange={e => setPtCorrectAnswer(e.target.value)}
-                  placeholder="Reponse correcte..."
-                  className="w-full px-3 py-2 rounded-lg outline-none"
-                  style={{ background: inputBg, border: `1px solid ${inputBorder}`, color: t.text, fontSize: '0.7rem' }}
-                />
+                <div className="space-y-1">
+                  <input
+                    type="text"
+                    value={ptCorrectAnswer}
+                    onChange={e => setPtCorrectAnswer(e.target.value)}
+                    placeholder={ptInputType === 'player-select' ? 'Jean, Marie, Paul...' : 'Reponse correcte...'}
+                    className="w-full px-3 py-2 rounded-lg outline-none"
+                    style={{ background: inputBg, border: `1px solid ${inputBorder}`, color: t.text, fontSize: '0.7rem' }}
+                  />
+                  {ptInputType === 'player-select' && (
+                    <p style={{ color: t.textDim, fontSize: '0.5rem', paddingLeft: '2px' }}>
+                      Plusieurs noms acceptés, séparés par des virgules
+                    </p>
+                  )}
+                </div>
 
                 {/* QCM choices */}
                 {ptInputType === 'multiple-choice' && (

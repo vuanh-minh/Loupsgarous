@@ -15,7 +15,8 @@ import { AVATAR_GALLERY, type GalleryAvatar } from '../../../data/avatarGallery'
 import { galleryRef, getGalleryId } from '../../../data/avatarResolver';
 import { ROLES, getRoleById } from '../../../data/roles';
 import { API_BASE, jsonAuthHeaders, authHeaders } from '../../../context/apiConfig';
-import { GalleryQuestsTab } from './GalleryQuestsTab';
+import { AVATAR_DEFAULT_TAGS } from '../../../data/avatarDefaultTags';
+import { GalleryQuestsTab, type GalleryPreTask } from './GalleryQuestsTab';
 
 /* ================================================================
    Types
@@ -40,6 +41,7 @@ export interface GalleryTaskTemplate {
   choices?: string[];
   imageUrl?: string;
   noPlayerLink?: boolean;
+  referencedPlayerId?: number;
 }
 
 /** Map of galleryId -> task templates */
@@ -112,6 +114,7 @@ export function GMPlayerGalleryPanel({
 
   // ── Gallery task templates (persistent) ──
   const [galleryTasks, setGalleryTasks] = useState<GalleryTasksMap>({});
+  const [galleryPreTasks, setGalleryPreTasks] = useState<GalleryPreTask[]>([]);
   const [savingTasks, setSavingTasks] = useState(false);
   const saveTasksTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [newTaskQuestion, setNewTaskQuestion] = useState('');
@@ -231,6 +234,21 @@ export function GMPlayerGalleryPanel({
     })();
   }, []);
 
+  // ── Load gallery pre-tasks from server ──
+  useEffect(() => {
+    (async () => {
+      try {
+        const res = await fetch(`${API_BASE}/gallery/pretasks`, { headers: jsonAuthHeaders() });
+        const data = await res.json();
+        if (data.pretasks) {
+          setGalleryPreTasks(Array.isArray(data.pretasks) ? data.pretasks : (data.pretasks.list ?? []));
+        }
+      } catch (err) {
+        console.error('Failed to load gallery pre-tasks:', err);
+      }
+    })();
+  }, []);
+
   // ── Debounced save tasks to server ──
   const saveGalleryTasks = useCallback((newTasks: GalleryTasksMap) => {
     setGalleryTasks(newTasks);
@@ -283,6 +301,61 @@ export function GMPlayerGalleryPanel({
       }
     }, 800);
   }, []);
+
+  // ── Export all gallery tasks as CSV ──
+  const handleExportAllTasks = useCallback(() => {
+    const CSV_HEADER = 'player,tags,question,inputType,correctAnswer,choices,imageUrl,source';
+
+    function escapeCsv(val: string): string {
+      return '"' + val.replace(/"/g, '""') + '"';
+    }
+
+    const rows: string[] = [CSV_HEADER];
+
+    // Tâches par joueur
+    AVATAR_GALLERY
+      .filter((a) => !deletedAvatarIds.has(a.id))
+      .forEach((a) => {
+        const tasks = galleryTasks[a.id] ?? [];
+        if (tasks.length === 0) return;
+        const tags = (AVATAR_DEFAULT_TAGS[a.name] ?? []).join('|');
+        tasks.forEach((task) => {
+          rows.push([
+            escapeCsv(a.name),
+            escapeCsv(tags),
+            escapeCsv(task.question),
+            escapeCsv(task.inputType),
+            escapeCsv(task.correctAnswer),
+            escapeCsv((task.choices ?? []).join('|')),
+            escapeCsv(task.imageUrl ?? ''),
+            escapeCsv('player-task'),
+          ].join(','));
+        });
+      });
+
+    // Pré-tâches génériques
+    galleryPreTasks.forEach((task) => {
+      rows.push([
+        escapeCsv(''),
+        escapeCsv(''),
+        escapeCsv(task.question),
+        escapeCsv(task.inputType),
+        escapeCsv(task.correctAnswer),
+        escapeCsv((task.choices ?? []).join('|')),
+        escapeCsv(task.imageUrl ?? ''),
+        escapeCsv('pre-task'),
+      ].join(','));
+    });
+
+    const csvContent = rows.join('\n');
+    const blob = new Blob(['\uFEFF' + csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'taches_galerie.csv';
+    a.click();
+    URL.revokeObjectURL(url);
+  }, [galleryTasks, galleryPreTasks, deletedAvatarIds]);
 
   // ── Set/clear default role for selected player ──
   const setDefaultRole = useCallback((roleId: string | undefined) => {
@@ -1391,6 +1464,14 @@ export function GMPlayerGalleryPanel({
             <div className="flex-1"><h3 style={{ fontFamily: '"Cinzel", serif', color: t.gold, fontSize: '0.95rem' }}>Galerie des Joueurs</h3></div>
             <div className="flex items-center gap-2">
               {(savingHints || savingTasks || savingRoles) && <span style={{ color: t.textDim, fontSize: '0.5rem', fontFamily: '"Cinzel", serif' }}>Sauvegarde...</span>}
+              <button
+                onClick={handleExportAllTasks}
+                className="flex items-center gap-1 px-2 py-0.5 rounded-md transition-colors hover:bg-white/5"
+                style={{ background: 'rgba(107,142,90,0.1)', border: '1px solid rgba(107,142,90,0.25)', color: '#6b8e5a', fontSize: '0.55rem', fontFamily: '"Cinzel", serif', fontWeight: 600 }}
+                title="Exporter toutes les tâches en CSV"
+              >
+                <Download size={10} /> Export CSV
+              </button>
               <span className="px-2 py-0.5 rounded-md" style={{ background: `${t.gold}15`, color: t.gold, fontSize: '0.65rem', fontWeight: 700, fontFamily: '"Cinzel", serif' }}>{AVATAR_GALLERY.length} joueurs</span>
             </div>
           </div>
@@ -1438,6 +1519,14 @@ export function GMPlayerGalleryPanel({
               </div>
               <div className="flex items-center gap-1.5 shrink-0">
                 {(savingHints || savingTasks || savingRoles) && <span style={{ color: t.textDim, fontSize: '0.45rem', fontFamily: '"Cinzel", serif' }}>Sauvegarde...</span>}
+                <button
+                  onClick={handleExportAllTasks}
+                  className="flex items-center gap-1 px-1.5 py-0.5 rounded-md transition-colors hover:bg-white/5"
+                  style={{ background: 'rgba(107,142,90,0.1)', border: '1px solid rgba(107,142,90,0.25)', color: '#6b8e5a', fontSize: '0.45rem', fontFamily: '"Cinzel", serif', fontWeight: 600 }}
+                  title="Exporter toutes les tâches en CSV"
+                >
+                  <Download size={9} /> Export CSV
+                </button>
                 <span className="px-1.5 py-0.5 rounded-md" style={{ background: `${t.gold}15`, color: t.gold, fontSize: '0.55rem', fontWeight: 700, fontFamily: '"Cinzel", serif' }}>{AVATAR_GALLERY.length - deletedAvatarIds.size}</span>
               </div>
             </div>

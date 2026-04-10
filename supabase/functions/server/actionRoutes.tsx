@@ -1787,25 +1787,131 @@ function autoAssignNextQuest(state: any, playerId: number, excludeIds?: Set<numb
 }
 
 /**
- * Distribute one quest to every player (alive and dead) at the start of a new phase.
- * Dead players only receive individual quests (collaborative quests are excluded via autoAssignNextQuest).
+ * Distribute up to 2 quests to every player (1 Generale + 1 Other) at the start of a new phase.
+ * Mirrors the client-side distributeQuestRound() logic in gmPureHelpers.ts.
+ * Dead players only receive individual quests.
  */
 function distributeQuestsToAlivePlayers(state: any): void {
-  // Early exit: skip distribution entirely if no quests are configured
   if (!state.quests || state.quests.length === 0) return;
   const players: any[] = state.players || [];
   if (players.length === 0) return;
+
   const pSet = state.villagePresentIds ? new Set(state.villagePresentIds) : null;
-  // Alive present players first, then dead players (dead can get individual quests)
   const alivePlayers = players.filter((p: any) => p.alive && (!pSet || pSet.has(p.id)));
   const deadPlayers = players.filter((p: any) => !p.alive);
   const allEligible = [...alivePlayers, ...deadPlayers];
-  // Track picked quest IDs to maximise variety across players (round-robin style).
-  // Quests already picked are deprioritised but NOT excluded (all quests are shareable).
-  const pickedThisRound = new Set<number>();
+  const aliveSet = new Set(alivePlayers.map((p: any) => p.id));
+
+  if (!state.questAssignments) state.questAssignments = {};
+
+  const gotGenerale = new Set<number>(); // players who got a Generale quest this round
+  const gotOther = new Set<number>();    // players who got a non-Generale quest this round
+
+  const quests: any[] = state.quests;
+  const availableQuests = quests.filter((q: any) => q.distributionOrder === 'available');
+  const orderedQuests = quests
+    .filter((q: any) => typeof q.distributionOrder === 'number')
+    .sort((a: any, b: any) => a.distributionOrder - b.distributionOrder);
+  const randomQuests = quests.filter((q: any) => q.distributionOrder === 'random' || q.distributionOrder === undefined);
+
+  const playerHasTag = (pid: number, quest: any): boolean => {
+    if (!quest.targetTags || quest.targetTags.length === 0) return false;
+    const tags = (state.playerTags || {})[pid] || [];
+    return quest.targetTags.some((t: string) => tags.includes(t));
+  };
+
+  const assignQuest = (pid: number, quest: any, slot: 'generale' | 'other'): boolean => {
+    if (!quest) return false;
+    const isDead = !aliveSet.has(pid);
+    if (isDead && (quest.questType || 'individual') === 'collaborative') return false;
+    if (!state.questAssignments[pid]) state.questAssignments[pid] = [];
+    if (state.questAssignments[pid].includes(quest.id)) return false;
+    state.questAssignments[pid].push(quest.id);
+    if (quest.hidden) quest.hidden = false;
+    if ((quest.questType || 'individual') === 'collaborative') {
+      if (!quest.collaborativeGroups) quest.collaborativeGroups = [];
+      const groupSize = quest.collaborativeGroupSize || 2;
+      const incomplete = quest.collaborativeGroups.find((g: number[]) => g.length < groupSize);
+      if (incomplete) { incomplete.push(pid); } else { quest.collaborativeGroups.push([pid]); }
+    }
+    if (slot === 'generale') gotGenerale.add(pid); else gotOther.add(pid);
+    return true;
+  };
+
+  // Phase 0: auto-assign "available" quests to all eligible (Generale slot)
+  if (state.roleRevealDone) {
+    for (const quest of availableQuests) {
+      for (const p of allEligible) {
+        const pid = p.id;
+        if (gotGenerale.has(pid)) continue;
+        if ((state.questAssignments[pid] || []).includes(quest.id)) continue;
+        if (quest.targetTags && quest.targetTags.length > 0) {
+          const tags = (state.playerTags || {})[pid] || [];
+          if (!quest.targetTags.some((t: string) => tags.includes(t))) continue;
+        }
+        if (!state.questAssignments[pid]) state.questAssignments[pid] = [];
+        state.questAssignments[pid].push(quest.id);
+        gotGenerale.add(pid);
+      }
+    }
+  }
+
+  // Phase 1: ordered quests by priority
+  for (const quest of orderedQuests) {
+    const isQuestGenerale = quest.isGenerale || quest.distributionOrder === 'available';
+    const slot: 'generale' | 'other' = isQuestGenerale ? 'generale' : 'other';
+    const slotSet = isQuestGenerale ? gotGenerale : gotOther;
+    for (const p of allEligible) {
+      const pid = p.id;
+      if (slotSet.has(pid)) continue;
+      if ((state.questAssignments[pid] || []).includes(quest.id)) continue;
+      if (quest.targetTags && quest.targetTags.length > 0) {
+        const tags = (state.playerTags || {})[pid] || [];
+        if (!quest.targetTags.some((t: string) => tags.includes(t))) continue;
+      }
+      assignQuest(pid, quest, slot);
+    }
+  }
+
+  // Phase 2: random quests — fill both slots for each player
   for (const p of allEligible) {
-    const qId = autoAssignNextQuest(state, p.id, pickedThisRound);
-    if (qId !== null) pickedThisRound.add(qId);
+    const pid = p.id;
+    const myQids: number[] = state.questAssignments[pid] || [];
+
+    // Fill Generale slot
+    if (!gotGenerale.has(pid)) {
+      const pool = randomQuests.filter((q: any) => {
+        if (myQids.includes(q.id)) return false;
+        if (!q.isGenerale) return false;
+        if (!aliveSet.has(pid) && (q.questType || 'individual') === 'collaborative') return false;
+        if (q.targetTags && q.targetTags.length > 0) {
+          if (!playerHasTag(pid, q)) return false;
+        }
+        return true;
+      });
+      if (pool.length > 0) {
+        assignQuest(pid, pool[Math.floor(Math.random() * pool.length)], 'generale');
+      }
+    }
+
+    // Fill Other slot
+    if (!gotOther.has(pid)) {
+      const pool = randomQuests.filter((q: any) => {
+        if ((state.questAssignments[pid] || []).includes(q.id)) return false;
+        if (q.isGenerale || q.distributionOrder === 'available') return false;
+        if (!aliveSet.has(pid) && (q.questType || 'individual') === 'collaborative') return false;
+        if (q.targetTags && q.targetTags.length > 0) {
+          if (!playerHasTag(pid, q)) return false;
+        }
+        return true;
+      });
+      if (pool.length > 0) {
+        assignQuest(pid, pool[Math.floor(Math.random() * pool.length)], 'other');
+      } else {
+        // Fallback: use autoAssignNextQuest for backward compat
+        autoAssignNextQuest(state, pid, new Set([...gotGenerale, ...gotOther]));
+      }
+    }
   }
 }
 

@@ -105,6 +105,8 @@ export interface Quest {
   playerResolvedInPhase?: Record<number, string>;
   /** Original gallery pre-quest ID (for deduplication during auto-import) */
   galleryPreQuestId?: number;
+  /** Marks this as a "Generale" (general/global) quest — one per player per distribution round */
+  isGenerale?: boolean;
 }
 
 /** Role Reveal Quest — simple onboarding quest configured by GM, shown to ALL players during role reveal */

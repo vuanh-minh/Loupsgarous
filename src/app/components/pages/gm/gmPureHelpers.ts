@@ -455,7 +455,8 @@ export function distributeQuestRound(s: GameState): { state: GameState; distribu
   }
 
   const updatedQuests = allQuests.map(q => ({ ...q }));
-  const processedThisRound = new Set<number>();
+  const gotGenerale = new Set<number>();  // Players who got a Generale quest this round
+  const gotOther = new Set<number>();     // Players who got a non-Generale quest this round
 
   // Split quests into available (auto), ordered (numeric) and random pools
   const availableQuests = updatedQuests
@@ -466,15 +467,16 @@ export function distributeQuestRound(s: GameState): { state: GameState; distribu
   const randomQuests = updatedQuests
     .filter(q => q.distributionOrder === 'random' || q.distributionOrder === undefined);
 
-  // Helper: attempt to assign a specific quest to a player
-  const tryAssignQuest = (pid: number, picked: typeof updatedQuests[0]) => {
+  // Helper: attempt to assign a specific quest to a player for a specific slot
+  const tryAssignQuest = (pid: number, picked: typeof updatedQuests[0], slot: 'generale' | 'other') => {
     const isCollab = (picked.questType || 'individual') === 'collaborative';
+    const slotSet = slot === 'generale' ? gotGenerale : gotOther;
 
     if (isCollab) {
       const groupSize = picked.collaborativeGroupSize || 3;
       const eligible = alive.filter(id => {
-        if (processedThisRound.has(id)) return false;
         if ((newAssignments[id] || []).includes(picked.id)) return false;
+        if (slotSet.has(id)) return false;  // Check slot not this round
         if (picked.targetTags && picked.targetTags.length > 0) {
           const idTags = (s.playerTags || {})[id] || [];
           return picked.targetTags.some(tag => idTags.includes(tag));
@@ -499,14 +501,14 @@ export function distributeQuestRound(s: GameState): { state: GameState; distribu
         if (!newAssignments[memberId].includes(picked.id)) {
           newAssignments[memberId].push(picked.id);
         }
-        processedThisRound.add(memberId);
+        slotSet.add(memberId);
         distributedCount++;
       }
       return true;
     } else {
       if (!newAssignments[pid]) newAssignments[pid] = [];
       newAssignments[pid].push(picked.id);
-      processedThisRound.add(pid);
+      slotSet.add(pid);
       distributedCount++;
       return true;
     }
@@ -529,11 +531,13 @@ export function distributeQuestRound(s: GameState): { state: GameState; distribu
     });
   };
 
-  // Phase 0: Auto-assign "available" quests to ALL eligible players (no round limit)
-  for (const quest of availableQuests) {
+  // Phase 0: Auto-assign "available" quests to ALL eligible players (counts as Generale slot)
+  // Only after Maire election — these quests start once the election is resolved.
+  if (s.maireElectionDone) for (const quest of availableQuests) {
     const isQuestCollab = (quest.questType || 'individual') === 'collaborative';
     for (const pid of allEligible) {
       if (isQuestCollab && !aliveSet.has(pid)) continue;
+      if (gotGenerale.has(pid)) continue;  // Already got Generale slot
       const myQids = newAssignments[pid] || [];
       if (myQids.includes(quest.id)) continue;
       if (quest.targetTags && quest.targetTags.length > 0) {
@@ -544,34 +548,38 @@ export function distributeQuestRound(s: GameState): { state: GameState; distribu
       }
       if (!newAssignments[pid]) newAssignments[pid] = [];
       newAssignments[pid].push(quest.id);
+      gotGenerale.add(pid);
       distributedCount++;
     }
   }
 
-  // Phase 1: Distribute ordered quests (ascending priority) to ALL eligible players
+  // Phase 1: Distribute ordered quests (ascending priority) to eligible players
   for (const quest of orderedQuests) {
     const isQuestCollab = (quest.questType || 'individual') === 'collaborative';
     const hasTags = quest.targetTags && quest.targetTags.length > 0;
+    const isQuestGenerale = quest.isGenerale || quest.distributionOrder === 'available';
+    const slot = isQuestGenerale ? 'generale' : 'other';
+    const slotSet = isQuestGenerale ? gotGenerale : gotOther;
 
     if (!isQuestCollab && hasTags) {
       for (const pid of allEligible) {
-        if (processedThisRound.has(pid)) continue;
+        if (slotSet.has(pid)) continue;  // Already has this slot
         const myQids = newAssignments[pid] || [];
         if (myQids.includes(quest.id)) continue;
         if (!playerHasQuestTag(pid, quest)) continue;
-        tryAssignQuest(pid, quest);
+        tryAssignQuest(pid, quest, slot);
       }
       if (allTaggedPlayersHaveQuest(quest)) {
         for (const pid of allEligible) {
-          if (processedThisRound.has(pid)) continue;
+          if (slotSet.has(pid)) continue;
           const myQids = newAssignments[pid] || [];
           if (myQids.includes(quest.id)) continue;
-          tryAssignQuest(pid, quest);
+          tryAssignQuest(pid, quest, slot);
         }
       }
     } else {
       for (const pid of allEligible) {
-        if (processedThisRound.has(pid)) continue;
+        if (slotSet.has(pid)) continue;
         if (isQuestCollab && !aliveSet.has(pid)) continue;
         const myQids = newAssignments[pid] || [];
         if (myQids.includes(quest.id)) continue;
@@ -579,38 +587,22 @@ export function distributeQuestRound(s: GameState): { state: GameState; distribu
           const pidTags = (s.playerTags || {})[pid] || [];
           if (!quest.targetTags!.some(tag => pidTags.includes(tag))) continue;
         }
-        tryAssignQuest(pid, quest);
+        tryAssignQuest(pid, quest, slot);
       }
     }
   }
 
-  // Phase 2: For remaining unprocessed players, pick a random quest from the random pool
+  // Phase 2: For remaining players, try to fill both slots (Generale + Other)
   for (const pid of allEligible) {
-    if (processedThisRound.has(pid)) continue;
     const isDead = !aliveSet.has(pid);
-
     const myQids = newAssignments[pid] || [];
-    const available = randomQuests.filter(q => {
-      if (myQids.includes(q.id)) return false;
-      if (isDead && (q.questType || 'individual') === 'collaborative') return false;
-      const isIndiv = (q.questType || 'individual') === 'individual';
-      if (q.targetTags && q.targetTags.length > 0) {
-        if (isIndiv) {
-          if (!playerHasQuestTag(pid, q) && !allTaggedPlayersHaveQuest(q)) return false;
-        } else {
-          if (!playerHasQuestTag(pid, q)) return false;
-        }
-      }
-      return true;
-    });
 
-    const taggedAvailable = available.filter(q => playerHasQuestTag(pid, q));
-    const pickPool = taggedAvailable.length > 0 ? taggedAvailable : available;
-
-    if (pickPool.length === 0) {
-      const orderedFallback = orderedQuests.filter(q => {
+    // Try to fill Generale slot
+    if (!gotGenerale.has(pid)) {
+      const generaleQuests = randomQuests.filter(q => {
         if (myQids.includes(q.id)) return false;
         if (isDead && (q.questType || 'individual') === 'collaborative') return false;
+        if (!q.isGenerale && q.distributionOrder !== 'available') return false; // Must be Generale
         const isIndiv = (q.questType || 'individual') === 'individual';
         if (q.targetTags && q.targetTags.length > 0) {
           if (isIndiv) {
@@ -621,42 +613,78 @@ export function distributeQuestRound(s: GameState): { state: GameState; distribu
         }
         return true;
       });
-      if (orderedFallback.length > 0) {
-        tryAssignQuest(pid, orderedFallback[0]);
+
+      const taggedGenerale = generaleQuests.filter(q => playerHasQuestTag(pid, q));
+      const generalePool = taggedGenerale.length > 0 ? taggedGenerale : generaleQuests;
+
+      if (generalePool.length > 0) {
+        const picked = generalePool[Math.floor(Math.random() * generalePool.length)];
+        tryAssignQuest(pid, picked, 'generale');
+      } else {
+        // Fallback to ordered Generale quests
+        const orderedGenerale = orderedQuests.filter(q => {
+          if (myQids.includes(q.id)) return false;
+          if (isDead && (q.questType || 'individual') === 'collaborative') return false;
+          if (!q.isGenerale && q.distributionOrder !== 'available') return false;
+          const isIndiv = (q.questType || 'individual') === 'individual';
+          if (q.targetTags && q.targetTags.length > 0) {
+            if (isIndiv) {
+              if (!playerHasQuestTag(pid, q) && !allTaggedPlayersHaveQuest(q)) return false;
+            } else {
+              if (!playerHasQuestTag(pid, q)) return false;
+            }
+          }
+          return true;
+        });
+        if (orderedGenerale.length > 0) {
+          tryAssignQuest(pid, orderedGenerale[0], 'generale');
+        }
       }
-      continue;
     }
 
-    const picked = pickPool[Math.floor(Math.random() * pickPool.length)];
-    const isCollab = (picked.questType || 'individual') === 'collaborative';
-
-    if (isCollab) {
-      const groupSize = picked.collaborativeGroupSize || 3;
-      const eligible = alive.filter(id => {
-        if (processedThisRound.has(id)) return false;
-        if ((newAssignments[id] || []).includes(picked.id)) return false;
-        if (picked.targetTags && picked.targetTags.length > 0) {
-          const idTags = (s.playerTags || {})[id] || [];
-          return picked.targetTags.some(tag => idTags.includes(tag));
+    // Try to fill Other slot
+    if (!gotOther.has(pid)) {
+      const otherQuests = randomQuests.filter(q => {
+        if (myQids.includes(q.id)) return false;
+        if (isDead && (q.questType || 'individual') === 'collaborative') return false;
+        if (q.isGenerale || q.distributionOrder === 'available') return false; // Must NOT be Generale
+        const isIndiv = (q.questType || 'individual') === 'individual';
+        if (q.targetTags && q.targetTags.length > 0) {
+          if (isIndiv) {
+            if (!playerHasQuestTag(pid, q) && !allTaggedPlayersHaveQuest(q)) return false;
+          } else {
+            if (!playerHasQuestTag(pid, q)) return false;
+          }
         }
         return true;
       });
 
-      if (eligible.length < 2) {
-        const individualAvailable = available.filter(q => (q.questType || 'individual') === 'individual');
-        if (individualAvailable.length > 0) {
-          const iPicked = individualAvailable[Math.floor(Math.random() * individualAvailable.length)];
-          if (!newAssignments[pid]) newAssignments[pid] = [];
-          newAssignments[pid].push(iPicked.id);
-          processedThisRound.add(pid);
-          distributedCount++;
-        }
-        continue;
-      }
+      const taggedOther = otherQuests.filter(q => playerHasQuestTag(pid, q));
+      const otherPool = taggedOther.length > 0 ? taggedOther : otherQuests;
 
-      tryAssignQuest(pid, picked);
-    } else {
-      tryAssignQuest(pid, picked);
+      if (otherPool.length > 0) {
+        const picked = otherPool[Math.floor(Math.random() * otherPool.length)];
+        tryAssignQuest(pid, picked, 'other');
+      } else {
+        // Fallback to ordered non-Generale quests
+        const orderedOther = orderedQuests.filter(q => {
+          if (myQids.includes(q.id)) return false;
+          if (isDead && (q.questType || 'individual') === 'collaborative') return false;
+          if (q.isGenerale || q.distributionOrder === 'available') return false;
+          const isIndiv = (q.questType || 'individual') === 'individual';
+          if (q.targetTags && q.targetTags.length > 0) {
+            if (isIndiv) {
+              if (!playerHasQuestTag(pid, q) && !allTaggedPlayersHaveQuest(q)) return false;
+            } else {
+              if (!playerHasQuestTag(pid, q)) return false;
+            }
+          }
+          return true;
+        });
+        if (orderedOther.length > 0) {
+          tryAssignQuest(pid, orderedOther[0], 'other');
+        }
+      }
     }
   }
 
@@ -692,6 +720,8 @@ export function assignAvailableQuestsToNewPlayer(
   if (!newAssign[playerId]) newAssign[playerId] = [];
 
   const availableQuests = (s.quests || []).filter(q => q.distributionOrder === 'available');
+  // Only assign available quests after Maire election is done
+  if (!s.maireElectionDone) return newAssign;
   for (const quest of availableQuests) {
     if (newAssign[playerId].includes(quest.id)) continue;
     const isCollab = (quest.questType || 'individual') === 'collaborative';

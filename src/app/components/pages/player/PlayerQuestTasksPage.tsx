@@ -10,6 +10,7 @@ import type { GameState, Quest, QuestTask, QuestTaskInputType, QuestStatus } fro
 import type { GameThemeTokens } from '../../../context/gameTheme';
 import { PAvatar } from './PAvatar';
 import { HintFullscreenLightbox, getHintAssociations, setHintAssociation as setHintAssoc, extractRoleFromHintText } from '../../HintComponents';
+import { AVATAR_GALLERY } from '../../../data/avatarGallery';
 
 interface PlayerQuestTasksPageProps {
   quest: Quest;
@@ -780,16 +781,28 @@ export const PlayerQuestTasksPage = React.memo(function PlayerQuestTasksPage({
                   }}>
                     {idx + 1}.
                   </span>
-                  {task.referencedPlayerId && (() => {
+                  {task.referencedPlayerId != null && (() => {
                     const rp = state.players.find(p => p.id === task.referencedPlayerId);
-                    if (!rp) return null;
-                    return (
+                    if (rp) return (
                       <div className="flex-shrink-0 mt-0.5">
                         <div
                           className="w-10 h-10 rounded-full overflow-hidden"
                           style={{ border: `2px solid ${cp.accentBorder}`, boxShadow: `0 2px 8px rgba(0,0,0,0.25)` }}
                         >
                           <PAvatar player={rp} size="text-sm" />
+                        </div>
+                      </div>
+                    );
+                    // Fallback: resolve from avatar gallery (gallery IDs differ from game player IDs)
+                    const av = AVATAR_GALLERY.find(a => a.id === task.referencedPlayerId);
+                    if (!av) return null;
+                    return (
+                      <div className="flex-shrink-0 mt-0.5">
+                        <div
+                          className="w-10 h-10 rounded-full overflow-hidden"
+                          style={{ border: `2px solid ${cp.accentBorder}`, boxShadow: `0 2px 8px rgba(0,0,0,0.25)` }}
+                        >
+                          <img src={av.url} alt={av.name} className="w-full h-full object-cover" />
                         </div>
                       </div>
                     );
