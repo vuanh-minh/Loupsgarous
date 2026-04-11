@@ -89,6 +89,9 @@ export function usePlayerSync({
     let active = true;
     // Reset backoff counters on mount / dependency change
     noChangePollCountRef.current = 0;
+    const mountTime = Date.now();
+    // Grace period: keep showing spinner for up to 15s while waiting for GM to sync
+    const INITIAL_GRACE_MS = 15000;
 
     const poll = async () => {
       // Skip poll if within dirty window (action recently sent)
@@ -115,7 +118,12 @@ export function usePlayerSync({
         pendingRefreshRef.current = false;
         setFullState(serverState);
       }
-      if (active) setInitialLoading(false);
+      if (active) {
+        // Only clear initial loading if we got data OR the grace period has elapsed
+        if (serverState || (Date.now() - mountTime > INITIAL_GRACE_MS)) {
+          setInitialLoading(false);
+        }
+      }
     };
     poll();
 
