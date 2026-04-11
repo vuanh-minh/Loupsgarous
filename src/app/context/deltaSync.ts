@@ -120,7 +120,8 @@ const MAX_BROADCAST_SIZE = 200_000; // 200KB
 
 /**
  * Strip heavy fields from a full-state payload to fit within broadcast limits.
- * Removes old events and resolved quest data progressively.
+ * Removes old events, resolved quest data, and heavy per-player data progressively.
+ * With 40+ players, quests/hints/playerHints can easily exceed 200KB.
  */
 export function fitBroadcastPayload(state: GameState): GameState {
   let size = estimatePayloadSize(state);
@@ -153,7 +154,59 @@ export function fitBroadcastPayload(state: GameState): GameState {
   // 4. Trim events even further
   if (Array.isArray(slim.events) && slim.events.length > 20) {
     slim.events = slim.events.slice(-20);
+    size = estimatePayloadSize(slim);
+    if (size <= MAX_BROADCAST_SIZE) return slim;
   }
+
+  // 5. Strip playerAnswers/playerResults from quest tasks (heaviest per-player data)
+  if (Array.isArray(slim.quests) && slim.quests.length > 0) {
+    slim.quests = slim.quests.map((q: any) => ({
+      ...q,
+      tasks: (q.tasks || []).map((t: any) => ({
+        ...t,
+        playerAnswers: undefined,
+        playerResults: undefined,
+      })),
+    }));
+    size = estimatePayloadSize(slim);
+    if (size <= MAX_BROADCAST_SIZE) return slim;
+  }
+
+  // 6. Strip dynamicHints grantedToPlayerIds (grows with player count)
+  if (Array.isArray(slim.dynamicHints) && slim.dynamicHints.length > 0) {
+    slim.dynamicHints = slim.dynamicHints.map((dh: any) => ({
+      ...dh,
+      grantedToPlayerIds: undefined,
+    }));
+    size = estimatePayloadSize(slim);
+    if (size <= MAX_BROADCAST_SIZE) return slim;
+  }
+
+  // 7. Strip playerHints (N hints × N players = O(n²) growth)
+  if (Array.isArray(slim.playerHints) && slim.playerHints.length > 200) {
+    slim.playerHints = slim.playerHints.filter((ph: any) => ph.revealed);
+    size = estimatePayloadSize(slim);
+    if (size <= MAX_BROADCAST_SIZE) return slim;
+  }
+
+  // 8. Strip quest playerStatuses and collaborativeVotes
+  if (Array.isArray(slim.quests) && slim.quests.length > 0) {
+    slim.quests = slim.quests.map((q: any) => ({
+      ...q,
+      playerStatuses: undefined,
+      collaborativeVotes: undefined,
+      collaborativeGroups: undefined,
+    }));
+    size = estimatePayloadSize(slim);
+    if (size <= MAX_BROADCAST_SIZE) return slim;
+  }
+
+  // 9. Last resort: strip all quests and hints (players will recover via REST polling)
+  slim.quests = [];
+  slim.questAssignments = {};
+  slim.hints = [];
+  slim.playerHints = [];
+  slim.dynamicHints = [];
 
   return slim;
 }

@@ -73,6 +73,8 @@ export function useGameSync({ setState, state, stateRef }: SyncDeps) {
     }
     try {
       const current = stateRef.current;
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 15000);
       const res = await fetch(`${API_BASE}/game/state`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${publicAnonKey}` },
@@ -81,7 +83,9 @@ export function useGameSync({ setState, state, stateRef }: SyncDeps) {
           gameState: current,
           gameId: current.gameId || undefined,
         }),
+        signal: controller.signal,
       });
+      clearTimeout(timeout);
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
         console.log('Sync error:', err);
@@ -117,9 +121,13 @@ export function useGameSync({ setState, state, stateRef }: SyncDeps) {
       else if (opts?.shortCode) params.set('shortCode', opts.shortCode);
       else if (stateRef.current.gameId) params.set('gameId', stateRef.current.gameId);
       const qs = params.toString() ? `?${params.toString()}` : '';
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 10000);
       const res = await fetch(`${API_BASE}/game/state${qs}`, {
         headers: { 'Authorization': `Bearer ${publicAnonKey}` },
+        signal: controller.signal,
       });
+      clearTimeout(timeout);
       if (!res.ok) {
         console.log('Load state error:', res.status);
         // Fallback to localStorage when server fails
@@ -233,7 +241,19 @@ export function useGameSync({ setState, state, stateRef }: SyncDeps) {
 
       const s = stateRef.current;
 
-      const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
+      // Cached JSON.stringify to avoid re-serializing the same object multiple times
+      const _cache = new WeakMap<object, string>();
+      const toJSON = (v: unknown): string => {
+        if (v === null || v === undefined || typeof v !== 'object') return JSON.stringify(v);
+        const obj = v as object;
+        let cached = _cache.get(obj);
+        if (!cached) { cached = JSON.stringify(obj); _cache.set(obj, cached); }
+        return cached;
+      };
+      const same = (a: unknown, b: unknown) => {
+        if (a === b) return true;
+        return toJSON(a) === toJSON(b);
+      };
 
       // ── Merge helpers for hints & playerHints (union, never lose data) ──
       const mergeHints = (local: any[], server: any[]): any[] => {
