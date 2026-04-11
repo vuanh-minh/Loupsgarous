@@ -4,7 +4,7 @@ import {
   Moon, Crown, Shield, Skull, Vote, Eye,
   Check, Heart, Star, BookOpen, ExternalLink,
   Clock, RefreshCw, Scroll, Dices,
-  Tag, Camera, Bell, ChevronDown, Image,
+  Tag, Camera, Bell, ChevronDown, Image, Pencil,
   Lightbulb, Send, Swords, CheckCircle2, UserX, UserCheck,
 } from 'lucide-react';
 import { type Player } from '../../../context/GameContext';
@@ -35,6 +35,23 @@ export function GMPlayerDetail() {
     ? state.players.find((p: Player) => p.id === selectedPlayer)
     : null;
   const selectedRole = selectedPlayerData ? getRoleById(selectedPlayerData.role) : null;
+
+  // Renommage inline du joueur
+  const [editingName, setEditingName] = useState(false);
+  const [draftName, setDraftName] = useState('');
+  const nameInputRef = useRef<HTMLInputElement>(null);
+  const commitName = useCallback(() => {
+    const trimmed = draftName.trim();
+    if (trimmed && selectedPlayerData && trimmed !== selectedPlayerData.name) {
+      updateState((s) => ({
+        ...s,
+        players: s.players.map((p) =>
+          p.id === selectedPlayerData.id ? { ...p, name: trimmed } : p
+        ),
+      }));
+    }
+    setEditingName(false);
+  }, [draftName, selectedPlayerData, updateState]);
 
   // Avatar upload — self-contained (uses same API endpoint as GameMasterPage)
   const avatarInputRef = useRef<HTMLInputElement>(null);
@@ -334,7 +351,32 @@ export function GMPlayerDetail() {
             {state.maireId === selectedPlayerData.id && (<div className="absolute -top-1 -left-1 w-5 h-5 rounded-full flex items-center justify-center" style={{ background: '#d4a843', border: '2px solid #0a1020' }} title="Maire"><Crown size={10} style={{ color: '#0a0e1a' }} /></div>)}
           </div>
           <div className="flex-1 min-w-0">
-            <h2 style={{ color: t.text, fontSize: '1.15rem', fontFamily: '"Cinzel", serif' }}>{selectedPlayerData.name} {state.maireId === selectedPlayerData.id ? '🏛️' : ''} <span style={{ color: t.textMuted, fontSize: '0.65rem', fontFamily: 'monospace', letterSpacing: '0.04em', fontWeight: 400 }}>#{selectedPlayerData.shortCode}</span></h2>
+            <h2 style={{ color: t.text, fontSize: '1.15rem', fontFamily: '"Cinzel", serif' }}>
+              {editingName ? (
+                <input
+                  ref={nameInputRef}
+                  value={draftName}
+                  onChange={(e) => setDraftName(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === 'Enter') commitName(); if (e.key === 'Escape') setEditingName(false); }}
+                  onBlur={commitName}
+                  autoFocus
+                  style={{ color: t.text, fontSize: '1.15rem', fontFamily: '"Cinzel", serif', background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(212,168,67,0.4)', borderRadius: '6px', padding: '2px 8px', outline: 'none', width: `${Math.max(draftName.length, 3) + 2}ch` }}
+                />
+              ) : (
+                <span
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => { setDraftName(selectedPlayerData.name); setEditingName(true); }}
+                  onKeyDown={(e) => { if (e.key === 'Enter') { setDraftName(selectedPlayerData.name); setEditingName(true); } }}
+                  className="inline-flex items-center gap-1.5 cursor-pointer group"
+                  title="Renommer ce joueur"
+                >
+                  {selectedPlayerData.name}
+                  <Pencil size={12} className="opacity-0 group-hover:opacity-60 transition-opacity" style={{ color: t.textMuted }} />
+                </span>
+              )}
+              {' '}{state.maireId === selectedPlayerData.id ? '🏛️' : ''} <span style={{ color: t.textMuted, fontSize: '0.65rem', fontFamily: 'monospace', letterSpacing: '0.04em', fontWeight: 400 }}>#{selectedPlayerData.shortCode}</span>
+            </h2>
             <div className="flex items-center gap-2 mt-1">
               <span className="text-xl">{selectedRole.emoji}</span>
               {isRoleRevealPhase ? (
