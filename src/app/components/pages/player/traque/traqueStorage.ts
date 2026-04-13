@@ -73,8 +73,8 @@ export function loadPlayerTagScores(selfPlayerId: number): Record<string, { corr
 }
 
 /** Agrège les scores de tous les joueurs pour le leaderboard (somme des premiers scores). */
-export function loadAllPlayersLeaderboard(): Array<{ selfPlayerId: number; totalCorrect: number }> {
-  const byPlayer: Record<number, number> = {};
+export function loadAllPlayersLeaderboard(): Array<{ selfPlayerId: number; totalCorrect: number; totalPlayers: number }> {
+  const byPlayer: Record<number, { correct: number; total: number }> = {};
   try {
     for (let i = 0; i < localStorage.length; i++) {
       const k = localStorage.key(i);
@@ -82,11 +82,14 @@ export function loadAllPlayersLeaderboard(): Array<{ selfPlayerId: number; total
       const raw = localStorage.getItem(k);
       if (!raw) continue;
       const data = JSON.parse(raw) as TagScore;
-      byPlayer[data.selfPlayerId] = (byPlayer[data.selfPlayerId] ?? 0) + data.correct;
+      if (!byPlayer[data.selfPlayerId]) byPlayer[data.selfPlayerId] = { correct: 0, total: 0 };
+      byPlayer[data.selfPlayerId].correct += data.correct;
+      byPlayer[data.selfPlayerId].total += data.total;
     }
   } catch {}
-  return Object.entries(byPlayer).map(([id, total]) => ({
+  return Object.entries(byPlayer).map(([id, s]) => ({
     selfPlayerId: Number(id),
-    totalCorrect: total,
+    totalCorrect: s.correct,
+    totalPlayers: s.total,
   }));
 }

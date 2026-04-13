@@ -104,13 +104,12 @@ export function HomePage() {
   const inputRefs = useRef<(HTMLInputElement | null)[]>([]);
 
   // Leaderboard Traque — scores serveur (fallback localStorage)
-  type LeaderboardEntry = { selfPlayerId: number; name: string; avatarUrl: string; correct: number };
+  type LeaderboardEntry = { selfPlayerId: number; name: string; avatarUrl: string; correct: number; total: number };
   const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>(() => {
-    // Initialisation instantanée depuis localStorage (somme des premières tentatives par tag)
     return loadAllPlayersLeaderboard()
       .map((s) => {
         const player = AVATAR_GALLERY.find((g) => g.id === s.selfPlayerId);
-        return { selfPlayerId: s.selfPlayerId, name: player?.name ?? `#${s.selfPlayerId}`, avatarUrl: player?.url ?? '', correct: s.totalCorrect };
+        return { selfPlayerId: s.selfPlayerId, name: player?.name ?? `#${s.selfPlayerId}`, avatarUrl: player?.url ?? '', correct: s.totalCorrect, total: s.totalPlayers };
       })
       .sort((a, b) => b.correct - a.correct)
       .slice(0, 5);
@@ -126,8 +125,9 @@ export function HomePage() {
           .map(([pid, tagScores]) => {
             const selfPlayerId = Number(pid);
             const totalCorrect = Object.values(tagScores).reduce((sum, s) => sum + (s.correct ?? 0), 0);
+            const totalPlayers = Object.values(tagScores).reduce((sum, s) => sum + (s.total ?? 0), 0);
             const player = AVATAR_GALLERY.find((g) => g.id === selfPlayerId);
-            return { selfPlayerId, name: player?.name ?? `#${selfPlayerId}`, avatarUrl: player?.url ?? '', correct: totalCorrect };
+            return { selfPlayerId, name: player?.name ?? `#${selfPlayerId}`, avatarUrl: player?.url ?? '', correct: totalCorrect, total: totalPlayers };
           })
           .sort((a, b) => b.correct - a.correct)
           .slice(0, 5);
@@ -738,7 +738,7 @@ export function HomePage() {
                   </span>
                   <span style={{ fontFamily: '"Cinzel", serif', color: i === 0 ? '#d4a843' : '#3a4870', fontSize: '0.78rem', fontWeight: 700 }}>
                     {entry.correct}
-                    <span style={{ color: i === 0 ? 'rgba(212,168,67,0.45)' : '#2a3050', fontWeight: 400 }}>/{AVATAR_GALLERY.length} joueurs</span>
+                    <span style={{ color: i === 0 ? 'rgba(212,168,67,0.45)' : '#2a3050', fontWeight: 400 }}>/{entry.total} joueurs</span>
                   </span>
                 </div>
               ))}
