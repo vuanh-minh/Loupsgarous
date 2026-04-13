@@ -691,22 +691,25 @@ export function HomePage() {
           {/* La Traque — bouton principal */}
           <button
             onClick={() => navigate('/traque')}
-            className="w-full flex flex-col items-center gap-3 p-6 rounded-2xl transition-all active:scale-95"
+            className="w-full flex items-center gap-4 px-5 py-4 rounded-2xl transition-all active:scale-95"
             style={{
-              background: 'linear-gradient(135deg, rgba(212,168,67,0.12) 0%, rgba(212,168,67,0.04) 100%)',
-              border: '1.5px solid rgba(212,168,67,0.35)',
-              boxShadow: '0 0 40px rgba(212,168,67,0.08)',
+              background: 'linear-gradient(135deg, rgba(212,168,67,0.18) 0%, rgba(180,120,30,0.10) 100%)',
+              border: '1.5px solid rgba(212,168,67,0.55)',
+              boxShadow: '0 0 28px rgba(212,168,67,0.18), inset 0 1px 0 rgba(255,220,100,0.12)',
             }}
           >
-            <span className="text-4xl">🎯</span>
-            <div className="text-center">
-              <p style={{ color: '#d4a843', fontSize: '1rem', fontFamily: '"Cinzel Decorative", "Cinzel", serif', fontWeight: 700, margin: 0 }}>
+            <span style={{ fontSize: '2rem', lineHeight: 1, flexShrink: 0 }}>🎯</span>
+            <div className="flex flex-col flex-1 text-left">
+              <p style={{ color: '#f0c84a', fontSize: '1rem', fontFamily: '"Cinzel Decorative", "Cinzel", serif', fontWeight: 700, margin: 0, letterSpacing: '0.02em' }}>
                 La Traque
               </p>
-              <p style={{ color: '#8090b0', fontSize: '0.72rem', marginTop: '0.4rem' }}>
+              <p style={{ color: '#a08040', fontSize: '0.7rem', marginTop: '0.2rem' }}>
                 Retrouve qui avait quel rôle
               </p>
             </div>
+            <svg width="18" height="18" viewBox="0 0 18 18" fill="none" style={{ flexShrink: 0, opacity: 0.6 }}>
+              <path d="M6.5 4L11.5 9L6.5 14" stroke="#d4a843" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+            </svg>
           </button>
 
           {/* Leaderboard Traque */}
