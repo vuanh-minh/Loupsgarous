@@ -1,6 +1,6 @@
 import React, { useMemo, useState, useEffect } from 'react';
 import { motion } from 'motion/react';
-import { ChevronRight } from 'lucide-react';
+import { ChevronRight, ChevronLeft } from 'lucide-react';
 import type { GameState } from '../../../../context/gameTypes';
 import { loadPlayerTagScores } from './traqueStorage';
 import { API_BASE, publicAnonKey } from '../../../../context/apiConfig';
@@ -18,9 +18,10 @@ interface Props {
   state: GameState;
   selfPlayerId: number;
   onSelect: (tags: string[]) => void;
+  onBack: () => void;
 }
 
-export function TraqueDifficultyPicker({ state, selfPlayerId, onSelect }: Props) {
+export function TraqueDifficultyPicker({ state, selfPlayerId, onSelect, onBack }: Props) {
   const availableTags = useMemo(() => {
     const tags = new Set<string>();
     state.players.forEach((p) => {
@@ -108,6 +109,14 @@ export function TraqueDifficultyPicker({ state, selfPlayerId, onSelect }: Props)
           animate={{ opacity: 1, y: 0 }}
           className="flex flex-col items-center"
         >
+          <button
+            onClick={onBack}
+            className="self-start flex items-center gap-1 mb-4 active:scale-95 transition-transform"
+            style={{ color: '#4a5570', fontSize: '0.72rem', fontFamily: '"Cinzel", serif' }}
+          >
+            <ChevronLeft size={14} />
+            Retour
+          </button>
           <p
             style={{
               fontFamily: '"Cinzel", serif',

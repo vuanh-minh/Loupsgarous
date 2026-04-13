@@ -47,6 +47,7 @@ export function TraquePage() {
       if (pendingSelfId === null) return;
       const pool = eligiblePlayers
         .filter((p) => {
+          if (p.id === pendingSelfId) return false;
           const pTags = state.playerTags[p.id] ?? [];
           return pTags.some((t) => tags.includes(t));
         })
@@ -139,6 +140,7 @@ export function TraquePage() {
         state={state}
         selfPlayerId={pendingSelfId}
         onSelect={handleSelectTags}
+        onBack={() => setPendingSelfId(null)}
       />
     );
   }

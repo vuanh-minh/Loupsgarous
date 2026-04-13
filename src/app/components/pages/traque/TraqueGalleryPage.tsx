@@ -214,7 +214,12 @@ export function TraqueGalleryPage() {
       // Reprendre une partie en cours si elle existe
       const existing = loadTraque(gameId, pendingSelfId);
       if (existing && existing.currentIndex < existing.roleOrder.length) {
-        setProgress(existing);
+        // Nettoyage défensif : s'assurer que selfPlayerId n'est pas dans roleOrder
+        const safeOrder = existing.roleOrder.filter((id) => id !== pendingSelfId);
+        const safeProgress = safeOrder.length !== existing.roleOrder.length
+          ? { ...existing, roleOrder: safeOrder }
+          : existing;
+        setProgress(safeProgress);
         setPendingSelfId(null);
         return;
       }
@@ -352,6 +357,7 @@ export function TraqueGalleryPage() {
         state={mockState}
         selfPlayerId={pendingSelfId}
         onSelect={handleSelectTags}
+        onBack={() => setPendingSelfId(null)}
       />
     );
   }
