@@ -446,9 +446,9 @@ export function TraqueRoundScreen({ state, progress, onAnswer }: Props) {
                 </div>
                 <div className="overflow-y-auto flex-1 px-4 pb-2">
                   {(() => {
-                    const filtered = groups.filter((g) => g.players.length > 0);
+                    const filtered = groups.filter(([, players]) => players.length > 0);
                     if (filtered.length === 0) return <p className="text-center py-6" style={{ color: '#4a5570', fontSize: '0.78rem' }}>Aucun joueur trouvé</p>;
-                    return filtered.map(({ tag, players }) => (
+                    return filtered.map(([tag, players]) => (
                       <div key={tag} className="mb-5">
                         <p className="mb-2 px-1" style={{ fontFamily: '"Cinzel", serif', color: '#7a88b5', fontSize: '0.58rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em' }}>{tag}</p>
                         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '0.5rem' }}>
