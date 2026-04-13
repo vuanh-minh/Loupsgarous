@@ -41,8 +41,8 @@ export function TraqueDifficultyPicker({ state, selfPlayerId, onSelect }: Props)
     return counts;
   }, [state, selfPlayerId]);
 
-  // Scores de première tentative du joueur courant par tag (verrouillés)
-  const tagScores = useMemo(
+  // Scores de première tentative du joueur courant par tag (localStorage)
+  const localTagScores = useMemo(
     () => loadPlayerTagScores(selfPlayerId),
     [selfPlayerId],
   );
@@ -61,6 +61,12 @@ export function TraqueDifficultyPicker({ state, selfPlayerId, onSelect }: Props)
       })
       .catch(() => {});
   }, []);
+
+  // Scores du joueur courant : localStorage en priorité, serveur en fallback
+  const tagScores = useMemo(() => {
+    const serverMine = allScores[String(selfPlayerId)] ?? {};
+    return { ...serverMine, ...localTagScores };
+  }, [localTagScores, allScores, selfPlayerId]);
 
   // Par tag : liste des joueurs ayant un score, triée par correct desc
   const tagPlayers = useMemo(() => {
