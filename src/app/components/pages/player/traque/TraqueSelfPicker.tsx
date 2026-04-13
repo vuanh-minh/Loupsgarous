@@ -1,8 +1,10 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import { motion } from 'motion/react';
 import { Target } from 'lucide-react';
 import type { GameState } from '../../../../context/gameTypes';
 import { PAvatar } from '../PAvatar';
+import { API_BASE, publicAnonKey } from '../../../../context/apiConfig';
+import { loadAllPlayersLeaderboard } from './traqueStorage';
 
 interface Props {
   state: GameState;
@@ -23,6 +25,36 @@ export function TraqueSelfPicker({ state, onSelect }: Props) {
     });
     return Object.entries(byTag);
   }, [state.players, state.playerTags]);
+
+  // Scores de tous les joueurs : { [selfPlayerId]: { correct, total } }
+  const [playerScores, setPlayerScores] = useState<Record<number, { correct: number; total: number }>>(() => {
+    // Initialisation depuis localStorage
+    const scores: Record<number, { correct: number; total: number }> = {};
+    loadAllPlayersLeaderboard().forEach((s) => {
+      scores[s.selfPlayerId] = { correct: s.totalCorrect, total: s.totalPlayers };
+    });
+    return scores;
+  });
+
+  useEffect(() => {
+    fetch(`${API_BASE}/gallery/scores`, {
+      headers: { Authorization: `Bearer ${publicAnonKey}` },
+    })
+      .then((r) => r.ok ? r.json() : null)
+      .then((json) => {
+        if (!json?.scores) return;
+        const scores: Record<number, { correct: number; total: number }> = {};
+        (Object.entries(json.scores) as Array<[string, Record<string, { correct: number; total: number }>]>)
+          .forEach(([pid, tagScores]) => {
+            const id = Number(pid);
+            const correct = Object.values(tagScores).reduce((s, v) => s + (v.correct ?? 0), 0);
+            const total = Object.values(tagScores).reduce((s, v) => s + (v.total ?? 0), 0);
+            scores[id] = { correct, total };
+          });
+        setPlayerScores(scores);
+      })
+      .catch(() => {});
+  }, []);
 
   return (
     <div
@@ -84,34 +116,71 @@ export function TraqueSelfPicker({ state, onSelect }: Props) {
               {tag}
             </p>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '0.5rem' }}>
-              {players.map((player) => (
-                <button
-                  key={player.id}
-                  onClick={() => onSelect(player.id)}
-                  className="flex flex-col items-center gap-1 py-2 px-1 rounded-xl active:scale-95 transition-transform"
-                  style={{
-                    background: 'rgba(34,38,64,0.7)',
-                    border: '1px solid rgba(140,160,220,0.12)',
-                  }}
-                >
-                  <div className="rounded-full overflow-hidden" style={{ width: 44, height: 44, flexShrink: 0 }}>
-                    <PAvatar player={player} size="text-lg" style={{ width: 44, height: 44 }} />
-                  </div>
-                  <span
-                    className="text-center leading-tight"
+              {players.map((player) => {
+                const score = playerScores[player.id];
+                const hasPlayed = !!score;
+                return (
+                  <button
+                    key={player.id}
+                    onClick={() => onSelect(player.id)}
+                    className="flex flex-col items-center gap-1 py-2 px-1 rounded-xl active:scale-95 transition-transform"
                     style={{
-                      fontFamily: '"Cinzel", serif',
-                      color: '#d0daf5',
-                      fontSize: '0.55rem',
-                      fontWeight: 600,
-                      wordBreak: 'break-word',
-                      maxWidth: '100%',
+                      background: hasPlayed ? 'rgba(80,180,80,0.07)' : 'rgba(34,38,64,0.7)',
+                      border: hasPlayed ? '1px solid rgba(80,180,80,0.3)' : '1px solid rgba(140,160,220,0.12)',
                     }}
                   >
-                    {player.name.split(' ')[0]}
-                  </span>
-                </button>
-              ))}
+                    {/* Avatar + badge score */}
+                    <div className="relative">
+                      <div
+                        className="rounded-full overflow-hidden"
+                        style={{
+                          width: 44,
+                          height: 44,
+                          flexShrink: 0,
+                          outline: hasPlayed ? '2px solid #4db84d' : 'none',
+                          outlineOffset: 1,
+                        }}
+                      >
+                        <PAvatar player={player} size="text-lg" style={{ width: 44, height: 44 }} />
+                      </div>
+                      {hasPlayed && (
+                        <span
+                          className="absolute flex items-center justify-center"
+                          style={{
+                            top: -4,
+                            right: -6,
+                            background: '#2a7a2a',
+                            border: '1.5px solid #4db84d',
+                            borderRadius: 6,
+                            color: '#a8f0a8',
+                            fontFamily: '"Cinzel", serif',
+                            fontSize: '0.5rem',
+                            fontWeight: 700,
+                            lineHeight: 1,
+                            padding: '1px 3px',
+                            whiteSpace: 'nowrap',
+                          }}
+                        >
+                          {score.correct}/{score.total}
+                        </span>
+                      )}
+                    </div>
+                    <span
+                      className="text-center leading-tight"
+                      style={{
+                        fontFamily: '"Cinzel", serif',
+                        color: hasPlayed ? '#a8f0a8' : '#d0daf5',
+                        fontSize: '0.55rem',
+                        fontWeight: 600,
+                        wordBreak: 'break-word',
+                        maxWidth: '100%',
+                      }}
+                    >
+                      {player.name.split(' ')[0]}
+                    </span>
+                  </button>
+                );
+              })}
             </div>
           </motion.div>
         ))}
