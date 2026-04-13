@@ -1,8 +1,11 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import { motion } from 'motion/react';
 import { ChevronRight } from 'lucide-react';
 import type { GameState } from '../../../../context/gameTypes';
 import { loadPlayerTagScores } from './traqueStorage';
+import { API_BASE, publicAnonKey } from '../../../../context/apiConfig';
+import { AVATAR_GALLERY } from '../../../../data/avatarGallery';
+import { PAvatar } from '../PAvatar';
 
 const TAG_ICONS: Record<string, string> = {
   'COLLÈGE / LYCÉE': '🏫',
@@ -38,11 +41,49 @@ export function TraqueDifficultyPicker({ state, selfPlayerId, onSelect }: Props)
     return counts;
   }, [state, selfPlayerId]);
 
-  // Scores de première tentative par tag (verrouillés)
+  // Scores de première tentative du joueur courant par tag (verrouillés)
   const tagScores = useMemo(
     () => loadPlayerTagScores(selfPlayerId),
     [selfPlayerId],
   );
+
+  // Scores de tous les joueurs par tag depuis le serveur
+  // Structure: { [playerId]: { [tag]: { correct, total } } }
+  const [allScores, setAllScores] = useState<Record<string, Record<string, { correct: number; total: number }>>>({});
+
+  useEffect(() => {
+    fetch(`${API_BASE}/gallery/scores`, {
+      headers: { Authorization: `Bearer ${publicAnonKey}` },
+    })
+      .then((r) => r.ok ? r.json() : null)
+      .then((json) => {
+        if (json?.scores) setAllScores(json.scores);
+      })
+      .catch(() => {});
+  }, []);
+
+  // Par tag : liste des joueurs ayant un score, triée par correct desc
+  const tagPlayers = useMemo(() => {
+    const result: Record<string, Array<{ id: number; name: string; avatarUrl: string; correct: number; total: number }>> = {};
+    for (const [pid, tagMap] of Object.entries(allScores)) {
+      const ga = AVATAR_GALLERY.find((g) => g.id === Number(pid));
+      for (const [tag, score] of Object.entries(tagMap)) {
+        if (!result[tag]) result[tag] = [];
+        result[tag].push({
+          id: Number(pid),
+          name: ga?.name ?? `#${pid}`,
+          avatarUrl: ga?.url ?? '',
+          correct: score.correct,
+          total: score.total,
+        });
+      }
+    }
+    // Trier par score décroissant
+    for (const tag of Object.keys(result)) {
+      result[tag].sort((a, b) => b.correct - a.correct);
+    }
+    return result;
+  }, [allScores]);
 
   return (
     <div
@@ -93,6 +134,8 @@ export function TraqueDifficultyPicker({ state, selfPlayerId, onSelect }: Props)
         <div className="flex flex-col gap-3">
           {availableTags.map((tag, i) => {
             const total = tagTotals[tag] ?? 0;
+            const myScore = tagScores[tag];
+            const players = tagPlayers[tag] ?? [];
             return (
               <motion.button
                 key={tag}
@@ -100,65 +143,98 @@ export function TraqueDifficultyPicker({ state, selfPlayerId, onSelect }: Props)
                 animate={{ opacity: 1, x: 0 }}
                 transition={{ delay: 0.08 + i * 0.07 }}
                 onClick={() => onSelect([tag])}
-                className="w-full flex items-center justify-between px-4 py-4 rounded-2xl active:scale-95 transition-transform"
+                className="w-full flex flex-col px-4 py-4 rounded-2xl active:scale-95 transition-transform"
                 style={{
-                  background: tagScores[tag] ? 'rgba(212,168,67,0.05)' : 'rgba(255,255,255,0.04)',
-                  border: `1.5px solid ${tagScores[tag] ? 'rgba(212,168,67,0.25)' : 'rgba(255,255,255,0.08)'}`,
+                  background: myScore ? 'rgba(212,168,67,0.05)' : 'rgba(255,255,255,0.04)',
+                  border: `1.5px solid ${myScore ? 'rgba(212,168,67,0.25)' : 'rgba(255,255,255,0.08)'}`,
                 }}
               >
-                <div className="flex items-center gap-3">
-                  <div
-                    style={{
-                      width: 4,
-                      height: 28,
-                      borderRadius: 2,
-                      background: tagScores[tag] ? '#d4a843' : 'rgba(212,168,67,0.3)',
-                      flexShrink: 0,
-                    }}
-                  />
-                  {TAG_ICONS[tag] && (
-                    <span style={{ fontSize: '1.2rem', lineHeight: 1, flexShrink: 0 }}>{TAG_ICONS[tag]}</span>
-                  )}
-                  <div className="flex flex-col gap-0.5">
-                    <span
+                {/* Ligne principale */}
+                <div className="flex items-center justify-between w-full">
+                  <div className="flex items-center gap-3">
+                    <div
                       style={{
-                        fontFamily: '"Cinzel", serif',
-                        color: tagScores[tag] ? '#d0daf5' : '#c8d2f0',
-                        fontSize: '0.88rem',
-                        fontWeight: 600,
+                        width: 4,
+                        height: 28,
+                        borderRadius: 2,
+                        background: myScore ? '#d4a843' : 'rgba(212,168,67,0.3)',
+                        flexShrink: 0,
                       }}
-                    >
-                      {tag}
-                    </span>
-                    {tagScores[tag] && (
-                      <span style={{ color: '#4a5570', fontSize: '0.58rem', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
-                        Complété
-                      </span>
+                    />
+                    {TAG_ICONS[tag] && (
+                      <span style={{ fontSize: '1.2rem', lineHeight: 1, flexShrink: 0 }}>{TAG_ICONS[tag]}</span>
                     )}
+                    <div className="flex flex-col gap-0.5">
+                      <span
+                        style={{
+                          fontFamily: '"Cinzel", serif',
+                          color: myScore ? '#d0daf5' : '#c8d2f0',
+                          fontSize: '0.88rem',
+                          fontWeight: 600,
+                        }}
+                      >
+                        {tag}
+                      </span>
+                      {myScore && (
+                        <span style={{ color: '#4a5570', fontSize: '0.58rem', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+                          Complété
+                        </span>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-3">
+                    <div className="flex flex-col items-end gap-0.5">
+                      <span
+                        style={{
+                          fontFamily: '"Cinzel", serif',
+                          color: myScore ? '#d4a843' : '#3a4870',
+                          fontSize: '0.85rem',
+                          fontWeight: 700,
+                        }}
+                      >
+                        {myScore?.correct ?? 0}
+                        <span style={{ color: myScore ? 'rgba(212,168,67,0.4)' : '#2a3050', fontWeight: 400 }}>
+                          /{total}
+                        </span>
+                      </span>
+                      <span style={{ color: '#2a3050', fontSize: '0.56rem', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+                        trouvés
+                      </span>
+                    </div>
+                    <ChevronRight size={15} style={{ color: '#3a4870', flexShrink: 0 }} />
                   </div>
                 </div>
 
-                <div className="flex items-center gap-3">
-                  <div className="flex flex-col items-end gap-0.5">
-                    <span
-                      style={{
-                        fontFamily: '"Cinzel", serif',
-                        color: tagScores[tag] ? '#d4a843' : '#3a4870',
-                        fontSize: '0.85rem',
-                        fontWeight: 700,
-                      }}
-                    >
-                      {tagScores[tag]?.correct ?? 0}
-                      <span style={{ color: tagScores[tag] ? 'rgba(212,168,67,0.4)' : '#2a3050', fontWeight: 400 }}>
-                        /{total}
-                      </span>
-                    </span>
-                    <span style={{ color: '#2a3050', fontSize: '0.56rem', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
-                      trouvés
-                    </span>
+                {/* Mini-leaderboard des autres joueurs */}
+                {players.length > 0 && (
+                  <div
+                    className="flex flex-col gap-1 mt-3 pt-3 w-full"
+                    style={{ borderTop: '1px solid rgba(255,255,255,0.06)' }}
+                  >
+                    {players.map((p, rank) => (
+                      <div key={p.id} className="flex items-center gap-2">
+                        <span style={{ fontFamily: '"Cinzel", serif', color: rank === 0 ? '#d4a843' : '#2a3050', fontSize: '0.6rem', fontWeight: 700, width: 10, flexShrink: 0 }}>
+                          {rank + 1}
+                        </span>
+                        <div className="w-5 h-5 rounded-full overflow-hidden shrink-0" style={{ border: `1px solid ${p.id === selfPlayerId ? 'rgba(212,168,67,0.4)' : 'rgba(255,255,255,0.1)'}` }}>
+                          <PAvatar
+                            player={{ id: p.id, name: p.name, avatar: '', avatarUrl: p.avatarUrl, shortCode: '', role: '', alive: true, votesReceived: 0 }}
+                            size="text-xs"
+                            style={{ width: 20, height: 20 }}
+                          />
+                        </div>
+                        <span style={{ fontFamily: '"Cinzel", serif', color: p.id === selfPlayerId ? '#c8d2f0' : '#5a6888', fontSize: '0.7rem', fontWeight: p.id === selfPlayerId ? 600 : 400, flex: 1, textAlign: 'left' }}>
+                          {p.name.split(' ')[0]}
+                        </span>
+                        <span style={{ fontFamily: '"Cinzel", serif', color: rank === 0 ? '#d4a843' : '#3a4870', fontSize: '0.7rem', fontWeight: 700 }}>
+                          {p.correct}
+                          <span style={{ color: '#2a3050', fontWeight: 400 }}>/{p.total}</span>
+                        </span>
+                      </div>
+                    ))}
                   </div>
-                  <ChevronRight size={15} style={{ color: '#3a4870', flexShrink: 0 }} />
-                </div>
+                )}
               </motion.button>
             );
           })}
