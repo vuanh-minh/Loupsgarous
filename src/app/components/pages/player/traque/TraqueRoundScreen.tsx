@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'motion/react';
-import { ChevronRight, SkipForward, X, ChevronDown, Search } from 'lucide-react';
+import { ChevronRight, SkipForward, X, ChevronDown } from 'lucide-react';
 import type { GameState, TraqueProgress } from '../../../../context/gameTypes';
 import { getRoleById } from '../../../../data/roles';
 import { PAvatar } from '../PAvatar';
@@ -73,7 +73,7 @@ export function TraqueRoundScreen({ state, progress, onAnswer }: Props) {
   const [feedback, setFeedback] = useState<FeedbackState>(null);
   const [selectedId, setSelectedId] = useState<string>('');
   const [sheetOpen, setSheetOpen] = useState(false);
-  const [search, setSearch] = useState('');
+
   const [hintIndex, setHintIndex] = useState(0);
   const [dragX, setDragX] = useState(0);
 
@@ -349,7 +349,7 @@ export function TraqueRoundScreen({ state, progress, onAnswer }: Props) {
             >
               {/* Trigger */}
               <button
-                onClick={() => { setSheetOpen(true); setSearch(''); }}
+                onClick={() => setSheetOpen(true)}
                 className="w-full flex items-center justify-between px-4 py-3 rounded-xl active:scale-95 transition-all"
                 style={{
                   background: 'rgba(34,38,64,0.95)',
@@ -444,32 +444,13 @@ export function TraqueRoundScreen({ state, progress, onAnswer }: Props) {
                     <X size={15} style={{ color: '#8090b0' }} />
                   </button>
                 </div>
-                <div className="px-4 pb-3 shrink-0">
-                  <div className="flex items-center gap-2 px-3 py-2 rounded-xl" style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)' }}>
-                    <Search size={14} style={{ color: '#6b7b9b', flexShrink: 0 }} />
-                    <input
-                      type="text" value={search} onChange={(e) => setSearch(e.target.value)}
-                      placeholder="Rechercher…" autoFocus
-                      className="flex-1 bg-transparent outline-none"
-                      style={{ color: '#d0daf5', fontSize: '0.82rem', fontFamily: '"Cinzel", serif' }}
-                    />
-                    {search && (
-                      <button onClick={() => setSearch('')} className="active:scale-90 transition-transform">
-                        <X size={13} style={{ color: '#6b7b9b' }} />
-                      </button>
-                    )}
-                  </div>
-                </div>
                 <div className="overflow-y-auto flex-1 px-4 pb-2">
                   {(() => {
-                    const q = search.trim().toLowerCase();
-                    const filtered = groups
-                      .map(([tag, players]) => ({ tag, players: q ? players.filter((p) => p.name.toLowerCase().includes(q)) : players }))
-                      .filter((g) => g.players.length > 0);
+                    const filtered = groups.filter((g) => g.players.length > 0);
                     if (filtered.length === 0) return <p className="text-center py-6" style={{ color: '#4a5570', fontSize: '0.78rem' }}>Aucun joueur trouvé</p>;
                     return filtered.map(({ tag, players }) => (
                       <div key={tag} className="mb-5">
-                        {!q && <p className="mb-2 px-1" style={{ fontFamily: '"Cinzel", serif', color: '#7a88b5', fontSize: '0.58rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em' }}>{tag}</p>}
+                        <p className="mb-2 px-1" style={{ fontFamily: '"Cinzel", serif', color: '#7a88b5', fontSize: '0.58rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em' }}>{tag}</p>
                         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '0.5rem' }}>
                           {players.map((player) => {
                             const isSelected = String(player.id) === selectedId;
