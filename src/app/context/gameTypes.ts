@@ -148,6 +148,26 @@ export interface PhaseDeathRecord {
   newPlayerJoinIds?: number[];
 }
 
+/* ── Mode Traque ── */
+export interface TraqueAnswer {
+  guessedPlayerId: number | null; // null = skip
+  correct: boolean;
+  status: 'correct' | 'wrong' | 'skipped';
+}
+
+export interface TraqueProgress {
+  gameId: string;
+  selfPlayerId: number;
+  /** Tags sélectionnés par le joueur — seuls les joueurs avec au moins un de ces tags sont inclus */
+  selectedTags: string[];
+  /** Ordre des manches : un playerId par manche (joueur dont on doit trouver le rôle) */
+  roleOrder: number[];
+  currentIndex: number;
+  /** targetPlayerId -> réponse */
+  answers: Record<number, TraqueAnswer>;
+  startedAt: string;
+}
+
 export interface GameState {
   gameId: string;
   screen: 'home' | 'setup' | 'game' | 'vote' | 'end';

@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Moon, Crown, Eye, Lock, X, AlertCircle, LogIn, Sparkles, UserCircle, ArrowRight, Users, Download, BookOpen, Smartphone } from 'lucide-react';
+import { Moon, Crown, Eye, Lock, X, AlertCircle, LogIn, Sparkles, UserCircle, ArrowRight, Users, Download, BookOpen, Smartphone, Loader2 } from 'lucide-react';
 import { useNavigate } from 'react-router';
 import { useGame } from '../../context/GameContext';
 import { API_BASE, publicAnonKey } from '../../context/apiConfig';
@@ -9,6 +9,7 @@ import { usePWAContext } from '../layout/RootLayout';
 import { PWAInstallBanner, IOSSteps, AndroidSteps, DesktopSteps, detectPlatformPublic } from '../PWAInstallBanner';
 import { resolveAvatarUrl } from '../../data/avatarResolver';
 import { AVATAR_GALLERY } from '../../data/avatarGallery';
+import { loadAllPlayersLeaderboard } from './player/traque/traqueStorage';
 import { AVATAR_DEFAULT_TAGS } from '../../data/avatarDefaultTags';
 import { PAvatar } from './player/PAvatar';
 import { ROLES, type RoleDefinition } from '../../data/roles';
@@ -99,7 +100,41 @@ export function HomePage() {
   const [codeDigits, setCodeDigits] = useState<string[]>(['', '', '', '']);
   const [joinError, setJoinError] = useState('');
   const [joining, setJoining] = useState(false);
+  const [showJoin, setShowJoin] = useState(false);
   const inputRefs = useRef<(HTMLInputElement | null)[]>([]);
+
+  // Leaderboard Traque — scores serveur (fallback localStorage)
+  type LeaderboardEntry = { selfPlayerId: number; name: string; avatarUrl: string; correct: number };
+  const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>(() => {
+    // Initialisation instantanée depuis localStorage (somme des premières tentatives par tag)
+    return loadAllPlayersLeaderboard()
+      .map((s) => {
+        const player = AVATAR_GALLERY.find((g) => g.id === s.selfPlayerId);
+        return { selfPlayerId: s.selfPlayerId, name: player?.name ?? `#${s.selfPlayerId}`, avatarUrl: player?.url ?? '', correct: s.totalCorrect };
+      })
+      .sort((a, b) => b.correct - a.correct)
+      .slice(0, 5);
+  });
+
+  useEffect(() => {
+    fetch(`${API_BASE}/gallery/scores`, { headers: { Authorization: `Bearer ${publicAnonKey}` } })
+      .then((r) => r.ok ? r.json() : null)
+      .then((json) => {
+        if (!json?.scores) return;
+        // Structure serveur: { [playerId]: { [tag]: { correct, total, savedAt } } }
+        const entries = (Object.entries(json.scores) as Array<[string, Record<string, { correct: number; total: number }>]>)
+          .map(([pid, tagScores]) => {
+            const selfPlayerId = Number(pid);
+            const totalCorrect = Object.values(tagScores).reduce((sum, s) => sum + (s.correct ?? 0), 0);
+            const player = AVATAR_GALLERY.find((g) => g.id === selfPlayerId);
+            return { selfPlayerId, name: player?.name ?? `#${selfPlayerId}`, avatarUrl: player?.url ?? '', correct: totalCorrect };
+          })
+          .sort((a, b) => b.correct - a.correct)
+          .slice(0, 5);
+        setLeaderboard(entries);
+      })
+      .catch(() => { /* garder les données localStorage */ });
+  }, []);
 
   // GM modal state
   const [showPasswordModal, setShowPasswordModal] = useState(false);
@@ -646,7 +681,141 @@ export function HomePage() {
         </motion.p>
         </div>
 
-        <AnimatePresence mode="wait">
+        {/* === La Traque — CTA principal === */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 1.1, duration: 0.6 }}
+          className="w-full max-w-sm px-4 flex flex-col gap-3 mb-6"
+        >
+          {/* La Traque — bouton principal */}
+          <button
+            onClick={() => navigate('/traque')}
+            className="w-full flex flex-col items-center gap-3 p-6 rounded-2xl transition-all active:scale-95"
+            style={{
+              background: 'linear-gradient(135deg, rgba(212,168,67,0.12) 0%, rgba(212,168,67,0.04) 100%)',
+              border: '1.5px solid rgba(212,168,67,0.35)',
+              boxShadow: '0 0 40px rgba(212,168,67,0.08)',
+            }}
+          >
+            <span className="text-4xl">🎯</span>
+            <div className="text-center">
+              <p style={{ color: '#d4a843', fontSize: '1rem', fontFamily: '"Cinzel Decorative", "Cinzel", serif', fontWeight: 700, margin: 0 }}>
+                La Traque
+              </p>
+              <p style={{ color: '#8090b0', fontSize: '0.72rem', marginTop: '0.4rem' }}>
+                Retrouve qui avait quel rôle
+              </p>
+            </div>
+          </button>
+
+          {/* Leaderboard Traque */}
+          {leaderboard.length > 0 && (
+            <div
+              className="w-full rounded-2xl px-4 py-3 flex flex-col gap-2"
+              style={{
+                background: 'rgba(255,255,255,0.03)',
+                border: '1px solid rgba(255,255,255,0.07)',
+              }}
+            >
+              <p style={{ fontFamily: '"Cinzel", serif', color: '#4a5570', fontSize: '0.6rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 2 }}>
+                Classement
+              </p>
+              {leaderboard.map((entry, i) => (
+                <div key={entry.selfPlayerId} className="flex items-center gap-3">
+                  <span style={{ fontFamily: '"Cinzel", serif', color: i === 0 ? '#d4a843' : '#2a3050', fontSize: '0.7rem', fontWeight: 700, width: 14, flexShrink: 0 }}>
+                    {i + 1}
+                  </span>
+                  <div className="w-7 h-7 rounded-full overflow-hidden shrink-0" style={{ border: i === 0 ? '1.5px solid rgba(212,168,67,0.4)' : '1px solid rgba(255,255,255,0.08)' }}>
+                    <PAvatar
+                      player={{ id: entry.selfPlayerId, name: entry.name, avatar: '', avatarUrl: entry.avatarUrl, shortCode: '', role: '', alive: true, votesReceived: 0 }}
+                      size="text-sm"
+                      style={{ width: 28, height: 28 }}
+                    />
+                  </div>
+                  <span style={{ fontFamily: '"Cinzel", serif', color: i === 0 ? '#c8d2f0' : '#5a6888', fontSize: '0.75rem', fontWeight: i === 0 ? 600 : 400, flex: 1 }}>
+                    {entry.name.split(' ')[0]}
+                  </span>
+                  <span style={{ fontFamily: '"Cinzel", serif', color: i === 0 ? '#d4a843' : '#3a4870', fontSize: '0.78rem', fontWeight: 700 }}>
+                    {entry.correct}
+                    <span style={{ color: i === 0 ? 'rgba(212,168,67,0.45)' : '#2a3050', fontWeight: 400 }}>/{AVATAR_GALLERY.length} joueurs</span>
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {false && /* Formulaire de code — masqué */
+          <AnimatePresence>
+            {showJoin && (
+              <motion.div
+                key="join-form"
+                initial={{ opacity: 0, height: 0 }}
+                animate={{ opacity: 1, height: 'auto' }}
+                exit={{ opacity: 0, height: 0 }}
+                transition={{ duration: 0.25 }}
+                className="overflow-hidden"
+              >
+                <div
+                  className="rounded-2xl p-4 flex flex-col gap-3"
+                  style={{
+                    background: 'rgba(255,255,255,0.03)',
+                    border: '1px solid rgba(255,255,255,0.08)',
+                  }}
+                >
+                  <div className="flex justify-center gap-2" onPaste={handlePaste}>
+                    {codeDigits.map((digit, index) => (
+                      <input
+                        key={index}
+                        ref={(el) => { inputRefs.current[index] = el; }}
+                        type="text"
+                        inputMode="text"
+                        maxLength={1}
+                        value={digit}
+                        onChange={(e) => handleDigitChange(index, e.target.value)}
+                        onKeyDown={(e) => handleDigitKeyDown(index, e)}
+                        className="text-center rounded-xl outline-none uppercase transition-all"
+                        style={{
+                          width: 52,
+                          height: 52,
+                          background: digit ? 'rgba(212,168,67,0.08)' : 'rgba(255,255,255,0.04)',
+                          border: `2px solid ${digit ? 'rgba(212,168,67,0.4)' : 'rgba(255,255,255,0.1)'}`,
+                          color: '#d4a843',
+                          fontFamily: '"Cinzel Decorative", serif',
+                          fontSize: '1.3rem',
+                          fontWeight: 700,
+                        }}
+                      />
+                    ))}
+                  </div>
+                  {joinError && (
+                    <p className="text-center" style={{ color: '#c41e3a', fontSize: '0.7rem' }}>{joinError}</p>
+                  )}
+                  <button
+                    onClick={() => handleJoinGame(codeDigits.join(''))}
+                    disabled={joining || codeDigits.join('').length < CODE_LENGTH}
+                    className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl transition-all active:scale-95"
+                    style={{
+                      background: codeDigits.join('').length === CODE_LENGTH
+                        ? 'linear-gradient(135deg, #b8860b 0%, #d4a843 50%, #b8860b 100%)'
+                        : 'rgba(255,255,255,0.06)',
+                      color: codeDigits.join('').length === CODE_LENGTH ? '#0a0e1a' : '#4a5570',
+                      fontFamily: '"Cinzel", serif',
+                      fontSize: '0.82rem',
+                      fontWeight: 700,
+                      border: 'none',
+                    }}
+                  >
+                    {joining ? <Loader2 size={14} className="animate-spin" /> : <LogIn size={14} />}
+                    Rejoindre
+                  </button>
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>}
+        </motion.div>
+
+        {false && <AnimatePresence mode="wait">
           {countdown.days === 0 && countdown.hours === 0 && countdown.minutes === 0 && countdown.seconds === 0 ? (
             /* ── Timer écoulé : container Rejoindre une partie ── */
             <motion.div
@@ -951,70 +1120,7 @@ export function HomePage() {
               </motion.div>
             </motion.div>
           )}
-        </AnimatePresence>
-
-        {/* Download App + Règles blocs */}
-        <div className="w-full max-w-2xl px-4 flex flex-col gap-3 mt-3">
-          {/* Download App */}
-          <button
-            onClick={handleDownloadClick}
-            className="w-full p-4 rounded-xl text-left transition-all active:scale-95"
-            style={{
-              background: 'rgba(255,255,255,0.03)',
-              border: '1px solid rgba(212,168,67,0.2)',
-            }}
-          >
-            <div className="flex items-center justify-between gap-3">
-              <div className="flex items-center gap-3">
-                <div
-                  className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0"
-                  style={{ background: 'rgba(212,168,67,0.1)', border: '1px solid rgba(212,168,67,0.2)' }}
-                >
-                  <Smartphone size={16} style={{ color: '#d4a843' }} />
-                </div>
-                <div>
-                  <p style={{ color: '#c0c8d8', fontSize: '0.85rem', fontFamily: '"Cinzel", serif', fontWeight: 600, margin: 0 }}>
-                    Télécharger l'app
-                  </p>
-                  <p style={{ color: '#6b7b9b', fontSize: '0.72rem', marginTop: 2 }}>
-                    Pour une meilleure expérience
-                  </p>
-                </div>
-              </div>
-              <Download size={16} style={{ color: '#d4a843' }} />
-            </div>
-          </button>
-
-          {/* Règles */}
-          <button
-            onClick={() => navigate('/rules')}
-            className="w-full p-4 rounded-xl text-left transition-all active:scale-95"
-            style={{
-              background: 'rgba(255,255,255,0.03)',
-              border: '1px solid rgba(255,255,255,0.08)',
-            }}
-          >
-            <div className="flex items-center justify-between gap-3">
-              <div className="flex items-center gap-3">
-                <div
-                  className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0"
-                  style={{ background: 'rgba(139,92,246,0.1)', border: '1px solid rgba(139,92,246,0.2)' }}
-                >
-                  <BookOpen size={16} style={{ color: '#a78bfa' }} />
-                </div>
-                <div>
-                  <p style={{ color: '#c0c8d8', fontSize: '0.85rem', fontFamily: '"Cinzel", serif', fontWeight: 600, margin: 0 }}>
-                    Règles du jeu
-                  </p>
-                  <p style={{ color: '#6b7b9b', fontSize: '0.72rem', marginTop: 2 }}>
-                    Rôles, phases et déroulement
-                  </p>
-                </div>
-              </div>
-              <ArrowRight size={16} style={{ color: '#6b7b9b' }} />
-            </div>
-          </button>
-        </div>
+        </AnimatePresence>}
       </div>
 
       {/* Fixed countdown timer - appears when original fades out */}

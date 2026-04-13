@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { motion } from 'motion/react';
-import { Trophy, X as XIcon } from 'lucide-react';
+import { Trophy, X as XIcon, Target } from 'lucide-react';
 import type { GameState } from '../../../context/gameTypes';
 import { getRoleById } from '../../../data/roles';
 import { computeScores } from '../../../data/scoring';
@@ -28,6 +28,9 @@ export const PlayerEndGameOverlay = React.memo(function PlayerEndGameOverlay({
 }: PlayerEndGameOverlayProps) {
   const [dismissed, setDismissed] = useState(false);
   const scores = useMemo(() => computeScores(state), [state]);
+
+  const currentPlayer = state.players.find((p) => p.id === currentPlayerId) ?? null;
+  const hasHints = (state.dynamicHints?.length ?? 0) > 0;
 
   const isWerewolfWin = state.winner === 'werewolves' || state.winner === 'werewolf';
   const isLoversWin = state.winner === 'lovers';
@@ -251,13 +254,35 @@ export const PlayerEndGameOverlay = React.memo(function PlayerEndGameOverlay({
           </div>
         </motion.div>
 
+        {/* Bouton Traque */}
+        {currentPlayer && hasHints && (
+          <motion.button
+            initial={{ y: 20, opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            transition={{ delay: 1.0 }}
+            onClick={() => navigate(`/player/${currentPlayer.shortCode}/traque`)}
+            className="mt-6 w-full flex items-center justify-center gap-2 py-3 px-6 rounded-xl active:scale-95 transition-transform"
+            style={{
+              background: 'linear-gradient(135deg, rgba(212,168,67,0.15) 0%, rgba(212,168,67,0.05) 100%)',
+              border: '1px solid rgba(212,168,67,0.3)',
+              color: '#d4a843',
+              fontFamily: '"Cinzel", serif',
+              fontSize: '0.85rem',
+              fontWeight: 700,
+            }}
+          >
+            <Target size={16} />
+            Jouer à la Traque
+          </motion.button>
+        )}
+
         {/* Home button */}
         <motion.button
           initial={{ y: 20, opacity: 0 }}
           animate={{ y: 0, opacity: 1 }}
-          transition={{ delay: 1.0 }}
+          transition={{ delay: currentPlayer && hasHints ? 1.1 : 1.0 }}
           onClick={() => navigate('/')}
-          className="mt-6 py-3 px-8 rounded-xl active:scale-95 transition-transform"
+          className="mt-3 py-3 px-8 rounded-xl active:scale-95 transition-transform"
           style={{
             background: 'rgba(255,255,255,0.05)',
             border: '1px solid rgba(255,255,255,0.1)',

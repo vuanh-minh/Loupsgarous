@@ -14,6 +14,7 @@ import {
   GALLERY_QUESTS_KEY,
   GALLERY_PRETASKS_KEY,
   GALLERY_DELETED_KEY,
+  GALLERY_SCORES_KEY,
 } from "./serverHelpers.tsx";
 
 export const miscRoutes = new Hono();
@@ -530,6 +531,44 @@ miscRoutes.delete("/make-server-2c00868b/gallery/player/:id", async (c) => {
   } catch (err) {
     console.log("Delete gallery player error:", err);
     return c.json({ error: `Erreur suppression joueur galerie: ${err}` }, 500);
+  }
+});
+
+// ── Gallery Traque scores (leaderboard) ──
+
+// GET: Load all scores
+miscRoutes.get("/make-server-2c00868b/gallery/scores", async (c) => {
+  try {
+    const data = (await kv.get(GALLERY_SCORES_KEY)) || {};
+    return c.json({ scores: data });
+  } catch (err) {
+    console.log("Load gallery scores error:", err);
+    return c.json({ error: `Erreur chargement scores: ${err}` }, 500);
+  }
+});
+
+// POST: Save score for a player+tag (first attempt only — never overwritten)
+// Body: { selfPlayerId: number, tag: string, correct: number, total: number }
+// KV structure: { [playerId]: { [tag]: { correct, total, savedAt } } }
+miscRoutes.post("/make-server-2c00868b/gallery/scores", async (c) => {
+  try {
+    const body = await c.req.json();
+    const { selfPlayerId, tag, correct, total } = body as { selfPlayerId: number; tag: string; correct: number; total: number };
+    if (typeof selfPlayerId !== 'number' || typeof tag !== 'string' || typeof correct !== 'number' || typeof total !== 'number') {
+      return c.json({ error: "Données invalides" }, 400);
+    }
+    const scores = ((await kv.get(GALLERY_SCORES_KEY)) || {}) as Record<string, Record<string, { correct: number; total: number; savedAt: string }>>;
+    const playerScores = scores[String(selfPlayerId)] ?? {};
+    // Lock: only save if this tag hasn't been recorded yet
+    if (!playerScores[tag]) {
+      playerScores[tag] = { correct, total, savedAt: new Date().toISOString() };
+      scores[String(selfPlayerId)] = playerScores;
+      await kv.set(GALLERY_SCORES_KEY, scores);
+    }
+    return c.json({ success: true });
+  } catch (err) {
+    console.log("Save gallery score error:", err);
+    return c.json({ error: `Erreur sauvegarde score: ${err}` }, 500);
   }
 });
 

@@ -110,6 +110,7 @@ export const GALLERY_ROLES_KEY = 'global:gallery-roles';
 export const GALLERY_QUESTS_KEY = 'global:gallery-quests';
 export const GALLERY_PRETASKS_KEY = 'global:gallery-pretasks';
 export const GALLERY_DELETED_KEY = 'global:gallery-deleted';
+export const GALLERY_SCORES_KEY = 'global:gallery-scores';
 
 // ── Random game ID ──
 const ID_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';

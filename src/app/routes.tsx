@@ -7,6 +7,8 @@ import { PlayerPage } from './components/pages/PlayerPage';
 import { JoinLobbyPage } from './components/pages/JoinLobbyPage';
 import { SpectatorPage } from './components/pages/SpectatorPage';
 import { DemoPage } from './components/pages/DemoPage';
+import { TraquePage } from './components/pages/player/traque/TraquePage';
+import { TraqueGalleryPage } from './components/pages/traque/TraqueGalleryPage';
 
 /** Inline error fallback for route-level failures */
 function RouteErrorFallback() {
@@ -85,6 +87,16 @@ export const router = createBrowserRouter([
         path: 'player/:shortCode',
         errorElement: <RouteErrorFallback />,
         Component: PlayerPage,
+      },
+      {
+        path: 'traque',
+        errorElement: <RouteErrorFallback />,
+        Component: TraqueGalleryPage,
+      },
+      {
+        path: 'player/:shortCode/traque',
+        errorElement: <RouteErrorFallback />,
+        Component: TraquePage,
       },
       {
         path: 'join/:gameId',
