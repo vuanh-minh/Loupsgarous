@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Moon, Crown, Eye, Lock, X, AlertCircle, LogIn, Sparkles, UserCircle, ArrowRight, Users, Download, BookOpen, Smartphone, Loader2 } from 'lucide-react';
+import { Moon, Crown, Eye, Lock, X, AlertCircle, LogIn, Sparkles, UserCircle, ArrowRight, Users, Download, BookOpen, Smartphone, Loader2, Menu } from 'lucide-react';
 import { useNavigate } from 'react-router';
 import { useGame } from '../../context/GameContext';
 import { API_BASE, publicAnonKey } from '../../context/apiConfig';
@@ -100,7 +100,6 @@ export function HomePage() {
   const [codeDigits, setCodeDigits] = useState<string[]>(['', '', '', '']);
   const [joinError, setJoinError] = useState('');
   const [joining, setJoining] = useState(false);
-  const [showJoin, setShowJoin] = useState(false);
   const inputRefs = useRef<(HTMLInputElement | null)[]>([]);
 
   // Leaderboard Traque — scores serveur (fallback localStorage)
@@ -162,6 +161,9 @@ export function HomePage() {
   const [newGameName, setNewGameName] = useState('');
   const [creating, setCreating] = useState(false);
   const [createError, setCreateError] = useState('');
+
+  // Menu state (La Traque & more)
+  const [showMenu, setShowMenu] = useState(false);
 
   // Install guide state
   const [showInstallGuide, setShowInstallGuide] = useState(false);
@@ -681,144 +683,7 @@ export function HomePage() {
         </motion.p>
         </div>
 
-        {/* === La Traque — CTA principal === */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 1.1, duration: 0.6 }}
-          className="w-full max-w-sm px-4 flex flex-col gap-3 mb-6"
-        >
-          {/* La Traque — bouton principal */}
-          <button
-            onClick={() => navigate('/traque')}
-            className="w-full flex items-center gap-4 px-5 py-4 rounded-2xl transition-all active:scale-95"
-            style={{
-              background: 'linear-gradient(135deg, rgba(212,168,67,0.18) 0%, rgba(180,120,30,0.10) 100%)',
-              border: '1.5px solid rgba(212,168,67,0.55)',
-              boxShadow: '0 0 28px rgba(212,168,67,0.18), inset 0 1px 0 rgba(255,220,100,0.12)',
-            }}
-          >
-            <span style={{ fontSize: '2rem', lineHeight: 1, flexShrink: 0 }}>🎯</span>
-            <div className="flex flex-col flex-1 text-left">
-              <p style={{ color: '#f0c84a', fontSize: '1rem', fontFamily: '"Cinzel Decorative", "Cinzel", serif', fontWeight: 700, margin: 0, letterSpacing: '0.02em' }}>
-                La Traque
-              </p>
-              <p style={{ color: '#a08040', fontSize: '0.7rem', marginTop: '0.2rem' }}>
-                Retrouve qui avait quel rôle
-              </p>
-            </div>
-            <svg width="18" height="18" viewBox="0 0 18 18" fill="none" style={{ flexShrink: 0, opacity: 0.6 }}>
-              <path d="M6.5 4L11.5 9L6.5 14" stroke="#d4a843" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-            </svg>
-          </button>
-
-          {/* Leaderboard Traque */}
-          {leaderboard.length > 0 && (
-            <div
-              className="w-full rounded-2xl px-4 py-3 flex flex-col gap-2"
-              style={{
-                background: 'rgba(255,255,255,0.03)',
-                border: '1px solid rgba(255,255,255,0.07)',
-              }}
-            >
-              <p style={{ fontFamily: '"Cinzel", serif', color: '#4a5570', fontSize: '0.6rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 2 }}>
-                Classement
-              </p>
-              {leaderboard.map((entry, i) => (
-                <div key={entry.selfPlayerId} className="flex items-center gap-3">
-                  <span style={{ fontFamily: '"Cinzel", serif', color: i === 0 ? '#d4a843' : '#2a3050', fontSize: '0.7rem', fontWeight: 700, width: 14, flexShrink: 0 }}>
-                    {i + 1}
-                  </span>
-                  <div className="w-7 h-7 rounded-full overflow-hidden shrink-0" style={{ border: i === 0 ? '1.5px solid rgba(212,168,67,0.4)' : '1px solid rgba(255,255,255,0.08)' }}>
-                    <PAvatar
-                      player={{ id: entry.selfPlayerId, name: entry.name, avatar: '', avatarUrl: entry.avatarUrl, shortCode: '', role: '', alive: true, votesReceived: 0 }}
-                      size="text-sm"
-                      style={{ width: 28, height: 28 }}
-                    />
-                  </div>
-                  <span style={{ fontFamily: '"Cinzel", serif', color: i === 0 ? '#c8d2f0' : '#5a6888', fontSize: '0.75rem', fontWeight: i === 0 ? 600 : 400, flex: 1 }}>
-                    {entry.name.split(' ')[0]}
-                  </span>
-                  <span style={{ fontFamily: '"Cinzel", serif', color: i === 0 ? '#d4a843' : '#3a4870', fontSize: '0.78rem', fontWeight: 700 }}>
-                    {entry.correct}
-                    <span style={{ color: i === 0 ? 'rgba(212,168,67,0.45)' : '#2a3050', fontWeight: 400 }}>/{entry.total} joueurs</span>
-                  </span>
-                </div>
-              ))}
-            </div>
-          )}
-
-          {false && /* Formulaire de code — masqué */
-          <AnimatePresence>
-            {showJoin && (
-              <motion.div
-                key="join-form"
-                initial={{ opacity: 0, height: 0 }}
-                animate={{ opacity: 1, height: 'auto' }}
-                exit={{ opacity: 0, height: 0 }}
-                transition={{ duration: 0.25 }}
-                className="overflow-hidden"
-              >
-                <div
-                  className="rounded-2xl p-4 flex flex-col gap-3"
-                  style={{
-                    background: 'rgba(255,255,255,0.03)',
-                    border: '1px solid rgba(255,255,255,0.08)',
-                  }}
-                >
-                  <div className="flex justify-center gap-2" onPaste={handlePaste}>
-                    {codeDigits.map((digit, index) => (
-                      <input
-                        key={index}
-                        ref={(el) => { inputRefs.current[index] = el; }}
-                        type="text"
-                        inputMode="text"
-                        maxLength={1}
-                        value={digit}
-                        onChange={(e) => handleDigitChange(index, e.target.value)}
-                        onKeyDown={(e) => handleDigitKeyDown(index, e)}
-                        className="text-center rounded-xl outline-none uppercase transition-all"
-                        style={{
-                          width: 52,
-                          height: 52,
-                          background: digit ? 'rgba(212,168,67,0.08)' : 'rgba(255,255,255,0.04)',
-                          border: `2px solid ${digit ? 'rgba(212,168,67,0.4)' : 'rgba(255,255,255,0.1)'}`,
-                          color: '#d4a843',
-                          fontFamily: '"Cinzel Decorative", serif',
-                          fontSize: '1.3rem',
-                          fontWeight: 700,
-                        }}
-                      />
-                    ))}
-                  </div>
-                  {joinError && (
-                    <p className="text-center" style={{ color: '#c41e3a', fontSize: '0.7rem' }}>{joinError}</p>
-                  )}
-                  <button
-                    onClick={() => handleJoinGame(codeDigits.join(''))}
-                    disabled={joining || codeDigits.join('').length < CODE_LENGTH}
-                    className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl transition-all active:scale-95"
-                    style={{
-                      background: codeDigits.join('').length === CODE_LENGTH
-                        ? 'linear-gradient(135deg, #b8860b 0%, #d4a843 50%, #b8860b 100%)'
-                        : 'rgba(255,255,255,0.06)',
-                      color: codeDigits.join('').length === CODE_LENGTH ? '#0a0e1a' : '#4a5570',
-                      fontFamily: '"Cinzel", serif',
-                      fontSize: '0.82rem',
-                      fontWeight: 700,
-                      border: 'none',
-                    }}
-                  >
-                    {joining ? <Loader2 size={14} className="animate-spin" /> : <LogIn size={14} />}
-                    Rejoindre
-                  </button>
-                </div>
-              </motion.div>
-            )}
-          </AnimatePresence>}
-        </motion.div>
-
-        {false && <AnimatePresence mode="wait">
+        <AnimatePresence mode="wait">
           {countdown.days === 0 && countdown.hours === 0 && countdown.minutes === 0 && countdown.seconds === 0 ? (
             /* ── Timer écoulé : container Rejoindre une partie ── */
             <motion.div
@@ -1123,7 +988,7 @@ export function HomePage() {
               </motion.div>
             </motion.div>
           )}
-        </AnimatePresence>}
+        </AnimatePresence>
       </div>
 
       {/* Fixed countdown timer - appears when original fades out */}
@@ -1182,6 +1047,122 @@ export function HomePage() {
             </div>
         </div>
       )}
+
+      {/* Menu button — La Traque & more */}
+      <button
+        onClick={() => setShowMenu(true)}
+        className="fixed top-4 right-4 z-[60] w-10 h-10 rounded-full flex items-center justify-center transition-all active:scale-95"
+        style={{
+          background: 'rgba(255,255,255,0.05)',
+          border: '1px solid rgba(212,168,67,0.25)',
+          backdropFilter: 'blur(8px)',
+        }}
+        aria-label="Menu"
+      >
+        <Menu size={18} style={{ color: '#d4a843' }} />
+      </button>
+
+      {/* Menu Sheet */}
+      <AnimatePresence>
+        {showMenu && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[70] flex items-end justify-center"
+            style={{ background: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(8px)' }}
+            onClick={() => setShowMenu(false)}
+          >
+            <motion.div
+              initial={{ opacity: 0, y: 100 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: 100 }}
+              transition={{ type: 'spring', stiffness: 300, damping: 30 }}
+              className="w-full max-w-md rounded-t-3xl overflow-hidden"
+              style={{
+                background: 'linear-gradient(180deg, #0f1629 0%, #1a1040 100%)',
+                border: '1px solid rgba(212,168,67,0.2)',
+                borderBottomWidth: 0,
+                paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 24px)',
+              }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="flex items-center justify-between px-5 pt-5 pb-3">
+                <h3 style={{ fontFamily: '"Cinzel", serif', color: '#d4a843', fontSize: '1rem' }}>Menu</h3>
+                <button
+                  onClick={() => setShowMenu(false)}
+                  className="w-8 h-8 rounded-full flex items-center justify-center"
+                  style={{ background: 'rgba(255,255,255,0.06)' }}
+                >
+                  <X size={16} style={{ color: '#6b7b9b' }} />
+                </button>
+              </div>
+              <div className="mx-5 h-px" style={{ background: 'rgba(212,168,67,0.1)' }} />
+              <div className="px-5 py-4 flex flex-col gap-3">
+                {/* La Traque */}
+                <button
+                  onClick={() => { setShowMenu(false); navigate('/traque'); }}
+                  className="w-full flex items-center gap-4 px-5 py-4 rounded-2xl transition-all active:scale-95"
+                  style={{
+                    background: 'linear-gradient(135deg, rgba(212,168,67,0.18) 0%, rgba(180,120,30,0.10) 100%)',
+                    border: '1.5px solid rgba(212,168,67,0.55)',
+                    boxShadow: '0 0 28px rgba(212,168,67,0.18), inset 0 1px 0 rgba(255,220,100,0.12)',
+                  }}
+                >
+                  <span style={{ fontSize: '2rem', lineHeight: 1, flexShrink: 0 }}>🎯</span>
+                  <div className="flex flex-col flex-1 text-left">
+                    <p style={{ color: '#f0c84a', fontSize: '1rem', fontFamily: '"Cinzel Decorative", "Cinzel", serif', fontWeight: 700, margin: 0, letterSpacing: '0.02em' }}>
+                      La Traque
+                    </p>
+                    <p style={{ color: '#a08040', fontSize: '0.7rem', marginTop: '0.2rem' }}>
+                      Retrouve qui avait quel rôle
+                    </p>
+                  </div>
+                  <svg width="18" height="18" viewBox="0 0 18 18" fill="none" style={{ flexShrink: 0, opacity: 0.6 }}>
+                    <path d="M6.5 4L11.5 9L6.5 14" stroke="#d4a843" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                  </svg>
+                </button>
+
+                {/* Leaderboard Traque */}
+                {leaderboard.length > 0 && (
+                  <div
+                    className="w-full rounded-2xl px-4 py-3 flex flex-col gap-2"
+                    style={{
+                      background: 'rgba(255,255,255,0.03)',
+                      border: '1px solid rgba(255,255,255,0.07)',
+                    }}
+                  >
+                    <p style={{ fontFamily: '"Cinzel", serif', color: '#4a5570', fontSize: '0.6rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 2 }}>
+                      Classement
+                    </p>
+                    {leaderboard.map((entry, i) => (
+                      <div key={entry.selfPlayerId} className="flex items-center gap-3">
+                        <span style={{ fontFamily: '"Cinzel", serif', color: i === 0 ? '#d4a843' : '#2a3050', fontSize: '0.7rem', fontWeight: 700, width: 14, flexShrink: 0 }}>
+                          {i + 1}
+                        </span>
+                        <div className="w-7 h-7 rounded-full overflow-hidden shrink-0" style={{ border: i === 0 ? '1.5px solid rgba(212,168,67,0.4)' : '1px solid rgba(255,255,255,0.08)' }}>
+                          <PAvatar
+                            player={{ id: entry.selfPlayerId, name: entry.name, avatar: '', avatarUrl: entry.avatarUrl, shortCode: '', role: '', alive: true, votesReceived: 0 }}
+                            size="text-sm"
+                            style={{ width: 28, height: 28 }}
+                          />
+                        </div>
+                        <span style={{ fontFamily: '"Cinzel", serif', color: i === 0 ? '#c8d2f0' : '#5a6888', fontSize: '0.75rem', fontWeight: i === 0 ? 600 : 400, flex: 1 }}>
+                          {entry.name.split(' ')[0]}
+                        </span>
+                        <span style={{ fontFamily: '"Cinzel", serif', color: i === 0 ? '#d4a843' : '#3a4870', fontSize: '0.78rem', fontWeight: 700 }}>
+                          {entry.correct}
+                          <span style={{ color: i === 0 ? 'rgba(212,168,67,0.45)' : '#2a3050', fontWeight: 400 }}>/{entry.total} joueurs</span>
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* GM Password Modal (hidden, accessed via Cmd+D) */}
       <AnimatePresence>
