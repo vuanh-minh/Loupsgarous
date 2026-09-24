@@ -1051,7 +1051,7 @@ export function HomePage() {
       {/* Menu button — La Traque & more */}
       <button
         onClick={() => setShowMenu(true)}
-        className="fixed top-4 right-4 z-[60] w-10 h-10 rounded-full flex items-center justify-center transition-all active:scale-95"
+        className="fixed top-4 right-4 z-[10001] w-10 h-10 rounded-full flex items-center justify-center transition-all active:scale-95"
         style={{
           background: 'rgba(255,255,255,0.05)',
           border: '1px solid rgba(212,168,67,0.25)',
@@ -1069,7 +1069,7 @@ export function HomePage() {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 z-[70] flex items-end justify-center"
+            className="fixed inset-0 z-[10001] flex items-end justify-center"
             style={{ background: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(8px)' }}
             onClick={() => setShowMenu(false)}
           >
